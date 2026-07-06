@@ -48,6 +48,12 @@ const navItems = [
     badge: "6",
   },
   {
+    title: "Estimates",
+    href: "/estimates",
+    icon: FileText,
+    badge: "3",
+  },
+  {
     title: "Jobs & Schedule",
     href: "/jobs",
     icon: CalendarDays,

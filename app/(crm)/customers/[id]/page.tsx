@@ -163,7 +163,7 @@ export default async function CustomerDetailPage({ params }: Props) {
                           )}
                         </div>
                         <Badge variant="secondary" className="shrink-0 text-xs">
-                          {prop.serviceType}
+                          Property
                         </Badge>
                       </div>
                     ))}

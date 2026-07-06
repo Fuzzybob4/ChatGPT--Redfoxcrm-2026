@@ -1,3 +1,5 @@
+'use client';
+
 import Link from "next/link";
 import {
   DollarSign,
@@ -30,15 +32,20 @@ import {
   getCustomerById,
   getInvoiceTotal,
 } from "@/lib/data";
+import { useLocation } from "@/lib/location-context";
 
 export default function DashboardPage() {
-  const stats = getDashboardStats();
+  const { selectedLocationId } = useLocation();
+  const stats = getDashboardStats(selectedLocationId);
 
-  const upcomingJobs = jobs
+  const locationJobs = jobs.filter((j) => j.locationId === selectedLocationId);
+  const locationInvoices = invoices.filter((i) => i.locationId === selectedLocationId);
+
+  const upcomingJobs = locationJobs
     .filter((j) => j.status === "Scheduled" || j.status === "In Progress")
     .slice(0, 5);
 
-  const recentInvoices = [...invoices]
+  const recentInvoices = [...locationInvoices]
     .sort(
       (a, b) =>
         new Date(b.issuedDate).getTime() - new Date(a.issuedDate).getTime()

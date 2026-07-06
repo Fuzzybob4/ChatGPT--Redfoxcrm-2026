@@ -339,7 +339,7 @@ export default function CustomerPortalPage() {
                           {prop.city}, {prop.state} {prop.zip}
                         </p>
                         <Badge variant="secondary" className="mt-2 text-xs">
-                          {prop.serviceType}
+                          Property
                         </Badge>
                         {prop.notes && (
                           <p className="text-xs text-muted-foreground mt-1 italic">
