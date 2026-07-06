@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f7f3ee; color: #111827; }
+.redfox-gradient { background: linear-gradient(135deg, #0B0F19 0%, #151A27 52%, #2B1111 100%); }
