@@ -1,262 +1,197 @@
-'use client';
-
 import Link from 'next/link';
-import Image from 'next/image';
+import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Check, MapPin, Users, Zap } from 'lucide-react';
-import { pricingPlans } from '@/lib/data';
+
+export const metadata = {
+  title: 'Pricing - RedFox CRM',
+  description: 'Choose the perfect plan for your outdoor service business. All plans include a 30-day free trial.',
+};
+
+const plans = [
+  {
+    name: 'Starter',
+    price: '$49',
+    period: '/month',
+    description: 'Perfect for solo operators and small teams',
+    features: [
+      '1 Location',
+      'Up to 3 team members',
+      'Unlimited customers & properties',
+      'Basic scheduling',
+      'Estimates & invoicing',
+      'Mobile app access',
+      'Email support',
+      'Monthly reports',
+    ],
+    cta: 'Start Free Trial',
+    highlighted: false,
+  },
+  {
+    name: 'Professional',
+    price: '$149',
+    period: '/month',
+    description: 'For growing businesses with multiple crews',
+    features: [
+      'Up to 5 locations',
+      'Up to 20 team members',
+      'Unlimited customers & properties',
+      'Advanced scheduling & routing',
+      'Estimates & invoicing',
+      'Customer portal',
+      'Mobile app access',
+      'Photo documentation',
+      'Performance analytics',
+      'Priority email & chat support',
+      'Weekly reports',
+      'API access',
+    ],
+    cta: 'Start Free Trial',
+    highlighted: true,
+  },
+  {
+    name: 'Enterprise',
+    price: 'Custom',
+    period: 'pricing',
+    description: 'For large organizations needing custom solutions',
+    features: [
+      'Unlimited locations',
+      'Unlimited team members',
+      'White-label options',
+      'Custom integrations',
+      'Dedicated account manager',
+      'Custom reporting',
+      'Advanced security features',
+      'On-premise deployment',
+      'Phone & prioritized support',
+      'SLA guarantee',
+    ],
+    cta: 'Contact Sales',
+    highlighted: false,
+  },
+];
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image src="/logo.png" alt="RedFox" width={32} height={32} />
-            <span className="font-bold text-lg text-foreground">RedFox Lighting</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground">
-              Sign in
-            </Link>
-            <Button render={<Link href="/signup" />} className="bg-primary hover:bg-primary/90">
-              Get Started
-            </Button>
-          </div>
-        </div>
-      </nav>
-
+    <div className="space-y-12">
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center space-y-4 mb-16">
-          <h1 className="text-4xl font-bold text-foreground">Simple, transparent pricing</h1>
-          <p className="text-xl text-muted-foreground">
-            Scale your holiday lighting business without breaking the bank
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center">
+          <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4">
+            Simple, Transparent Pricing
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Choose the plan that fits your business. All plans include a 30-day free trial with full access to all features.
           </p>
         </div>
+      </section>
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
-          {/* Starter */}
-          <div className="bg-card border border-border rounded-lg p-8 space-y-8 flex flex-col">
-            <div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Starter</h3>
-              <p className="text-muted-foreground">Perfect for solo operators</p>
-            </div>
+      {/* Pricing Cards */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {plans.map((plan, idx) => (
+            <div
+              key={idx}
+              className={`rounded-lg border transition-all ${
+                plan.highlighted
+                  ? 'border-primary bg-primary/5 shadow-xl'
+                  : 'border-border bg-background'
+              } p-8`}
+            >
+              {plan.highlighted && (
+                <div className="inline-block bg-primary text-background px-3 py-1 rounded-full text-xs font-semibold mb-4">
+                  Most Popular
+                </div>
+              )}
+              <h3 className="text-2xl font-bold text-foreground mb-2">{plan.name}</h3>
+              <p className="text-sm text-muted-foreground mb-6">{plan.description}</p>
 
-            <div className="space-y-2">
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-foreground">$49</span>
-                <span className="text-muted-foreground">/month</span>
+              <div className="mb-8">
+                <span className="text-5xl font-bold text-foreground">{plan.price}</span>
+                <span className="text-muted-foreground ml-2">{plan.period}</span>
               </div>
-              <p className="text-sm text-muted-foreground">Billed monthly, cancel anytime</p>
-            </div>
 
-            <Button render={<Link href="/signup" />} variant="outline" className="w-full">
-              Get Started
-            </Button>
+              <Link href="/signup" className="w-full mb-8 block">
+                <Button
+                  variant={plan.highlighted ? 'default' : 'outline'}
+                  size="lg"
+                  className="w-full"
+                >
+                  {plan.cta}
+                </Button>
+              </Link>
 
-            <div className="space-y-3 flex-1">
-              <p className="text-sm font-semibold text-foreground">What&apos;s included:</p>
-              <ul className="space-y-2">
-                {[
-                  '1 Location',
-                  'Up to 100 Customers',
-                  'Estimates & Invoices',
-                  'Customer Portal',
-                  'Mobile App',
-                  'Email Support',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span>{feature}</span>
-                  </li>
+              <div className="space-y-4">
+                {plan.features.map((feature, fidx) => (
+                  <div key={fidx} className="flex gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </div>
                 ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Professional */}
-          <div className="bg-card border-2 border-primary rounded-lg p-8 space-y-8 flex flex-col relative">
-            <Badge className="absolute top-4 right-4 bg-primary">Popular</Badge>
-
-            <div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Professional</h3>
-              <p className="text-muted-foreground">For growing teams</p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-foreground">$149</span>
-                <span className="text-muted-foreground">/month</span>
               </div>
-              <p className="text-sm text-muted-foreground">Billed monthly, cancel anytime</p>
             </div>
-
-            <Button render={<Link href="/signup" />} className="w-full bg-primary hover:bg-primary/90">
-              Get Started
-            </Button>
-
-            <div className="space-y-3 flex-1">
-              <p className="text-sm font-semibold text-foreground">What&apos;s included:</p>
-              <ul className="space-y-2">
-                {[
-                  '5 Locations',
-                  'Unlimited Customers',
-                  'Advanced Estimates & Invoices',
-                  'Crew Scheduling',
-                  'Route Optimization',
-                  'Customer Portal',
-                  'Mobile App',
-                  'Priority Support',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Enterprise */}
-          <div className="bg-card border border-border rounded-lg p-8 space-y-8 flex flex-col">
-            <div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Enterprise</h3>
-              <p className="text-muted-foreground">For large operations</p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-foreground">Custom</span>
-              </div>
-              <p className="text-sm text-muted-foreground">Contact us for pricing</p>
-            </div>
-
-            <Button render={<Link href="/signup" />} variant="outline" className="w-full">
-              Contact Sales
-            </Button>
-
-            <div className="space-y-3 flex-1">
-              <p className="text-sm font-semibold text-foreground">Everything Plus:</p>
-              <ul className="space-y-2">
-                {[
-                  'Unlimited Locations',
-                  'Unlimited Users & Customers',
-                  'Custom Integrations',
-                  'API Access',
-                  'Advanced Analytics',
-                  'SSO & Advanced Security',
-                  'Dedicated Account Manager',
-                  '24/7 Priority Support',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          ))}
         </div>
+      </section>
 
-        {/* Comparison Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+      {/* Feature Comparison */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-accent rounded-lg p-8">
+          <h2 className="text-3xl font-bold text-foreground mb-8">Feature Comparison</h2>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted">
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-foreground">Features</th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-foreground">Starter</th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-foreground">Professional</th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-foreground">Enterprise</th>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-4 font-semibold text-foreground">Feature</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground">Starter</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground">Professional</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground">Enterprise</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                <tr>
-                  <td className="px-6 py-4 text-sm text-foreground flex items-center gap-2">
-                    <MapPin className="w-4 h-4" /> Locations
-                  </td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">1</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">5</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Unlimited</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 text-sm text-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Team Members
-                  </td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Unlimited</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Unlimited</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Unlimited</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 text-sm text-foreground flex items-center gap-2">
-                    <Zap className="w-4 h-4" /> Advanced Features
-                  </td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Basic</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Advanced</td>
-                  <td className="px-6 py-4 text-center text-sm text-muted-foreground">Custom</td>
-                </tr>
+              <tbody>
+                {[
+                  ['Locations', '1', '5', 'Unlimited'],
+                  ['Team Members', '3', '20', 'Unlimited'],
+                  ['Customers & Properties', 'Unlimited', 'Unlimited', 'Unlimited'],
+                  ['Estimates & Invoicing', '✓', '✓', '✓'],
+                  ['Job Scheduling', 'Basic', 'Advanced', 'Advanced'],
+                  ['Route Optimization', '—', '✓', '✓'],
+                  ['Customer Portal', '—', '✓', '✓'],
+                  ['Mobile App', '✓', '✓', '✓'],
+                  ['Analytics & Reports', 'Monthly', 'Weekly', 'Custom'],
+                  ['API Access', '—', '✓', '✓'],
+                  ['White Label', '—', '—', '✓'],
+                  ['Dedicated Support', '—', '✓', '✓'],
+                ].map((row, ridx) => (
+                  <tr key={ridx} className="border-b border-border hover:bg-background/50 transition-colors">
+                    <td className="py-3 px-4 text-foreground font-medium">{row[0]}</td>
+                    <td className="py-3 px-4 text-center text-muted-foreground">{row[1]}</td>
+                    <td className="py-3 px-4 text-center text-muted-foreground">{row[2]}</td>
+                    <td className="py-3 px-4 text-center text-muted-foreground">{row[3]}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="bg-card border-t border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <h2 className="text-3xl font-bold text-foreground text-center mb-12">Frequently asked questions</h2>
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">Can I upgrade or downgrade anytime?</h3>
-              <p className="text-muted-foreground">
-                Yes! Upgrade or downgrade your plan at any time. Changes take effect immediately.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">What&apos;s your refund policy?</h3>
-              <p className="text-muted-foreground">
-                We offer a 30-day money-back guarantee. If you&apos;re not satisfied, we&apos;ll refund your payment.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">Do you offer discounts for annual billing?</h3>
-              <p className="text-muted-foreground">
-                Yes! Annual plans are 20% cheaper than monthly. Contact us for details.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">Is there a free tier?</h3>
-              <p className="text-muted-foreground">
-                All new accounts get a 30-day free trial with full access to the Starter plan features.
-              </p>
-            </div>
+      {/* CTA */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="bg-accent rounded-lg p-12 text-center">
+          <h2 className="text-3xl font-bold text-foreground mb-4">Ready to Get Started?</h2>
+          <p className="text-lg text-muted-foreground mb-8">
+            Join 1000+ outdoor service companies already growing with RedFox CRM.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/signup" className="inline-block">
+              <Button size="lg" variant="default">Start Your Free Trial</Button>
+            </Link>
+            <a href="#" className="inline-block">
+              <Button size="lg" variant="outline">Schedule a Demo</Button>
+            </a>
           </div>
         </div>
       </section>
-
-      {/* CTA */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="bg-primary/5 border border-primary/20 rounded-lg p-12 text-center space-y-6">
-          <h2 className="text-3xl font-bold text-foreground">Ready to get started?</h2>
-          <p className="text-lg text-muted-foreground">
-            Start your free 30-day trial today. No credit card required.
-          </p>
-          <Button render={<Link href="/signup" />} size="lg" className="bg-primary hover:bg-primary/90">
-            Start Your Free Trial
-          </Button>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center text-sm text-muted-foreground">
-          <p>&copy; 2024 RedFox Lighting. All rights reserved.</p>
-        </div>
-      </footer>
     </div>
   );
 }
