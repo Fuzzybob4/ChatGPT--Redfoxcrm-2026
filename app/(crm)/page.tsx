@@ -34,12 +34,10 @@ import {
 export default function DashboardPage() {
   const stats = getDashboardStats();
 
-  // Today's + upcoming jobs
   const upcomingJobs = jobs
     .filter((j) => j.status === "Scheduled" || j.status === "In Progress")
     .slice(0, 5);
 
-  // Recent invoices
   const recentInvoices = [...invoices]
     .sort(
       (a, b) =>
@@ -53,8 +51,8 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Welcome back, Alex"
         actions={
-          <Button asChild size="sm">
-            <Link href="/jobs/new">+ New Job</Link>
+          <Button size="sm" render={<Link href="/jobs/new" />}>
+            + New Job
           </Button>
         }
       />
@@ -100,13 +98,15 @@ export default function DashboardPage() {
                   Upcoming Jobs
                 </CardTitle>
                 <CardDescription className="text-xs mt-0.5">
-                  Scheduled & in-progress
+                  Scheduled &amp; in-progress
                 </CardDescription>
               </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/jobs" className="flex items-center gap-1 text-xs">
-                  View all <ArrowRight className="size-3" />
-                </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/jobs" className="flex items-center gap-1 text-xs" />}
+              >
+                View all <ArrowRight className="size-3" />
               </Button>
             </CardHeader>
             <CardContent className="pt-0">
@@ -127,10 +127,13 @@ export default function DashboardPage() {
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {customer?.name} &middot;{" "}
-                          {new Date(job.scheduledDate + "T" + job.scheduledTime).toLocaleDateString(
-                            "en-US",
-                            { weekday: "short", month: "short", day: "numeric" }
-                          )}{" "}
+                          {new Date(
+                            job.scheduledDate + "T" + job.scheduledTime
+                          ).toLocaleDateString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}{" "}
                           at {job.scheduledTime}
                         </p>
                       </div>
@@ -158,10 +161,12 @@ export default function DashboardPage() {
                   Latest billing activity
                 </CardDescription>
               </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/invoices" className="flex items-center gap-1 text-xs">
-                  View all <ArrowRight className="size-3" />
-                </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/invoices" className="flex items-center gap-1 text-xs" />}
+              >
+                View all <ArrowRight className="size-3" />
               </Button>
             </CardHeader>
             <CardContent className="pt-0">
@@ -206,29 +211,37 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="pt-4 pb-4">
               <div className="flex flex-wrap gap-3">
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/customers/new">
-                    <Users className="size-3.5 mr-1.5" />
-                    Add Customer
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/customers/new" />}
+                >
+                  <Users className="size-3.5" data-icon="inline-start" />
+                  Add Customer
                 </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/jobs/new">
-                    <CalendarDays className="size-3.5 mr-1.5" />
-                    Schedule Job
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/jobs/new" />}
+                >
+                  <CalendarDays className="size-3.5" data-icon="inline-start" />
+                  Schedule Job
                 </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/invoices/new">
-                    <DollarSign className="size-3.5 mr-1.5" />
-                    Create Invoice
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/invoices/new" />}
+                >
+                  <DollarSign className="size-3.5" data-icon="inline-start" />
+                  Create Invoice
                 </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/portal">
-                    <CheckCircle className="size-3.5 mr-1.5" />
-                    Customer Portal
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/portal" />}
+                >
+                  <CheckCircle className="size-3.5" data-icon="inline-start" />
+                  Customer Portal
                 </Button>
               </div>
             </CardContent>

@@ -13,11 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-import {
-  invoices,
-  getCustomerById,
-  getInvoiceTotal,
-} from "@/lib/data";
+import { invoices, getCustomerById, getInvoiceTotal } from "@/lib/data";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -38,21 +34,23 @@ export default async function InvoiceDetailPage({ params }: Props) {
         description={customer?.name}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/invoices">
-                <ArrowLeft className="size-3.5 mr-1" />
-                Back
-              </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/invoices" />}
+            >
+              <ArrowLeft className="size-3.5" data-icon="inline-start" />
+              Back
             </Button>
             {invoice.status === "Draft" && (
               <Button size="sm">
-                <Send className="size-3.5 mr-1.5" />
+                <Send className="size-3.5" data-icon="inline-start" />
                 Send Invoice
               </Button>
             )}
             {invoice.status === "Sent" && (
               <Button size="sm">
-                <CheckCircle className="size-3.5 mr-1.5" />
+                <CheckCircle className="size-3.5" data-icon="inline-start" />
                 Mark Paid
               </Button>
             )}
@@ -63,7 +61,6 @@ export default async function InvoiceDetailPage({ params }: Props) {
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-2xl mx-auto">
           <Card>
-            {/* Invoice header */}
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -190,11 +187,11 @@ export default async function InvoiceDetailPage({ params }: Props) {
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2">
                 <Button variant="outline" size="sm">
-                  <Printer className="size-3.5 mr-1.5" />
+                  <Printer className="size-3.5" data-icon="inline-start" />
                   Print
                 </Button>
                 <Button variant="outline" size="sm">
-                  <Download className="size-3.5 mr-1.5" />
+                  <Download className="size-3.5" data-icon="inline-start" />
                   Download PDF
                 </Button>
               </div>

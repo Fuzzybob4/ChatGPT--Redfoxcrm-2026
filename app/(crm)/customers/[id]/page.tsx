@@ -44,11 +44,13 @@ export default async function CustomerDetailPage({ params }: Props) {
         description={customer.email}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/customers">
-                <ArrowLeft className="size-3.5 mr-1" />
-                Back
-              </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/customers" />}
+            >
+              <ArrowLeft className="size-3.5" data-icon="inline-start" />
+              Back
             </Button>
             <Button size="sm">Edit Customer</Button>
           </div>
@@ -137,7 +139,7 @@ export default async function CustomerDetailPage({ params }: Props) {
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm">
-                  <Plus className="size-3.5 mr-1" />
+                  <Plus className="size-3.5" data-icon="inline-start" />
                   Add
                 </Button>
               </CardHeader>
@@ -183,11 +185,13 @@ export default async function CustomerDetailPage({ params }: Props) {
                     Jobs
                   </CardTitle>
                 </div>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/jobs/new?customer=${customer.id}`}>
-                    <Plus className="size-3.5 mr-1" />
-                    Schedule
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href={`/jobs/new?customer=${customer.id}`} />}
+                >
+                  <Plus className="size-3.5" data-icon="inline-start" />
+                  Schedule
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
@@ -232,11 +236,13 @@ export default async function CustomerDetailPage({ params }: Props) {
                     Invoices
                   </CardTitle>
                 </div>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/invoices/new?customer=${customer.id}`}>
-                    <Plus className="size-3.5 mr-1" />
-                    New Invoice
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href={`/invoices/new?customer=${customer.id}`} />}
+                >
+                  <Plus className="size-3.5" data-icon="inline-start" />
+                  New Invoice
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">

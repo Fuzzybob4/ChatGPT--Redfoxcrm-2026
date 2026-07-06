@@ -30,7 +30,7 @@ const SERVICE_COLORS: Record<string, string> = {
   "Lawn Care": "bg-emerald-100 text-emerald-800 border-emerald-200",
   "Pest Control": "bg-orange-100 text-orange-800 border-orange-200",
   HVAC: "bg-blue-100 text-blue-800 border-blue-200",
-  Cleaning: "bg-purple-100 text-purple-800 border-purple-200",
+  Cleaning: "bg-violet-100 text-violet-800 border-violet-200",
   "Tree Service": "bg-yellow-100 text-yellow-800 border-yellow-200",
   "Pressure Washing": "bg-cyan-100 text-cyan-800 border-cyan-200",
 };
@@ -45,12 +45,10 @@ export default function JobsPage() {
       j.title.toLowerCase().includes(query.toLowerCase()) ||
       customer?.name.toLowerCase().includes(query.toLowerCase()) ||
       j.technicianName.toLowerCase().includes(query.toLowerCase());
-
     const matchesTab = activeTab === "all" || j.status === activeTab;
     return matchesQuery && matchesTab;
   });
 
-  // Group by date for schedule view
   const byDate = filtered.reduce<Record<string, typeof filtered>>(
     (acc, job) => {
       const d = job.scheduledDate;
@@ -74,20 +72,17 @@ export default function JobsPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
-        title="Jobs & Schedule"
+        title="Jobs &amp; Schedule"
         description={`${jobs.length} total jobs`}
         actions={
-          <Button size="sm" asChild>
-            <Link href="/jobs/new">
-              <Plus className="size-3.5 mr-1" />
-              Schedule Job
-            </Link>
+          <Button size="sm" render={<Link href="/jobs/new" />}>
+            <Plus className="size-3.5" data-icon="inline-start" />
+            Schedule Job
           </Button>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {/* Filters row */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-5">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -100,7 +95,6 @@ export default function JobsPage() {
           </div>
         </div>
 
-        {/* Status tabs */}
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "all" | JobStatus)}
@@ -117,8 +111,7 @@ export default function JobsPage() {
             ))}
           </TabsList>
 
-          {/* Schedule view – grouped by date */}
-          {["all", ...ALL_STATUSES].map((tab) => (
+          {(["all", ...ALL_STATUSES] as ("all" | JobStatus)[]).map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-0 space-y-6">
               {sortedDates.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-12">
@@ -154,10 +147,9 @@ export default function JobsPage() {
                       return (
                         <Card
                           key={job.id}
-                          className="hover:border-primary/50 transition-colors cursor-pointer group"
+                          className="hover:border-primary/50 transition-colors cursor-pointer"
                         >
                           <CardContent className="py-3.5 px-4">
-                            {/* Top row */}
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium text-sm truncate">
@@ -167,7 +159,6 @@ export default function JobsPage() {
                               <StatusBadge status={job.status} />
                             </div>
 
-                            {/* Service type */}
                             <Badge
                               variant="outline"
                               className={`text-[11px] px-2 py-0 mb-2.5 border ${colorClass}`}
@@ -175,7 +166,6 @@ export default function JobsPage() {
                               {job.serviceType}
                             </Badge>
 
-                            {/* Meta */}
                             <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <User className="size-3 shrink-0" />

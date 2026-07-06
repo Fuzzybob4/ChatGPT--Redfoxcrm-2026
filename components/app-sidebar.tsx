@@ -65,10 +65,9 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r-0">
-      {/* Logo / brand */}
+      {/* Brand */}
       <SidebarHeader className="px-4 py-5">
         <Link href="/" className="flex items-center gap-2.5">
-          {/* Fox icon – simple SVG inline */}
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
             RF
           </span>
@@ -95,25 +94,23 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      asChild
                       isActive={active}
+                      render={<Link href={item.href} />}
                       className={cn(
                         "gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground",
                         active && "text-sidebar-foreground font-medium"
                       )}
                     >
-                      <Link href={item.href}>
-                        <item.icon className="size-4 shrink-0" />
-                        <span>{item.title}</span>
-                        {item.badge && (
-                          <Badge
-                            variant="secondary"
-                            className="ml-auto text-[10px] h-5 px-1.5 bg-sidebar-accent text-sidebar-accent-foreground"
-                          >
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </Link>
+                      <item.icon className="size-4 shrink-0" />
+                      <span>{item.title}</span>
+                      {item.badge && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto text-[10px] h-5 px-1.5 bg-sidebar-accent text-sidebar-accent-foreground"
+                        >
+                          {item.badge}
+                        </Badge>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -131,19 +128,21 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild className="text-sidebar-foreground/80 hover:text-sidebar-foreground gap-3">
-                  <Link href="/portal">
-                    <ExternalLink className="size-4 shrink-0" />
-                    <span>Customer Portal</span>
-                  </Link>
+                <SidebarMenuButton
+                  render={<Link href="/portal" />}
+                  className="text-sidebar-foreground/80 hover:text-sidebar-foreground gap-3"
+                >
+                  <ExternalLink className="size-4 shrink-0" />
+                  <span>Customer Portal</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild className="text-sidebar-foreground/80 hover:text-sidebar-foreground gap-3">
-                  <Link href="/settings">
-                    <Settings className="size-4 shrink-0" />
-                    <span>Settings</span>
-                  </Link>
+                <SidebarMenuButton
+                  render={<Link href="/settings" />}
+                  className="text-sidebar-foreground/80 hover:text-sidebar-foreground gap-3"
+                >
+                  <Settings className="size-4 shrink-0" />
+                  <span>Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -153,26 +152,32 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border px-3 py-3">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
-              <Avatar className="size-8 shrink-0">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                  AO
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col items-start leading-tight min-w-0">
-                <span className="font-medium truncate text-sidebar-foreground">Alex Owner</span>
-                <span className="text-xs text-sidebar-foreground/60 truncate">
-                  alex@redfoxcrm.com
-                </span>
-              </div>
-              <ChevronDown className="ml-auto size-3 shrink-0 text-sidebar-foreground/50" />
-            </button>
+          <DropdownMenuTrigger
+            render={
+              <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors" />
+            }
+          >
+            <Avatar className="size-8 shrink-0">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                AO
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col items-start leading-tight min-w-0">
+              <span className="font-medium truncate text-sidebar-foreground">
+                Alex Owner
+              </span>
+              <span className="text-xs text-sidebar-foreground/60 truncate">
+                alex@redfoxcrm.com
+              </span>
+            </div>
+            <ChevronDown className="ml-auto size-3 shrink-0 text-sidebar-foreground/50" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-48">
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Billing</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">Sign out</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive">
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>

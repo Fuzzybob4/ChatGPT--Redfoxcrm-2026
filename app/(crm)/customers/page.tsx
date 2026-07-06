@@ -18,7 +18,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 
 import { customers, getCustomerProperties } from "@/lib/data";
 
@@ -38,11 +37,9 @@ export default function CustomersPage() {
         title="Customers"
         description={`${customers.length} accounts`}
         actions={
-          <Button size="sm" asChild>
-            <Link href="/customers/new">
-              <Plus className="size-3.5 mr-1" />
-              Add Customer
-            </Link>
+          <Button size="sm" render={<Link href="/customers/new" />}>
+            <Plus className="size-3.5" data-icon="inline-start" />
+            Add Customer
           </Button>
         }
       />
@@ -120,10 +117,12 @@ export default function CustomersPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/customers/${customer.id}`}>
-                              View
-                            </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            render={<Link href={`/customers/${customer.id}`} />}
+                          >
+                            View
                           </Button>
                         </TableCell>
                       </TableRow>

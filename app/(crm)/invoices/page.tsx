@@ -69,11 +69,9 @@ export default function InvoicesPage() {
         title="Invoices"
         description={`${invoices.length} total invoices`}
         actions={
-          <Button size="sm" asChild>
-            <Link href="/invoices/new">
-              <Plus className="size-3.5 mr-1" />
-              New Invoice
-            </Link>
+          <Button size="sm" render={<Link href="/invoices/new" />}>
+            <Plus className="size-3.5" data-icon="inline-start" />
+            New Invoice
           </Button>
         }
       />
@@ -121,7 +119,6 @@ export default function InvoicesPage() {
           </div>
         </div>
 
-        {/* Tabs */}
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "all" | InvoiceStatus)}
@@ -138,7 +135,7 @@ export default function InvoicesPage() {
             ))}
           </TabsList>
 
-          {["all", ...ALL_STATUSES].map((tab) => (
+          {(["all", ...ALL_STATUSES] as ("all" | InvoiceStatus)[]).map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-0">
               {/* Desktop */}
               <div className="hidden md:block">
@@ -200,11 +197,9 @@ export default function InvoicesPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    asChild
+                                    render={<Link href={`/invoices/${inv.id}`} />}
                                   >
-                                    <Link href={`/invoices/${inv.id}`}>
-                                      View
-                                    </Link>
+                                    View
                                   </Button>
                                   {(inv.status === "Draft" || inv.status === "Sent") && (
                                     <Button variant="ghost" size="sm">
