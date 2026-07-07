@@ -16,7 +16,7 @@ const plans = [
     features: [
       '1 Location',
       'Up to 3 team members',
-      'Unlimited customers & properties',
+      'Up to 3,000 customers & properties',
       'Basic scheduling',
       'Estimates & invoicing',
       'Mobile app access',
@@ -34,7 +34,7 @@ const plans = [
     features: [
       'Up to 5 locations',
       'Up to 20 team members',
-      'Unlimited customers & properties',
+      'Up to 15,000 customers & properties',
       'Advanced scheduling & routing',
       'Estimates & invoicing',
       'Customer portal',
@@ -50,23 +50,50 @@ const plans = [
   },
   {
     name: 'Enterprise',
-    price: 'Custom',
-    period: 'pricing',
+    price: '$199',
+    period: '/month starting',
     description: 'For large organizations needing custom solutions',
     features: [
       'Unlimited locations',
       'Unlimited team members',
+      'Unlimited customers & properties',
       'White-label options',
-      'Custom integrations',
+      'Custom integrations (QuickBooks, Stripe & more)',
       'Dedicated account manager',
       'Custom reporting',
       'Advanced security features',
-      'On-premise deployment',
       'Phone & prioritized support',
-      'SLA guarantee',
     ],
     cta: 'Contact Sales',
     highlighted: false,
+  },
+];
+
+const addons = [
+  {
+    name: 'Recurring Services',
+    price: '$29',
+    description: 'Manage recurring service contracts and billing cycles',
+  },
+  {
+    name: 'Route Optimization',
+    price: '$49',
+    description: 'Optimize routes for your crews to save time and fuel',
+  },
+  {
+    name: 'Customer Portal Upsells',
+    price: '$19',
+    description: 'Allow customers to add optional services when paying invoices',
+  },
+  {
+    name: 'SMS Notifications',
+    price: '$29',
+    description: 'Send text messages to customers about jobs and appointments',
+  },
+  {
+    name: 'Email Campaigns',
+    price: '$19',
+    description: 'Send marketing emails and newsletters to customers',
   },
 ];
 
@@ -133,6 +160,30 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Add-On Services */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-bold text-foreground mb-3">Power Up With Add-Ons</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Toggle these services on anytime from your dashboard. Add only what your business needs — cancel anytime.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {addons.map((addon) => (
+            <div
+              key={addon.name}
+              className="rounded-lg border border-border bg-background p-6 flex flex-col gap-3 hover:border-primary/50 transition-colors"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="font-semibold text-foreground">{addon.name}</h3>
+                <span className="text-primary font-bold whitespace-nowrap">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mo</span></span>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">{addon.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Feature Comparison */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-accent rounded-lg p-8">
@@ -151,7 +202,7 @@ export default function PricingPage() {
                 {[
                   ['Locations', '1', '5', 'Unlimited'],
                   ['Team Members', '3', '20', 'Unlimited'],
-                  ['Customers & Properties', 'Unlimited', 'Unlimited', 'Unlimited'],
+                  ['Customers & Properties', '3,000', '15,000', 'Unlimited'],
                   ['Estimates & Invoicing', '✓', '✓', '✓'],
                   ['Job Scheduling', 'Basic', 'Advanced', 'Advanced'],
                   ['Route Optimization', '—', '✓', '✓'],

@@ -10,6 +10,10 @@ import {
   Settings,
   ExternalLink,
   ChevronDown,
+  Map,
+  HardHat,
+  BarChart3,
+  Receipt,
 } from "lucide-react";
 
 import {
@@ -23,6 +27,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -52,6 +59,13 @@ const navItems = [
     href: "/estimates",
     icon: FileText,
     badge: "3",
+    children: [
+      {
+        title: "Invoices",
+        href: "/invoices",
+        icon: Receipt,
+      },
+    ],
   },
   {
     title: "Jobs & Schedule",
@@ -60,9 +74,19 @@ const navItems = [
     badge: "4",
   },
   {
-    title: "Invoices",
-    href: "/invoices",
-    icon: FileText,
+    title: "Mapping",
+    href: "/mapping",
+    icon: Map,
+  },
+  {
+    title: "Crew",
+    href: "/crew",
+    icon: HardHat,
+  },
+  {
+    title: "Reports",
+    href: "/reports",
+    icon: BarChart3,
   },
 ];
 
@@ -118,6 +142,29 @@ export function AppSidebar() {
                         </Badge>
                       )}
                     </SidebarMenuButton>
+                    {item.children && (
+                      <SidebarMenuSub>
+                        {item.children.map((child) => {
+                          const childActive = pathname.startsWith(child.href);
+                          return (
+                            <SidebarMenuSubItem key={child.href}>
+                              <SidebarMenuSubButton
+                                isActive={childActive}
+                                render={<Link href={child.href} />}
+                                className={cn(
+                                  "gap-3 text-sidebar-foreground/70 hover:text-sidebar-foreground",
+                                  childActive &&
+                                    "text-sidebar-foreground font-medium"
+                                )}
+                              >
+                                <child.icon className="size-3.5 shrink-0" />
+                                <span>{child.title}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    )}
                   </SidebarMenuItem>
                 );
               })}
