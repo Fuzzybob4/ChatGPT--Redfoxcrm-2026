@@ -172,7 +172,7 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
             </button>
           )}
         </div>
-        <Select value={cityFilter} onValueChange={setCityFilter}>
+        <Select value={cityFilter} onValueChange={(v) => setCityFilter(v ?? "all")}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="All cities" />
           </SelectTrigger>
