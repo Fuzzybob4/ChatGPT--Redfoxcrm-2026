@@ -14,6 +14,7 @@ import {
   HardHat,
   BarChart3,
   Receipt,
+  Mail,
 } from "lucide-react";
 
 import {
@@ -87,6 +88,11 @@ const navItems = [
     title: "Reports",
     href: "/reports",
     icon: BarChart3,
+  },
+  {
+    title: "Email Marketing",
+    href: "/email-marketing",
+    icon: Mail,
   },
 ];
 
