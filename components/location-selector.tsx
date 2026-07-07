@@ -1,8 +1,8 @@
 'use client';
 
 import { useLocation } from '@/lib/location-context';
-import { useAuth } from '@/lib/auth-context';
 import { useData } from '@/lib/data-context';
+import { useOrgContext } from '@/lib/org-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,12 +16,12 @@ import { cn } from '@/lib/utils';
 
 export function LocationSelector() {
   const { selectedLocationId, setSelectedLocationId } = useLocation();
-  const { user } = useAuth();
   const { locations, getLocationById } = useData();
+  const org = useOrgContext();
   const currentLocation = getLocationById(selectedLocationId);
 
   // Multi-location switching is a Professional / Enterprise feature
-  const isMultiLocation = user?.plan === 'professional' || user?.plan === 'enterprise';
+  const isMultiLocation = org.isEnterprise || org.locationCount > 1;
 
   if (!isMultiLocation) {
     return (

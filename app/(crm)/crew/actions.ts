@@ -18,12 +18,12 @@ export async function addEmployee(formData: FormData) {
     return { error: "First name, last name, and email are required." };
   }
 
-  const orgId = await getOrgId();
-  if (!orgId) return { error: "Organization not found." };
+  const org = await getCurrentOrg();
+  if (!org) return { error: "Organization not found." };
 
-  const supabase = createAdminClient();
+  const supabase = await createClient();
   const { error } = await supabase.from("employees").insert({
-    org_id: orgId,
+    org_id: org.orgId,
     first_name: firstName,
     last_name: lastName,
     full_name: `${firstName} ${lastName}`,
@@ -50,7 +50,7 @@ export async function updateEmployeeAccess(
   field: "can_access_work_orders" | "can_access_mapping" | "is_active",
   value: boolean
 ) {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
   const { error } = await supabase
     .from("employees")
     .update({ [field]: value })
@@ -63,7 +63,7 @@ export async function updateEmployeeAccess(
 }
 
 export async function removeEmployee(employeeId: string) {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
   const { error } = await supabase
     .from("employees")
     .update({ is_active: false })

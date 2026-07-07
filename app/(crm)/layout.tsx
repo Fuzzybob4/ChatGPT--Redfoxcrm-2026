@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { LocationProvider } from "@/lib/location-context";
 import { DataProvider } from "@/lib/data-context";
+import { OrgProvider } from "@/lib/org-context";
 import { getCurrentOrg } from "@/lib/org";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -11,17 +12,19 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
   if (!org) redirect("/onboarding");
 
   return (
-    <DataProvider>
-      <LocationProvider>
-        <SidebarProvider defaultOpen>
-          <div className="flex min-h-screen w-full">
-            <AppSidebar />
-            <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
-              {children}
-            </main>
-          </div>
-        </SidebarProvider>
-      </LocationProvider>
-    </DataProvider>
+    <OrgProvider org={org}>
+      <DataProvider>
+        <LocationProvider>
+          <SidebarProvider defaultOpen>
+            <div className="flex min-h-screen w-full">
+              <AppSidebar />
+              <main className="flex flex-1 flex-col min-w-0 overflow-hidden">
+                {children}
+              </main>
+            </div>
+          </SidebarProvider>
+        </LocationProvider>
+      </DataProvider>
+    </OrgProvider>
   );
 }
