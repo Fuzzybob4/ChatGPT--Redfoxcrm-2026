@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithOAuth: (provider: 'google' | 'github' | 'azure') => Promise<void>;
   signup: (name: string, email: string, password: string, locationName: string) => Promise<void>;
   logout: () => void;
 }
@@ -58,6 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user) setUser(supabaseUserToUser(data.user));
   };
 
+  const loginWithOAuth = async (provider: 'google' | 'github' | 'azure') => {
+    const redirectTo =
+      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+      `${window.location.origin}/auth/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) throw new Error(error.message);
+    // Browser will redirect to the OAuth provider; no further action needed here
+  };
+
   const signup = async (name: string, email: string, password: string, locationName: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -83,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginWithOAuth, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
