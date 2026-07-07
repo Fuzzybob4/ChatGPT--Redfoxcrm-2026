@@ -7,7 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -44,9 +43,9 @@ export function LocationSelector() {
         <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider">
+        <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Locations
-        </DropdownMenuLabel>
+        </div>
         <DropdownMenuSeparator />
         {locations.map((loc) => (
           <DropdownMenuItem
