@@ -35,6 +35,14 @@ export default function CustomersPage() {
       c.phone.includes(query)
   );
 
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
@@ -171,8 +179,7 @@ export default function CustomersPage() {
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                           <MapPin className="size-3" />
-                          {props.length}{" "}
-                          {props.length === 1 ? "property" : "properties"}
+                          {[customer.city, customer.state].filter(Boolean).join(", ") || "—"}
                         </p>
                       </div>
                     </div>

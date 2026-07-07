@@ -2,7 +2,7 @@
 
 import { useLocation } from '@/lib/location-context';
 import { useAuth } from '@/lib/auth-context';
-import { locations, getLocationById } from '@/lib/data';
+import { useData } from '@/lib/data-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 export function LocationSelector() {
   const { selectedLocationId, setSelectedLocationId } = useLocation();
   const { user } = useAuth();
+  const { locations, getLocationById } = useData();
   const currentLocation = getLocationById(selectedLocationId);
 
   // Multi-location switching is a Professional / Enterprise feature

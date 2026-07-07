@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getEstimateById, getCustomerById, getPropertyById, getEstimateTotal } from '@/lib/data';
+import { getEstimateTotal } from '@/lib/data';
+import { useData } from '@/lib/data-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +22,16 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export default function EstimateDetailPage() {
   const { id } = useParams() as { id: string };
+  const { loading, getEstimateById, getCustomerById } = useData();
   const estimate = getEstimateById(id);
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!estimate) {
     return (
@@ -40,7 +50,6 @@ export default function EstimateDetailPage() {
   }
 
   const customer = getCustomerById(estimate.customerId);
-  const property = getPropertyById(estimate.propertyId);
   const total = getEstimateTotal(estimate);
   const config = statusConfig[estimate.status];
 
@@ -48,7 +57,7 @@ export default function EstimateDetailPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <PageHeader
         title={estimate.estimateNumber}
-        description={`${customer?.name || 'Unknown'} • ${property?.address || 'Unknown'}`}
+        description={`${customer?.name || 'Unknown'} • ${customer?.address || 'No address'}`}
         actions={
           <div className="flex gap-2">
             <Button render={<Link href="/estimates" />} variant="outline" size="sm">
@@ -82,7 +91,7 @@ export default function EstimateDetailPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <CardTitle>{customer?.name}</CardTitle>
-                  <CardDescription>{property?.address}</CardDescription>
+                  <CardDescription>{customer?.address || 'No address'}</CardDescription>
                 </div>
                 <Badge className={`${config.color}`}>{config.label}</Badge>
               </div>

@@ -7,7 +7,6 @@ import {
   Search,
   Clock,
   User,
-  MapPin,
   DollarSign,
   ChevronLeft,
   ChevronRight,
@@ -23,12 +22,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-import {
-  jobs,
-  getCustomerById,
-  getPropertyById,
-  type JobStatus,
-} from "@/lib/data";
+import { type JobStatus, type Job } from "@/lib/data";
+import { useData } from "@/lib/data-context";
+import { useLocation } from "@/lib/location-context";
 
 const ALL_STATUSES: JobStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -54,7 +50,15 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-function CalendarView({ query }: { query: string }) {
+function CalendarView({
+  query,
+  jobs,
+  getCustomerById,
+}: {
+  query: string;
+  jobs: Job[];
+  getCustomerById: (id: string) => { name: string } | undefined;
+}) {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -67,13 +71,13 @@ function CalendarView({ query }: { query: string }) {
 
   // Map YYYY-MM-DD -> jobs on that day
   const jobsByDate = useMemo(() => {
-    const map: Record<string, typeof jobs> = {};
+    const map: Record<string, Job[]> = {};
     jobs.forEach((j) => {
       if (!map[j.scheduledDate]) map[j.scheduledDate] = [];
       map[j.scheduledDate].push(j);
     });
     return map;
-  }, []);
+  }, [jobs]);
 
   const cells: (string | null)[] = [
     ...Array(firstDayOfMonth).fill(null),
@@ -197,7 +201,6 @@ function CalendarView({ query }: { query: string }) {
             <div className="grid gap-3 md:grid-cols-2">
               {selectedJobs.map((job) => {
                 const customer = getCustomerById(job.customerId);
-                const property = getPropertyById(job.propertyId);
                 return (
                   <Card key={job.id} className="hover:border-primary/50 transition-colors">
                     <CardContent className="py-3.5 px-4">
@@ -207,7 +210,6 @@ function CalendarView({ query }: { query: string }) {
                       </div>
                       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1.5"><User className="size-3" />{customer?.name}</span>
-                        {property && <span className="flex items-center gap-1.5"><MapPin className="size-3" />{property.address}</span>}
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5"><Clock className="size-3" />{job.scheduledTime} &middot; {job.durationMins} min</span>
                           <span className="flex items-center gap-1 font-semibold text-foreground"><DollarSign className="size-3" />{job.amount}</span>
@@ -229,6 +231,9 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | JobStatus>("all");
   const [view, setView] = useState<"list" | "calendar">("list");
+  const { loading, getLocationJobs, getCustomerById } = useData();
+  const { selectedLocationId } = useLocation();
+  const jobs = getLocationJobs(selectedLocationId);
 
   const filtered = jobs.filter((j) => {
     const customer = getCustomerById(j.customerId);
@@ -256,6 +261,14 @@ export default function JobsPage() {
     Completed: jobs.filter((j) => j.status === "Completed").length,
     Cancelled: jobs.filter((j) => j.status === "Cancelled").length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -306,7 +319,9 @@ export default function JobsPage() {
         </div>
 
         {/* Calendar view */}
-        {view === "calendar" && <CalendarView query={query} />}
+        {view === "calendar" && (
+          <CalendarView query={query} jobs={jobs} getCustomerById={getCustomerById} />
+        )}
 
         {/* List view */}
         {view === "list" && (
@@ -346,7 +361,6 @@ export default function JobsPage() {
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {byDate[date].map((job) => {
                         const customer = getCustomerById(job.customerId);
-                        const property = getPropertyById(job.propertyId);
                         const colorClass = SERVICE_COLORS[job.serviceType] ?? "bg-muted text-muted-foreground border-border";
                         return (
                           <Card key={job.id} className="hover:border-primary/50 transition-colors cursor-pointer">
@@ -360,9 +374,6 @@ export default function JobsPage() {
                               </Badge>
                               <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1.5"><User className="size-3 shrink-0" />{customer?.name}</span>
-                                {property && (
-                                  <span className="flex items-center gap-1.5"><MapPin className="size-3 shrink-0" />{property.address}, {property.city}</span>
-                                )}
                                 <div className="flex items-center justify-between">
                                   <span className="flex items-center gap-1.5"><Clock className="size-3 shrink-0" />{job.scheduledTime} &middot; {job.durationMins} min</span>
                                   <span className="flex items-center gap-1 font-semibold text-foreground"><DollarSign className="size-3" />{job.amount}</span>

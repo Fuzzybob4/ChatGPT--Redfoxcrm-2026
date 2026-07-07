@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { estimates, getEstimateTotal, getCustomerById, getPropertyById, EstimateStatus } from '@/lib/data';
+import { getEstimateTotal, EstimateStatus } from '@/lib/data';
+import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -23,27 +24,37 @@ const statusConfig: Record<EstimateStatus, { label: string; variant: 'default' |
 
 export default function EstimatesPage() {
   const { selectedLocationId } = useLocation();
+  const { loading, estimates, getCustomerById } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<EstimateStatus | 'all'>('all');
 
   // Filter estimates by location
-  const locationEstimates = estimates.filter((e) => e.locationId === selectedLocationId);
+  const locationEstimates = selectedLocationId
+    ? estimates.filter((e) => e.locationId === selectedLocationId)
+    : estimates;
 
   // Apply filters
   const filtered = locationEstimates.filter((est) => {
     const customer = getCustomerById(est.customerId);
-    const property = getPropertyById(est.propertyId);
     const searchTerm = search.toLowerCase();
 
     const matchesSearch =
       est.estimateNumber.toLowerCase().includes(searchTerm) ||
       customer?.name.toLowerCase().includes(searchTerm) ||
-      property?.address.toLowerCase().includes(searchTerm);
+      (customer?.address ?? '').toLowerCase().includes(searchTerm);
 
     const matchesStatus = statusFilter === 'all' || est.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -104,7 +115,7 @@ export default function EstimatesPage() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Estimate #</TableHead>
                     <TableHead>Customer</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead>Address</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Status</TableHead>
@@ -114,7 +125,6 @@ export default function EstimatesPage() {
                 <TableBody>
                   {filtered.map((est) => {
                     const customer = getCustomerById(est.customerId);
-                    const property = getPropertyById(est.propertyId);
                     const config = statusConfig[est.status];
 
                     return (
@@ -123,7 +133,7 @@ export default function EstimatesPage() {
                           {est.estimateNumber}
                         </TableCell>
                         <TableCell className="text-foreground">{customer?.name}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{property?.address}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{customer?.address || '—'}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {format(new Date(est.createdDate), 'MMM dd, yyyy')}
                         </TableCell>

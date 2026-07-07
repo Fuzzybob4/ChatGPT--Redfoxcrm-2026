@@ -86,6 +86,8 @@ export async function createOrganization(
     return { ok: false, error: bpErr.message };
   }
 
+  if (!orgId) return { ok: false, error: 'Failed to resolve organization' };
+
   await supabase
     .from('onboarding_state')
     .upsert({ user_id: user.id, org_id: orgId, current_step: 2 }, { onConflict: 'user_id' });

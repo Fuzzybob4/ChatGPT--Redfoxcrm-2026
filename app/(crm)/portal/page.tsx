@@ -40,15 +40,8 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-import {
-  customers,
-  getCustomerJobs,
-  getCustomerInvoices,
-  getCustomerProperties,
-  getInvoiceTotal,
-} from "@/lib/data";
-
-const PORTAL_CUSTOMER_ID = "cust-1";
+import { getInvoiceTotal } from "@/lib/data";
+import { useData } from "@/lib/data-context";
 
 // Optional upsell services customers can add when paying
 const UPSELL_SERVICES = [
@@ -74,10 +67,8 @@ const UPSELL_SERVICES = [
 ];
 
 export default function CustomerPortalPage() {
-  const customer = customers.find((c) => c.id === PORTAL_CUSTOMER_ID)!;
-  const jobs = getCustomerJobs(PORTAL_CUSTOMER_ID);
-  const invoices = getCustomerInvoices(PORTAL_CUSTOMER_ID);
-  const properties = getCustomerProperties(PORTAL_CUSTOMER_ID);
+  const { loading, customers, getCustomerJobs, getCustomerInvoices } = useData();
+  const customer = customers[0];
 
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
@@ -87,6 +78,33 @@ export default function CustomerPortalPage() {
   const [selectedUpsells, setSelectedUpsells] = useState<Set<string>>(new Set());
   const [paymentStep, setPaymentStep] = useState<"select" | "upsells" | "confirm" | "done">("select");
   const [paidInvoices, setPaidInvoices] = useState<Set<string>>(new Set());
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <div className="flex flex-1 flex-col min-h-0">
+        <PageHeader
+          title="Customer Portal"
+          description="Preview: how customers see their account"
+        />
+        <div className="flex-1 flex items-center justify-center p-10">
+          <p className="text-sm text-muted-foreground">
+            No customers yet. Add a customer to preview the portal.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const jobs = getCustomerJobs(customer.id);
+  const invoices = getCustomerInvoices(customer.id);
 
   const upcomingJobs = jobs.filter(
     (j) => j.status === "Scheduled" || j.status === "In Progress"
@@ -158,8 +176,8 @@ export default function CustomerPortalPage() {
                 <p className="text-xs text-primary-foreground/70 mt-0.5">Upcoming Jobs</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold">{properties.length}</p>
-                <p className="text-xs text-primary-foreground/70 mt-0.5">Properties</p>
+                <p className="text-2xl font-bold">{pastJobs.length}</p>
+                <p className="text-xs text-primary-foreground/70 mt-0.5">Completed Jobs</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold">{unpaidInvoices.length}</p>
@@ -349,7 +367,7 @@ export default function CustomerPortalPage() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="properties" className="text-xs px-3">Properties</TabsTrigger>
+              <TabsTrigger value="properties" className="text-xs px-3">Address</TabsTrigger>
               <TabsTrigger value="feedback" className="text-xs px-3">Feedback</TabsTrigger>
               <TabsTrigger value="support" className="text-xs px-3">Support</TabsTrigger>
             </TabsList>
@@ -470,31 +488,30 @@ export default function CustomerPortalPage() {
               })}
             </TabsContent>
 
-            {/* Properties */}
+            {/* Service Address */}
             <TabsContent value="properties" className="space-y-3">
-              {properties.map((prop) => (
-                <Card key={prop.id}>
+              {customer.address ? (
+                <Card>
                   <CardContent className="py-4 px-5">
                     <div className="flex items-start gap-3">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 mt-0.5">
                         <MapPin className="size-4 text-primary" />
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{prop.address}</p>
-                        <p className="text-xs text-muted-foreground">{prop.city}, {prop.state} {prop.zip}</p>
-                        {prop.rooflineLinearFeet && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {prop.rooflineLinearFeet} ft roofline &middot; {prop.squareFootage?.toLocaleString()} sq ft
-                          </p>
-                        )}
-                        {prop.notes && (
-                          <p className="text-xs text-muted-foreground mt-1 italic">{prop.notes}</p>
-                        )}
+                        <p className="font-medium text-sm">{customer.address}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {[customer.city, customer.state].filter(Boolean).join(", ")}
+                          {customer.zip ? ` ${customer.zip}` : ""}
+                        </p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No address on file
+                </p>
+              )}
             </TabsContent>
 
             {/* Feedback */}

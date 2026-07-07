@@ -22,17 +22,22 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import {
-  invoices,
-  getCustomerById,
   getInvoiceTotal,
   type InvoiceStatus,
 } from "@/lib/data";
+import { useData } from "@/lib/data-context";
+import { useLocation } from "@/lib/location-context";
 
 const ALL_STATUSES: InvoiceStatus[] = ["Draft", "Sent", "Paid", "Overdue"];
 
 export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | InvoiceStatus>("all");
+  const { loading, invoices: allInvoices, getCustomerById } = useData();
+  const { selectedLocationId } = useLocation();
+  const invoices = selectedLocationId
+    ? allInvoices.filter((i) => i.locationId === selectedLocationId)
+    : allInvoices;
 
   const filtered = invoices.filter((inv) => {
     const customer = getCustomerById(inv.customerId);
@@ -62,6 +67,14 @@ export default function InvoicesPage() {
     Paid: invoices.filter((i) => i.status === "Paid").length,
     Overdue: invoices.filter((i) => i.status === "Overdue").length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
