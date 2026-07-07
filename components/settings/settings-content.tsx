@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { AddonPaymentModal } from "@/components/settings/addon-payment-modal";
 import {
   Building,
   Zap,
@@ -9,6 +10,7 @@ import {
   Mail,
   Bell,
   BookOpen,
+  Upload,
   Globe,
   Trash2,
   Check,
@@ -84,8 +86,12 @@ export function SettingsContent({
   orgData,
   orgId,
 }: SettingsContentProps) {
-  const [activeAddons, setActiveAddons] = useState<Set<string>>(new Set(["route_optimization"]));
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeAddons, setActiveAddons] = useState<Set<string>>(new Set());
   const [saved, setSaved] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [pendingAddons, setPendingAddons] = useState<string[]>([]);
 
   // Build integration status based on orgData
   const integrationsWithStatus = INTEGRATIONS.map((integration) => ({
@@ -101,6 +107,19 @@ export function SettingsContent({
       return next;
     });
   }
+
+  const handleSaveAddons = useCallback(() => {
+    const newAddons = Array.from(activeAddons);
+    if (newAddons.length > 0) {
+      setPendingAddons(newAddons);
+      setShowPaymentModal(true);
+    }
+  }, [activeAddons]);
+
+  const handlePaymentSuccess = useCallback((addons: string[]) => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }, []);
 
   function handleSave() {
     setSaved(true);
@@ -318,20 +337,29 @@ export function SettingsContent({
               </CardContent>
             </Card>
             {activeAddons.size > 0 && (
-              <div className="mt-4 rounded-lg bg-primary/5 border border-primary/20 p-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Active Add-Ons</p>
-                  <p className="text-xs text-muted-foreground">
-                    {ADD_ONS.filter((a) => activeAddons.has(a.id)).map((a) => a.name).join(", ")}
-                  </p>
+              <div className="mt-4 rounded-lg bg-primary/5 border border-primary/20 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Selected Add-Ons</p>
+                    <p className="text-xs text-muted-foreground">
+                      {ADD_ONS.filter((a) => activeAddons.has(a.id)).map((a) => a.name).join(", ")}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-base font-bold text-primary">
+                      ${ADD_ONS.filter((a) => activeAddons.has(a.id))
+                        .reduce((s, a) => s + parseInt(a.price.replace(/\D/g, "")), 0)}/mo
+                    </p>
+                    <p className="text-xs text-muted-foreground">billed monthly</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-base font-bold text-primary">
-                    ${ADD_ONS.filter((a) => activeAddons.has(a.id))
-                      .reduce((s, a) => s + parseInt(a.price.replace(/\D/g, "")), 0)}/mo
-                  </p>
-                  <p className="text-xs text-muted-foreground">billed monthly</p>
-                </div>
+                <Button
+                  onClick={handleSaveAddons}
+                  className="w-full gap-1.5"
+                >
+                  <CreditCard className="size-3.5" />
+                  Pay Now to Activate
+                </Button>
               </div>
             )}
           </TabsContent>
@@ -379,6 +407,14 @@ export function SettingsContent({
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Payment Modal */}
+        <AddonPaymentModal
+          open={showPaymentModal}
+          onOpenChange={setShowPaymentModal}
+          selectedAddons={pendingAddons}
+          onSuccess={handlePaymentSuccess}
+        />
       </div>
     </div>
   );
