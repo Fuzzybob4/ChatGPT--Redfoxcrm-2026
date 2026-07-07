@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapCustomer } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
 
@@ -9,7 +9,7 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function MappingPage() {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   const { data: customers } = await supabase
     .from("customers")

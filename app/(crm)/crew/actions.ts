@@ -1,19 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-const DEMO_ORG_SLUG = "redfox-demo";
-
-async function getOrgId() {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("url_slug", DEMO_ORG_SLUG)
-    .single();
-  return data?.id as string | undefined;
-}
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrg } from "@/lib/org";
 
 export async function addEmployee(formData: FormData) {
   const firstName = String(formData.get("firstName") ?? "").trim();

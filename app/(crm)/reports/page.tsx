@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/page-header";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { ReportsView } from "@/components/reports/reports-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   const [{ data: invoices }, { data: estimates }, { data: customers }] =
     await Promise.all([

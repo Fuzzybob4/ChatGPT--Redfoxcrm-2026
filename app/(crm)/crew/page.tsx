@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { CrewList, type CrewMember } from "@/components/crew/crew-list";
 
@@ -9,7 +9,7 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function CrewPage() {
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   const { data: employees } = await supabase
     .from("employees")
