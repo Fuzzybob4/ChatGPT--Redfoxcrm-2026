@@ -16,24 +16,23 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const { locations } = useData();
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
 
-  // Initialize with the user's saved location, their assigned location, or "all".
+  // Initialize with the user's saved location or default to "all" (empty string).
+  // Empty string means show all locations.
   useEffect(() => {
-    if (selectedLocationId) return;
+    if (selectedLocationId !== '') return; // already initialized
+    
     const saved =
       typeof window !== 'undefined'
         ? localStorage.getItem('redfox_selected_location')
         : null;
+    
     if (saved) {
       setSelectedLocationId(saved);
-      return;
-    }
-    if (user?.locationId) {
-      setSelectedLocationId(user.locationId);
-    } else if (locations.length > 0) {
-      // Empty string means "All locations" — default to that for multi-location orgs.
+    } else {
+      // Default to empty string (all locations)
       setSelectedLocationId('');
     }
-  }, [user, locations, selectedLocationId]);
+  }, [selectedLocationId]);
 
   const handleSetLocation = (id: string) => {
     setSelectedLocationId(id);

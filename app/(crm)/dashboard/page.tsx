@@ -28,10 +28,12 @@ import { Separator } from "@/components/ui/separator";
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
+import { useOrgContext } from "@/lib/org-context";
 
 export default function DashboardPage() {
   const { selectedLocationId } = useLocation();
-  const { loading, getDashboardStats, getCustomerById, getLocationJobs, invoices } = useData();
+  const { loading, getDashboardStats, getCustomerById, getLocationJobs, invoices, locations } = useData();
+  const org = useOrgContext();
   const stats = getDashboardStats(selectedLocationId);
 
   const locationJobs = getLocationJobs(selectedLocationId);
@@ -64,9 +66,20 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Welcome back"
         actions={
-          <Button size="sm" render={<Link href="/jobs/new" />}>
-            + New Job
-          </Button>
+          <div className="flex items-center gap-2">
+            {(org.isEnterprise || org.locationCount > 1) && locations.length > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                render={<Link href="/dashboard/multi-location" />}
+              >
+                Compare Locations
+              </Button>
+            )}
+            <Button size="sm" render={<Link href="/jobs/new" />}>
+              + New Job
+            </Button>
+          </div>
         }
       />
 

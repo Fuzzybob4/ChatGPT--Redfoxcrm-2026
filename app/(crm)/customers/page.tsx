@@ -21,6 +21,7 @@ import {
 
 import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
+import { CSVImportDialog } from "@/components/customers/csv-import-dialog";
 
 export default function CustomersPage() {
   const [query, setQuery] = useState("");
@@ -49,10 +50,13 @@ export default function CustomersPage() {
         title="Customers"
         description={`${customers.length} accounts`}
         actions={
-          <Button size="sm" render={<Link href="/customers/new" />}>
-            <Plus className="size-3.5" data-icon="inline-start" />
-            Add Customer
-          </Button>
+          <div className="flex items-center gap-2">
+            <CSVImportDialog />
+            <Button size="sm" render={<Link href="/customers/new" />}>
+              <Plus className="size-3.5" data-icon="inline-start" />
+              Add Customer
+            </Button>
+          </div>
         }
       />
 
