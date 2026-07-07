@@ -50,7 +50,7 @@ const faqs = [
     questions: [
       {
         q: 'Can I change my plan anytime?',
-        a: 'Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate charges accordingly.',
+        a: 'Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we&apos;ll prorate charges accordingly.',
       },
       {
         q: 'Do you offer annual billing discounts?',
@@ -58,7 +58,7 @@ const faqs = [
       },
       {
         q: 'What happens after my free trial ends?',
-        a: 'After 30 days, your trial converts to a paid plan. We\'ll notify you before the trial ends so you can choose your plan or cancel if needed.',
+        a: 'After 30 days, your trial converts to a paid plan. We&apos;ll notify you before the trial ends so you can choose your plan or cancel if needed.',
       },
       {
         q: 'Is there a cancellation fee?',
