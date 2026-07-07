@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 
 export function LandingFooter() {
   return (
-    <footer className="bg-background border-t border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <footer className="bg-[#0f0f0f] border-t border-white/10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
           {/* Brand */}
           <div className="space-y-4">
@@ -20,10 +20,13 @@ export function LandingFooter() {
                 height={32}
                 className="w-8 h-8"
               />
-              <span className="font-bold text-foreground">REDFOX CRM</span>
+              <div className="flex flex-col leading-none">
+                <span className="font-extrabold text-base text-white tracking-tight">REDFOX</span>
+                <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">CRM</span>
+              </div>
             </Link>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              The all-in-one CRM for outdoor service pros. Manage customers, jobs, and grow your business.
+            <p className="text-sm text-gray-400 max-w-xs">
+              The all-in-one CRM for outdoor service pros who want to work smarter and grow faster.
             </p>
             <div className="flex gap-4 pt-2">
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
@@ -43,41 +46,41 @@ export function LandingFooter() {
 
           {/* Product */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">PRODUCT</h3>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Product</h3>
             <ul className="space-y-3">
-              <li><Link href="/landing/features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</Link></li>
-              <li><Link href="/landing/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link></li>
-              <li><Link href="/landing/changelog" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Changelog</Link></li>
-              <li><Link href="/landing/integrations" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Integrations</Link></li>
+              <li><Link href="/landing/features" className="text-sm text-gray-400 hover:text-white transition-colors">Features</Link></li>
+              <li><Link href="/landing/pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Pricing</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Changelog</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Integrations</Link></li>
             </ul>
           </div>
 
           {/* Company */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">COMPANY</h3>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Company</h3>
             <ul className="space-y-3">
-              <li><Link href="/landing/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">About Us</Link></li>
-              <li><Link href="/landing/careers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Careers</Link></li>
-              <li><Link href="/landing/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Contact</Link></li>
-              <li><Link href="/landing/partners" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Partners</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">About Us</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Careers</Link></li>
+              <li><Link href="/landing/support" className="text-sm text-gray-400 hover:text-white transition-colors">Contact</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Partners</Link></li>
             </ul>
           </div>
 
           {/* Resources */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">RESOURCES</h3>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Resources</h3>
             <ul className="space-y-3">
-              <li><Link href="/landing/help-center" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Help Center</Link></li>
-              <li><Link href="/landing/api" className="text-sm text-muted-foreground hover:text-foreground transition-colors">API Docs</Link></li>
-              <li><Link href="/landing/guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Guides</Link></li>
-              <li><Link href="/landing/webinars" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Webinars</Link></li>
+              <li><Link href="/landing/support" className="text-sm text-gray-400 hover:text-white transition-colors">Help Center</Link></li>
+              <li><Link href="/landing/api" className="text-sm text-gray-400 hover:text-white transition-colors">API Docs</Link></li>
+              <li><Link href="/landing/faq" className="text-sm text-gray-400 hover:text-white transition-colors">FAQ</Link></li>
+              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Webinars</Link></li>
             </ul>
           </div>
 
           {/* Newsletter */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Stay Updated</h3>
-            <p className="text-sm text-muted-foreground mb-3">Get tips, updates, and industry insights delivered to your inbox.</p>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Stay Updated</h3>
+            <p className="text-sm text-gray-400 mb-3">Get tips, updates, and industry insights delivered to your inbox.</p>
             <form className="flex gap-2">
               <Input
                 type="email"
@@ -90,13 +93,13 @@ export function LandingFooter() {
         </div>
 
         {/* Bottom section */}
-        <div className="border-t border-border pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">© 2025 RedFox CRM. All rights reserved.</p>
+        <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <p className="text-sm text-gray-500">© 2025 RedFox CRM. All rights reserved.</p>
           <div className="flex gap-6">
-            <Link href="/landing/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/landing/privacy" className="text-sm text-gray-500 hover:text-white transition-colors">
               Privacy Policy
             </Link>
-            <Link href="/landing/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/landing/terms" className="text-sm text-gray-500 hover:text-white transition-colors">
               Terms of Service
             </Link>
           </div>
