@@ -184,8 +184,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TRUST BAR ────────────────────────────────────────────── */}
-      <section className="bg-white border-y border-gray-200 py-12">
+      {/* ── TRUST BAR — hidden until we have real numbers ─────────── */}
+      <section className="bg-white border-y border-gray-200 py-12 hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest mb-10">
             Trusted by Outdoor Service Professionals
