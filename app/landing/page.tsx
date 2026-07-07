@@ -151,7 +151,7 @@ export default function LandingPage() {
                   </Button>
                 </Link>
                 <Link href="#">
-                  <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 h-12 px-8 gap-2">
+                  <Button size="lg" variant="ghost" className="border border-white/50 text-white bg-white/10 hover:bg-white/20 hover:text-white h-12 px-8 gap-2">
                     <Calendar className="w-4 h-4" />
                     Book a Demo
                   </Button>
@@ -160,89 +160,23 @@ export default function LandingPage() {
 
               <div className="flex flex-wrap gap-6 text-xs text-gray-400 pt-1">
                 <span className="flex items-center gap-2"><Shield className="w-4 h-4" /> 30-Day Free Trial</span>
-                <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> No Credit Card</span>
                 <span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Cancel Anytime</span>
               </div>
             </div>
 
-            {/* Right — product screenshot mockup */}
-            <div className="relative flex items-end justify-center lg:justify-end">
-              {/* Main dashboard card */}
-              <div className="relative z-10 bg-white rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Image src="/logo.png" alt="RedFox" width={20} height={20} className="w-5 h-5" />
-                    <span className="text-xs font-bold text-gray-700">REDFOX CRM</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-400" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                    <div className="w-3 h-3 rounded-full bg-green-400" />
-                  </div>
-                </div>
-                {/* Mock dashboard content */}
-                <div className="flex">
-                  {/* Sidebar */}
-                  <div className="w-36 bg-[#1a1a1a] p-3 space-y-1 shrink-0">
-                    {['Dashboard','Customers','Jobs','Estimates','Invoices','Schedule','Crew','Reports','Settings'].map((item, i) => (
-                      <div key={item} className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${i === 0 ? 'bg-primary text-white' : 'text-gray-400'}`}>
-                        <div className="w-3 h-3 bg-current rounded-sm opacity-60" />
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                  {/* Main content */}
-                  <div className="flex-1 p-4 bg-white space-y-3">
-                    <p className="text-xs font-semibold text-gray-800">Dashboard</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[['$24,850','REVENUE'],['23','JOBS'],['14','ESTIMATES'],['42%','CONVERSION']].map(([v,l]) => (
-                        <div key={l} className="bg-gray-50 rounded p-2 border border-gray-100">
-                          <p className="text-xs font-bold text-gray-800">{v}</p>
-                          <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{l}</p>
-                          <p className="text-[9px] text-green-500 mt-0.5">+15%</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-gray-50 rounded border border-gray-100 p-3">
-                      <p className="text-[10px] font-semibold text-gray-700 mb-2">Revenue Overview</p>
-                      {/* Mini chart bars */}
-                      <div className="flex items-end gap-1 h-12">
-                        {[30,50,40,65,55,80,70,90,75,85,95,88].map((h,i) => (
-                          <div key={i} className="flex-1 bg-primary/20 rounded-sm" style={{ height: `${h}%` }}>
-                            <div className="w-full bg-primary rounded-sm" style={{ height: i === 11 ? '100%' : '60%' }} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-semibold text-gray-700">Upcoming Jobs</p>
-                      {[['8:30 AM','Johnson Residence','In Progress'],['10:30 AM','Wilson Residence','Scheduled']].map(([t,n,s]) => (
-                        <div key={n} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1.5 border border-gray-100">
-                          <div>
-                            <p className="text-[9px] text-gray-400">{t}</p>
-                            <p className="text-[10px] font-medium text-gray-700">{n}</p>
-                          </div>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${s === 'In Progress' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{s}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Floating mobile card */}
-              <div className="absolute -right-4 bottom-8 z-20 w-44 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden hidden lg:block">
-                <div className="bg-primary px-3 py-2">
-                  <p className="text-white text-[10px] font-semibold">Today&apos;s Jobs</p>
-                </div>
-                <div className="p-2 space-y-1.5">
-                  {['8:30 AM - Johnson','10:30 AM - Wilson','1:00 PM - Smith'].map((j) => (
-                    <div key={j} className="text-[9px] text-gray-600 bg-gray-50 rounded px-2 py-1">{j}</div>
-                  ))}
-                  <div className="bg-primary rounded py-1.5 text-center">
-                    <p className="text-white text-[9px] font-semibold">Start Route</p>
-                  </div>
-                </div>
+            {/* Right — product screenshot */}
+            <div className="relative flex items-end justify-center lg:justify-end pb-0">
+              <div className="relative w-full max-w-2xl">
+                {/* Glow effect behind image */}
+                <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-3xl scale-95 translate-y-4" />
+                <Image
+                  src="/hero-screenshot.png"
+                  alt="RedFox CRM map and route planning feature"
+                  width={900}
+                  height={620}
+                  className="relative z-10 w-full rounded-xl shadow-2xl border border-white/10"
+                  priority
+                />
               </div>
             </div>
 
@@ -308,8 +242,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ─────────────────────────────────────────── */}
-      <section className="bg-[#0f0f0f] py-24">
+      {/* ── TESTIMONIALS — hidden until we have real reviews ──────── */}
+      <section className="bg-[#0f0f0f] py-24 hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-extrabold text-white mb-3">Loved by Business Owners</h2>
