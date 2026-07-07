@@ -1,7 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { redirect } from "next/navigation";
+import { getCurrentOrg } from "@/lib/org";
+import { createClient } from "@/lib/supabase/server";
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +10,11 @@ import {
   Settings,
   ExternalLink,
   ChevronDown,
+  Map,
+  HardHat,
+  BarChart3,
+  Receipt,
+  Mail,
 } from "lucide-react";
 
 import {
@@ -23,6 +28,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -52,6 +60,13 @@ const navItems = [
     href: "/estimates",
     icon: FileText,
     badge: "3",
+    children: [
+      {
+        title: "Invoices",
+        href: "/invoices",
+        icon: Receipt,
+      },
+    ],
   },
   {
     title: "Jobs & Schedule",
@@ -60,14 +75,43 @@ const navItems = [
     badge: "4",
   },
   {
-    title: "Invoices",
-    href: "/invoices",
-    icon: FileText,
+    title: "Mapping",
+    href: "/mapping",
+    icon: Map,
+  },
+  {
+    title: "Crew",
+    href: "/crew",
+    icon: HardHat,
+  },
+  {
+    title: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+  },
+  {
+    title: "Email Marketing",
+    href: "/email-marketing",
+    icon: Mail,
   },
 ];
 
-export function AppSidebar() {
-  const pathname = usePathname();
+export async function AppSidebar() {
+  const org = await getCurrentOrg();
+  if (!org) redirect("/onboarding");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const userEmail = user?.email ?? "";
+  const userInitials = (org.businessName || user?.email || "?")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <Sidebar className="border-r-0">
@@ -93,19 +137,11 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      isActive={active}
                       render={<Link href={item.href} />}
-                      className={cn(
-                        "gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground",
-                        active && "text-sidebar-foreground font-medium"
-                      )}
+                      className="gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground"
                     >
                       <item.icon className="size-4 shrink-0" />
                       <span>{item.title}</span>
@@ -118,6 +154,23 @@ export function AppSidebar() {
                         </Badge>
                       )}
                     </SidebarMenuButton>
+                    {item.children && (
+                      <SidebarMenuSub>
+                        {item.children.map((child) => {
+                          return (
+                            <SidebarMenuSubItem key={child.href}>
+                              <SidebarMenuSubButton
+                                render={<Link href={child.href} />}
+                                className="gap-3 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                              >
+                                <child.icon className="size-3.5 shrink-0" />
+                                <span>{child.title}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    )}
                   </SidebarMenuItem>
                 );
               })}
@@ -165,23 +218,27 @@ export function AppSidebar() {
           >
             <Avatar className="size-8 shrink-0">
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                AO
+                {userInitials}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start leading-tight min-w-0">
               <span className="font-medium truncate text-sidebar-foreground">
-                Alex Owner
+                {org.businessName || "Business"}
               </span>
               <span className="text-xs text-sidebar-foreground/60 truncate">
-                alex@redfoxcrm.com
+                {userEmail}
               </span>
             </div>
             <ChevronDown className="ml-auto size-3 shrink-0 text-sidebar-foreground/50" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-48">
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem render={<Link href="/profile" />}>
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/billing" />}>
+              Billing
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" render={<Link href="/auth/signout" />}>
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

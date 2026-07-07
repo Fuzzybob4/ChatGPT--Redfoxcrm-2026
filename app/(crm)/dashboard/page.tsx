@@ -25,21 +25,21 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
-import {
-  getDashboardStats,
-  jobs,
-  invoices,
-  getCustomerById,
-  getInvoiceTotal,
-} from "@/lib/data";
+import { getInvoiceTotal } from "@/lib/data";
+import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
+import { useOrgContext } from "@/lib/org-context";
 
 export default function DashboardPage() {
   const { selectedLocationId } = useLocation();
+  const { loading, getDashboardStats, getCustomerById, getLocationJobs, invoices, locations } = useData();
+  const org = useOrgContext();
   const stats = getDashboardStats(selectedLocationId);
 
-  const locationJobs = jobs.filter((j) => j.locationId === selectedLocationId);
-  const locationInvoices = invoices.filter((i) => i.locationId === selectedLocationId);
+  const locationJobs = getLocationJobs(selectedLocationId);
+  const locationInvoices = selectedLocationId
+    ? invoices.filter((i) => i.locationId === selectedLocationId)
+    : invoices;
 
   const upcomingJobs = locationJobs
     .filter((j) => j.status === "Scheduled" || j.status === "In Progress")
@@ -52,15 +52,34 @@ export default function DashboardPage() {
     )
     .slice(0, 5);
 
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
         title="Dashboard"
-        description="Welcome back, Alex"
+        description="Welcome back"
         actions={
-          <Button size="sm" render={<Link href="/jobs/new" />}>
-            + New Job
-          </Button>
+          <div className="flex items-center gap-2">
+            {(org.isEnterprise || org.locationCount > 1) && locations.length > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                render={<Link href="/dashboard/multi-location" />}
+              >
+                Compare Locations
+              </Button>
+            )}
+            <Button size="sm" render={<Link href="/jobs/new" />}>
+              + New Job
+            </Button>
+          </div>
         }
       />
 

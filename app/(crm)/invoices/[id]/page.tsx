@@ -1,3 +1,6 @@
+"use client";
+
+import { use } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, CheckCircle, Printer, Download } from "lucide-react";
@@ -13,15 +16,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-import { invoices, getCustomerById, getInvoiceTotal } from "@/lib/data";
+import { getInvoiceTotal } from "@/lib/data";
+import { useData } from "@/lib/data-context";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default async function InvoiceDetailPage({ params }: Props) {
-  const { id } = await params;
+export default function InvoiceDetailPage({ params }: Props) {
+  const { id } = use(params);
+  const { loading, invoices, getCustomerById } = useData();
   const invoice = invoices.find((i) => i.id === id);
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
   if (!invoice) notFound();
 
   const customer = getCustomerById(invoice.customerId);

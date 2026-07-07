@@ -1,3 +1,6 @@
+"use client";
+
+import { use } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, Phone, Mail, CalendarDays, FileText, ArrowLeft, Plus } from "lucide-react";
@@ -16,24 +19,28 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-import {
-  customers,
-  getCustomerProperties,
-  getCustomerJobs,
-  getCustomerInvoices,
-  getInvoiceTotal,
-} from "@/lib/data";
+import { getInvoiceTotal } from "@/lib/data";
+import { useData } from "@/lib/data-context";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default async function CustomerDetailPage({ params }: Props) {
-  const { id } = await params;
-  const customer = customers.find((c) => c.id === id);
+export default function CustomerDetailPage({ params }: Props) {
+  const { id } = use(params);
+  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices } = useData();
+  const customer = getCustomerById(id);
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
   if (!customer) notFound();
 
-  const props = getCustomerProperties(customer.id);
   const jobs = getCustomerJobs(customer.id);
   const invs = getCustomerInvoices(customer.id);
 
@@ -109,11 +116,7 @@ export default async function CustomerDetailPage({ params }: Props) {
                 <CardTitle className="text-sm font-semibold">Account Summary</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{props.length}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Properties</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
                   <div>
                     <p className="text-2xl font-bold text-foreground">{jobs.length}</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">Jobs</p>
@@ -129,48 +132,36 @@ export default async function CustomerDetailPage({ params }: Props) {
 
           {/* Right column */}
           <div className="flex flex-col gap-4 lg:col-span-2">
-            {/* Properties */}
+            {/* Service Address */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div>
-                  <CardTitle className="text-sm font-semibold">Service Properties</CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Locations associated with this customer
-                  </CardDescription>
-                </div>
-                <Button variant="outline" size="sm">
-                  <Plus className="size-3.5" data-icon="inline-start" />
-                  Add
-                </Button>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Service Address</CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Primary location for this customer
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                {props.length > 0 ? (
-                  <div className="flex flex-col divide-y divide-border">
-                    {props.map((prop) => (
-                      <div key={prop.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted mt-0.5">
-                          <MapPin className="size-4 text-primary" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{prop.address}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {prop.city}, {prop.state} {prop.zip}
-                          </p>
-                          {prop.notes && (
-                            <p className="text-xs text-muted-foreground mt-0.5 italic">
-                              {prop.notes}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant="secondary" className="shrink-0 text-xs">
-                          Property
-                        </Badge>
-                      </div>
-                    ))}
+                {customer.address ? (
+                  <div className="flex items-start gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted mt-0.5">
+                      <MapPin className="size-4 text-primary" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{customer.address}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[customer.city, customer.state].filter(Boolean).join(", ")}
+                        {customer.zip ? ` ${customer.zip}` : ""}
+                      </p>
+                    </div>
+                    {customer.installStatus && (
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {customer.installStatus}
+                      </Badge>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-6">
-                    No properties yet
+                    No address on file
                   </p>
                 )}
               </CardContent>

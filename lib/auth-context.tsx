@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 export interface User {
   id: string;
@@ -20,66 +21,65 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function supabaseUserToUser(sbUser: { id: string; email?: string; user_metadata?: Record<string, string> }): User {
+  return {
+    id: sbUser.id,
+    email: sbUser.email ?? '',
+    name: sbUser.user_metadata?.full_name ?? sbUser.email?.split('@')[0] ?? 'User',
+    locationId: sbUser.user_metadata?.location_id ?? 'loc-1',
+    plan: (sbUser.user_metadata?.plan as User['plan']) ?? 'starter',
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
-  // Load user from localStorage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('redfox_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('redfox_user');
-      }
-    }
-    setIsLoading(false);
+    // Get initial session
+    supabase.auth.getUser().then(({ data: { user: sbUser } }) => {
+      setUser(sbUser ? supabaseUserToUser(sbUser) : null);
+      setIsLoading(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ? supabaseUserToUser(session.user) : null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Mock login - in production, call your auth API
-    if (!email || !password) {
-      throw new Error('Email and password required');
-    }
-
-    // Simulate API delay
-    await new Promise((r) => setTimeout(r, 500));
-
-    const mockUser: User = {
-      id: 'user-1',
-      email,
-      name: email.split('@')[0],
-      locationId: 'loc-1',
-      plan: 'professional',
-    };
-
-    setUser(mockUser);
-    localStorage.setItem('redfox_user', JSON.stringify(mockUser));
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+    if (data.user) setUser(supabaseUserToUser(data.user));
   };
 
   const signup = async (name: string, email: string, password: string, locationName: string) => {
-    if (!name || !email || !password || !locationName) {
-      throw new Error('All fields required');
-    }
-
-    await new Promise((r) => setTimeout(r, 500));
-
-    const mockUser: User = {
-      id: `user-${Date.now()}`,
+    const { data, error } = await supabase.auth.signUp({
       email,
-      name,
-      locationId: 'loc-1',
-      plan: 'starter',
-    };
-
-    setUser(mockUser);
-    localStorage.setItem('redfox_user', JSON.stringify(mockUser));
+      password,
+      options: {
+        emailRedirectTo:
+          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+          `${window.location.origin}/auth/callback`,
+        data: {
+          full_name: name,
+          location_name: locationName,
+          plan: 'starter',
+        },
+      },
+    });
+    if (error) throw new Error(error.message);
+    if (data.user) setUser(supabaseUserToUser(data.user));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('redfox_user');
   };
 
   return (

@@ -104,12 +104,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Demo credentials */}
-        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-          <p className="font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-          <p className="text-blue-800">Email: demo@example.com</p>
-          <p className="text-blue-800">Password: demo123</p>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          By signing in you agree to our{' '}
+          <a href="/landing/terms" className="underline hover:text-foreground">Terms of Service</a>
+        </p>
       </div>
     </div>
   );

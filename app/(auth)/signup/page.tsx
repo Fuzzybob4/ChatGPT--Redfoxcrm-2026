@@ -130,15 +130,10 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Plan info */}
-        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-          <p className="font-semibold text-blue-900 mb-2">New accounts start with:</p>
-          <ul className="text-blue-800 space-y-1 list-disc list-inside">
-            <li>Starter plan (1 location)</li>
-            <li>Full feature access for 30 days</li>
-            <li>No credit card required</li>
-          </ul>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          By creating an account you agree to our{' '}
+          <a href="/landing/terms" className="underline hover:text-foreground">Terms of Service</a>
+        </p>
       </div>
     </div>
   );

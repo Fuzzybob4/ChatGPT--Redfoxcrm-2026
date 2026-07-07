@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { customers, properties } from '@/lib/data';
+import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,8 @@ interface LineItem {
 export default function NewEstimatePage() {
   const router = useRouter();
   const { selectedLocationId } = useLocation();
+  const { getLocationCustomers } = useData();
   const [customerId, setCustomerId] = useState('');
-  const [propertyId, setPropertyId] = useState('');
   const [discount, setDiscount] = useState('0');
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -32,9 +32,8 @@ export default function NewEstimatePage() {
   ]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Filter customers and properties by location
-  const locationCustomers = customers.filter((c) => c.locationId === selectedLocationId);
-  const availableProperties = properties.filter((p) => p.locationId === selectedLocationId && (!customerId || p.customerId === customerId));
+  // Filter customers by location
+  const locationCustomers = getLocationCustomers(selectedLocationId);
 
   const addLineItem = () => {
     setLineItems([
@@ -56,8 +55,8 @@ export default function NewEstimatePage() {
   };
 
   const handleSave = async () => {
-    if (!customerId || !propertyId) {
-      alert('Please select a customer and property');
+    if (!customerId) {
+      alert('Please select a customer');
       return;
     }
 
@@ -89,8 +88,8 @@ export default function NewEstimatePage() {
           {/* Customer & Property Selection */}
           <Card>
             <CardHeader>
-              <CardTitle>Customer & Property</CardTitle>
-              <CardDescription>Select which customer and property this estimate is for</CardDescription>
+              <CardTitle>Customer</CardTitle>
+              <CardDescription>Select which customer this estimate is for</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
@@ -101,20 +100,6 @@ export default function NewEstimatePage() {
                     {locationCustomers.map((cust) => (
                       <SelectItem key={cust.id} value={cust.id}>
                         {cust.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Property</label>
-                <Select value={propertyId} onValueChange={(v) => setPropertyId(v || '')} disabled={!customerId}>
-                  <SelectGroup>
-                    <SelectItem value="">Select a property...</SelectItem>
-                    {availableProperties.map((prop) => (
-                      <SelectItem key={prop.id} value={prop.id}>
-                        {prop.address}
                       </SelectItem>
                     ))}
                   </SelectGroup>
