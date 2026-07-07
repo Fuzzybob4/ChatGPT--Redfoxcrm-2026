@@ -19,10 +19,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { customers, getCustomerProperties } from "@/lib/data";
+import { useData } from "@/lib/data-context";
+import { useLocation } from "@/lib/location-context";
 
 export default function CustomersPage() {
   const [query, setQuery] = useState("");
+  const { loading, getLocationCustomers } = useData();
+  const { selectedLocationId } = useLocation();
+  const customers = getLocationCustomers(selectedLocationId);
 
   const filtered = customers.filter(
     (c) =>
@@ -65,7 +69,7 @@ export default function CustomersPage() {
                   <TableRow className="text-xs uppercase tracking-wide text-muted-foreground">
                     <TableHead>Customer</TableHead>
                     <TableHead>Contact</TableHead>
-                    <TableHead>Properties</TableHead>
+                    <TableHead>Location</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Since</TableHead>
                     <TableHead />
@@ -73,7 +77,6 @@ export default function CustomersPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((customer) => {
-                    const props = getCustomerProperties(customer.id);
                     return (
                       <TableRow key={customer.id}>
                         <TableCell>
@@ -103,8 +106,7 @@ export default function CustomersPage() {
                         <TableCell>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <MapPin className="size-3" />
-                            {props.length}{" "}
-                            {props.length === 1 ? "property" : "properties"}
+                            {[customer.city, customer.state].filter(Boolean).join(", ") || "—"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -147,7 +149,6 @@ export default function CustomersPage() {
         {/* Mobile cards */}
         <div className="flex flex-col gap-3 md:hidden">
           {filtered.map((customer) => {
-            const props = getCustomerProperties(customer.id);
             return (
               <Link key={customer.id} href={`/customers/${customer.id}`}>
                 <Card className="cursor-pointer hover:border-primary/50 transition-colors">

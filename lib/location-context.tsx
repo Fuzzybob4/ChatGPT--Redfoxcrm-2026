@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './auth-context';
-import { locations } from './data';
+import { useData } from './data-context';
 
 interface LocationContextType {
   selectedLocationId: string;
@@ -13,20 +13,33 @@ const LocationContext = createContext<LocationContextType | undefined>(undefined
 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { locations } = useData();
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
 
-  // Initialize with user's location or first location
+  // Initialize with the user's saved location, their assigned location, or "all".
   useEffect(() => {
-    if (user && !selectedLocationId) {
-      const defaultLocation = user.locationId || locations[0]?.id || '';
-      setSelectedLocationId(defaultLocation);
-      localStorage.setItem('redfox_selected_location', defaultLocation);
+    if (selectedLocationId) return;
+    const saved =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('redfox_selected_location')
+        : null;
+    if (saved) {
+      setSelectedLocationId(saved);
+      return;
     }
-  }, [user, selectedLocationId]);
+    if (user?.locationId) {
+      setSelectedLocationId(user.locationId);
+    } else if (locations.length > 0) {
+      // Empty string means "All locations" — default to that for multi-location orgs.
+      setSelectedLocationId('');
+    }
+  }, [user, locations, selectedLocationId]);
 
   const handleSetLocation = (id: string) => {
     setSelectedLocationId(id);
-    localStorage.setItem('redfox_selected_location', id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('redfox_selected_location', id);
+    }
   };
 
   return (
