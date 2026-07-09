@@ -17,6 +17,8 @@ export default function SignupPage() {
   const [locationName, setLocationName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+  const [successEmail, setSuccessEmail] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +27,8 @@ export default function SignupPage() {
 
     try {
       await signup(name, email, password, locationName);
-      router.push('/');
+      setSuccessEmail(email);
+      setSignupSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed');
     } finally {
@@ -53,18 +56,59 @@ export default function SignupPage() {
 
         {/* Signup Form */}
         <div className="bg-card rounded-lg shadow-lg p-8 space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">Get started free</h2>
-            <p className="text-sm text-muted-foreground mt-1">Create your RedFox account</p>
-          </div>
+          {signupSuccess ? (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-foreground text-center">Account created successfully!</h2>
+                <p className="text-sm text-muted-foreground text-center">We&apos;re almost done setting up your account</p>
+              </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
-              {error}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-medium text-blue-900">Next step:</p>
+                <p className="text-sm text-blue-800">
+                  Please check your email at <span className="font-semibold">{successEmail}</span> for a confirmation link. Click the link to verify your email address.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground text-center">Once confirmed, you can log in to your account.</p>
+                <Button
+                  render={<Link href="/login" />}
+                  className="w-full bg-primary hover:bg-primary/90"
+                >
+                  Go to Login
+                </Button>
+              </div>
+
+              <p className="text-center text-xs text-muted-foreground">
+                Didn&apos;t receive the email? Check your spam folder or{' '}
+                <button
+                  onClick={() => setSignupSuccess(false)}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  try again
+                </button>
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Get started free</h2>
+                <p className="text-sm text-muted-foreground mt-1">Create your RedFox account</p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="name" className="text-sm font-medium text-foreground">Full Name</label>
               <Input
@@ -113,21 +157,23 @@ export default function SignupPage() {
               />
             </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/90"
-            >
-              {isLoading ? 'Creating account...' : 'Create Account'}
-            </Button>
-          </form>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-primary hover:bg-primary/90"
+                >
+                  {isLoading ? 'Creating account...' : 'Create Account'}
+                </Button>
+              </form>
 
-          <div className="text-center text-sm">
-            <span className="text-muted-foreground">Already have an account? </span>
-            <Link href="/login" className="text-primary font-semibold hover:underline">
-              Sign in
-            </Link>
-          </div>
+              <div className="text-center text-sm">
+                <span className="text-muted-foreground">Already have an account? </span>
+                <Link href="/login" className="text-primary font-semibold hover:underline">
+                  Sign in
+                </Link>
+              </div>
+            </>
+          )}
         </div>
 
         <p className="text-center text-xs text-muted-foreground">

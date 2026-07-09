@@ -8,7 +8,6 @@ import {
   CalendarDays,
   FileText,
   Settings,
-  ExternalLink,
   ChevronDown,
   Map,
   HardHat,
@@ -186,15 +185,6 @@ export async function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={<Link href="/portal" />}
-                  className="text-sidebar-foreground/80 hover:text-sidebar-foreground gap-3"
-                >
-                  <ExternalLink className="size-4 shrink-0" />
-                  <span>Customer Portal</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   render={<Link href="/settings" />}
