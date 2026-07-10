@@ -5,6 +5,7 @@ import { LocationProvider } from "@/lib/location-context";
 import { DataProvider } from "@/lib/data-context";
 import { OrgProvider } from "@/lib/org-context";
 import { getCurrentOrg } from "@/lib/org";
+import { SubscriptionGate } from "@/components/subscription/subscription-gate";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
   const org = await getCurrentOrg();
@@ -22,6 +23,13 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
                 {children}
               </main>
             </div>
+            <SubscriptionGate
+              plan={org.plan}
+              trialEndsAt={org.trialEndsAt}
+              subscriptionStatus={org.subscriptionStatus}
+              cardBrand={org.cardBrand}
+              cardLast4={org.cardLast4}
+            />
           </SidebarProvider>
         </LocationProvider>
       </DataProvider>

@@ -7,6 +7,13 @@ export interface OrgContextType {
   businessName: string;
   isEnterprise: boolean;
   locationCount: number;
+  plan: string;
+  trialEndsAt: string | null;
+  subscriptionStatus: string;
+  subscriptionInterval: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
 }
 
 const OrgContext = createContext<OrgContextType | undefined>(undefined);
