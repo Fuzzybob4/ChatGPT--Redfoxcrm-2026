@@ -1,40 +1,76 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
+import { createSignupSetupIntent } from '@/app/(auth)/signup/actions';
+import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
+
+type Step = 'details' | 'card' | 'success';
 
 export default function SignupPage() {
-  const router = useRouter();
   const { signup } = useAuth();
+  const [step, setStep] = useState<Step>('details');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [locationName, setLocationName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
   const [successEmail, setSuccessEmail] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Stripe setup state carried into the card step.
+  const [clientSecret, setClientSecret] = useState('');
+  const [customerId, setCustomerId] = useState('');
+
+  // Move from the details form to the card-collection step.
+  const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      await signup(name, email, password, locationName);
-      setSuccessEmail(email);
-      setSignupSuccess(true);
+      const result = await createSignupSetupIntent(email);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setClientSecret(result.clientSecret);
+      setCustomerId(result.customerId);
+      setStep('card');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Signup failed');
+      setError(err instanceof Error ? err.message : 'Could not start signup');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Card saved → create the account with the card details in metadata.
+  const handleCardComplete = async (card: SavedCard) => {
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await signup(name, email, password, locationName, {
+        stripe_customer_id: customerId,
+        default_payment_method_id: card.paymentMethodId,
+        card_brand: card.brand,
+        card_last4: card.last4,
+      });
+      setSuccessEmail(email);
+      setStep('success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Signup failed');
+      setStep('details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signupSuccess = step === 'success';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
@@ -56,7 +92,7 @@ export default function SignupPage() {
 
         {/* Signup Form */}
         <div className="bg-card rounded-lg shadow-lg p-8 space-y-6">
-          {signupSuccess ? (
+          {step === 'success' ? (
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
@@ -88,18 +124,18 @@ export default function SignupPage() {
               <p className="text-center text-xs text-muted-foreground">
                 Didn&apos;t receive the email? Check your spam folder or{' '}
                 <button
-                  onClick={() => setSignupSuccess(false)}
+                  onClick={() => setStep('details')}
                   className="text-primary font-semibold hover:underline"
                 >
                   try again
                 </button>
               </p>
             </div>
-          ) : (
+          ) : step === 'card' ? (
             <>
               <div>
-                <h2 className="text-xl font-semibold text-foreground">Get started free</h2>
-                <p className="text-sm text-muted-foreground mt-1">Create your RedFox account</p>
+                <h2 className="text-xl font-semibold text-foreground">Add a payment method</h2>
+                <p className="text-sm text-muted-foreground mt-1">Step 2 of 2 &mdash; secure your 30-day free trial</p>
               </div>
 
               {error && (
@@ -108,7 +144,28 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <SignupCardStep
+                clientSecret={clientSecret}
+                customerId={customerId}
+                onComplete={handleCardComplete}
+                onBack={() => setStep('details')}
+                submitting={isLoading}
+              />
+            </>
+          ) : (
+            <>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Get started free</h2>
+                <p className="text-sm text-muted-foreground mt-1">Step 1 of 2 &mdash; create your RedFox account</p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleDetailsSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="name" className="text-sm font-medium text-foreground">Full Name</label>
               <Input
@@ -162,7 +219,7 @@ export default function SignupPage() {
                   disabled={isLoading}
                   className="w-full bg-primary hover:bg-primary/90"
                 >
-                  {isLoading ? 'Creating account...' : 'Create Account'}
+                  {isLoading ? 'Please wait...' : 'Continue'}
                 </Button>
               </form>
 
