@@ -15,11 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  LIFECYCLE_META,
-  LIFECYCLE_ORDER,
-  type LifecycleStatus,
-} from "@/lib/lifecycle";
 
 export interface MapCustomer {
   id: string;
@@ -30,19 +25,26 @@ export interface MapCustomer {
   city: string;
   lat: number;
   lng: number;
-  lifecycleStatus: LifecycleStatus;
-  hasUnpaidInvoice: boolean;
-  hasPaidInvoice: boolean;
+  mapStatus: "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 }
 
-type MapView = LifecycleStatus | "all";
+type MapView = "all" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+
+const STATUS_CONFIG: Record<Exclude<MapView, "all">, { label: string; color: string }> = {
+  pending_installs: { label: "Pending Installs", color: "#dc2626" },
+  estimates_sent: { label: "Estimates Sent", color: "#f59e0b" },
+  installed: { label: "Installed", color: "#16a34a" },
+  removed: { label: "Removed", color: "#6b7280" },
+};
 
 function pinColor(c: MapCustomer): string {
-  return LIFECYCLE_META[c.lifecycleStatus].color;
+  if (c.mapStatus === "all_customers") return "#111827";
+  return STATUS_CONFIG[c.mapStatus].color;
 }
 
 function matchesView(c: MapCustomer, view: MapView): boolean {
-  return view === "all" || c.lifecycleStatus === view;
+  if (view === "all") return true;
+  return c.mapStatus === view;
 }
 
 export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
@@ -56,17 +58,23 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
     [customers]
   );
 
-  // Build filter tabs from the lifecycle statuses actually present in the data.
+  // Build filter tabs with all status options
   const views = useMemo(() => {
-    const present = new Set(customers.map((c) => c.lifecycleStatus));
-    const statusViews = LIFECYCLE_ORDER.filter((s) => present.has(s)).map((s) => ({
-      id: s as MapView,
-      label: LIFECYCLE_META[s].label,
-      color: LIFECYCLE_META[s].color,
-    }));
+    const present = new Set(customers.map((c) => c.mapStatus).filter((s) => s !== "all_customers"));
     return [
       { id: "all" as MapView, label: "All Customers", color: "#111827" },
-      ...statusViews,
+      ...(present.has("pending_installs")
+        ? [{ id: "pending_installs" as MapView, label: STATUS_CONFIG.pending_installs.label, color: STATUS_CONFIG.pending_installs.color }]
+        : []),
+      ...(present.has("estimates_sent")
+        ? [{ id: "estimates_sent" as MapView, label: STATUS_CONFIG.estimates_sent.label, color: STATUS_CONFIG.estimates_sent.color }]
+        : []),
+      ...(present.has("installed")
+        ? [{ id: "installed" as MapView, label: STATUS_CONFIG.installed.label, color: STATUS_CONFIG.installed.color }]
+        : []),
+      ...(present.has("removed")
+        ? [{ id: "removed" as MapView, label: STATUS_CONFIG.removed.label, color: STATUS_CONFIG.removed.color }]
+        : []),
     ];
   }, [customers]);
 
@@ -224,20 +232,12 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
                 <p className="text-xs text-gray-600">{selected.address}</p>
                 <p className="text-xs text-gray-600">{selected.phone}</p>
                 <div className="flex flex-wrap gap-1 pt-1">
-                  <span
-                    className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white"
-                    style={{ backgroundColor: LIFECYCLE_META[selected.lifecycleStatus].color }}
-                  >
-                    {LIFECYCLE_META[selected.lifecycleStatus].label}
-                  </span>
-                  {selected.hasUnpaidInvoice && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-600 text-white">
-                      Unpaid Invoice
-                    </span>
-                  )}
-                  {selected.hasPaidInvoice && !selected.hasUnpaidInvoice && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-600 text-white">
-                      Paid
+                  {selected.mapStatus !== "all_customers" && (
+                    <span
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white"
+                      style={{ backgroundColor: STATUS_CONFIG[selected.mapStatus].color }}
+                    >
+                      {STATUS_CONFIG[selected.mapStatus].label}
                     </span>
                   )}
                 </div>

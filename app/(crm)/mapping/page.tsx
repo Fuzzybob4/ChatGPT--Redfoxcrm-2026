@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapCustomer } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
-import { deriveLifecycleStatus, type LifecycleJobSignal } from "@/lib/lifecycle";
 
 export const metadata = {
   title: "Mapping - RedFox CRM",
@@ -15,7 +14,7 @@ export default async function MappingPage() {
   const { data: customers } = await supabase
     .from("customers")
     .select(
-      "id, full_name, first_name, last_name, email, phone, address, city, state, zip_code, lat, lng, install_status, status"
+      "id, full_name, first_name, last_name, email, phone, address, city, state, zip_code, lat, lng, status"
     )
     .not("lat", "is", null)
     .not("lng", "is", null);
@@ -24,43 +23,68 @@ export default async function MappingPage() {
     .from("invoices")
     .select("customer_id, status, total_amount, amount_paid");
 
-  const { data: jobs } = await supabase
-    .from("scheduled_jobs")
-    .select("customer_id, status, crew_name, assigned_employees");
+  const { data: estimates } = await supabase
+    .from("estimates")
+    .select("customer_id, status");
 
-  // Aggregate payment state per customer
-  const paymentByCustomer = new Map<string, { hasUnpaid: boolean; hasPaid: boolean }>();
+  // Build status lookup per customer
+  type MapStatus = "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+  
+  const statusByCustomer = new Map<string, MapStatus>();
+  
+  // First pass: invoices determine paid/unpaid
+  const invoicesByCustomer = new Map<string, any[]>();
+  const hasInvoiceByCustomer = new Map<string, boolean>();
   for (const inv of invoices ?? []) {
     if (!inv.customer_id) continue;
-    const entry = paymentByCustomer.get(inv.customer_id) ?? { hasUnpaid: false, hasPaid: false };
-    const unpaid =
-      (inv.status === "sent" || inv.status === "overdue") &&
-      Number(inv.amount_paid ?? 0) < Number(inv.total_amount ?? 0);
-    if (unpaid) entry.hasUnpaid = true;
-    if (inv.status === "paid") entry.hasPaid = true;
-    paymentByCustomer.set(inv.customer_id, entry);
+    const list = invoicesByCustomer.get(inv.customer_id) ?? [];
+    list.push(inv);
+    invoicesByCustomer.set(inv.customer_id, list);
+    hasInvoiceByCustomer.set(inv.customer_id, true);
   }
 
-  // Aggregate job signals per customer (crew assigned + status)
-  const jobsByCustomer = new Map<string, LifecycleJobSignal[]>();
-  for (const j of jobs ?? []) {
-    if (!j.customer_id) continue;
-    const hasCrew =
-      Boolean((j.crew_name ?? "").trim()) ||
-      (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0);
-    const list = jobsByCustomer.get(j.customer_id) ?? [];
-    list.push({ status: j.status ?? "", hasCrew });
-    jobsByCustomer.set(j.customer_id, list);
+  // Second pass: estimates
+  const estimatesByCustomer = new Map<string, any[]>();
+  const hasEstimateByCustomer = new Map<string, boolean>();
+  for (const est of estimates ?? []) {
+    if (!est.customer_id) continue;
+    const list = estimatesByCustomer.get(est.customer_id) ?? [];
+    list.push(est);
+    estimatesByCustomer.set(est.customer_id, list);
+    hasEstimateByCustomer.set(est.customer_id, true);
   }
 
+  // Determine status for each customer
   const mapCustomers: MapCustomer[] = (customers ?? []).map((c) => {
-    const pay = paymentByCustomer.get(c.id) ?? { hasUnpaid: false, hasPaid: false };
-    const lifecycleStatus = deriveLifecycleStatus({
-      hasUnpaidInvoice: pay.hasUnpaid,
-      hasPaidInvoice: pay.hasPaid,
-      jobs: jobsByCustomer.get(c.id) ?? [],
-      installStatus: c.install_status,
-    });
+    let mapStatus: MapStatus = "all_customers";
+
+    // Check if removed
+    if (c.status === "removed") {
+      mapStatus = "removed";
+    }
+    // Check if has paid invoices (deposit or full payment)
+    else if (hasInvoiceByCustomer.has(c.id)) {
+      const invs = invoicesByCustomer.get(c.id) ?? [];
+      const hasPaid = invs.some((inv: any) => inv.status === "paid");
+      if (hasPaid) {
+        mapStatus = "installed";
+      } else {
+        // Has unpaid invoices
+        const hasUnpaid = invs.some(
+          (inv: any) =>
+            (inv.status === "sent" || inv.status === "overdue") &&
+            Number(inv.amount_paid ?? 0) < Number(inv.total_amount ?? 0)
+        );
+        if (hasUnpaid) {
+          mapStatus = "pending_installs";
+        }
+      }
+    }
+    // Check if has estimates but no invoices
+    else if (hasEstimateByCustomer.has(c.id)) {
+      mapStatus = "estimates_sent";
+    }
+
     return {
       id: c.id,
       name: c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
@@ -70,9 +94,7 @@ export default async function MappingPage() {
       city: c.city ?? "",
       lat: c.lat as number,
       lng: c.lng as number,
-      lifecycleStatus,
-      hasUnpaidInvoice: pay.hasUnpaid,
-      hasPaidInvoice: pay.hasPaid,
+      mapStatus,
     };
   });
 
