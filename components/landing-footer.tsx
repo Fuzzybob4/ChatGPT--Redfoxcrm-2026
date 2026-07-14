@@ -73,7 +73,6 @@ export function LandingFooter() {
               <li><Link href="/landing/support" className="text-sm text-gray-400 hover:text-white transition-colors">Help Center</Link></li>
               <li><Link href="/landing/api" className="text-sm text-gray-400 hover:text-white transition-colors">API Docs</Link></li>
               <li><Link href="/landing/faq" className="text-sm text-gray-400 hover:text-white transition-colors">FAQ</Link></li>
-              <li><Link href="#" className="text-sm text-gray-400 hover:text-white transition-colors">Webinars</Link></li>
             </ul>
           </div>
 

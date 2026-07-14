@@ -16,6 +16,7 @@ import {
   Mail,
   Building,
   Truck,
+  Package,
 } from "lucide-react";
 
 import {
@@ -95,6 +96,12 @@ const navItems = [
     title: "Fleet Management",
     href: "/vehicles",
     icon: Truck,
+    comingSoon: true,
+  },
+  {
+    title: "Inventory",
+    href: "/inventory",
+    icon: Package,
     comingSoon: true,
   },
   {
