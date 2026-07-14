@@ -105,6 +105,7 @@ const navItems = [
     title: "Email Marketing",
     href: "/email-marketing",
     icon: Mail,
+    comingSoon: true,
   },
 ];
 
@@ -190,6 +191,14 @@ export async function AppSidebar() {
                           className="ml-auto text-[10px] h-5 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
                         >
                           Enterprise
+                        </Badge>
+                      )}
+                      {item.comingSoon && (
+                        <Badge
+                          variant="outline"
+                          className="ml-auto text-[10px] h-5 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
+                        >
+                          Soon
                         </Badge>
                       )}
                       {item.badge && badgeCounts[item.href] && (
