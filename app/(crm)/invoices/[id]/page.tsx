@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useTransition } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, CheckCircle, Printer, Download } from "lucide-react";
@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
+import { updateInvoiceStatus } from "../actions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -25,8 +26,16 @@ interface Props {
 
 export default function InvoiceDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, invoices, getCustomerById } = useData();
+  const { loading, invoices, getCustomerById, refresh } = useData();
   const invoice = invoices.find((i) => i.id === id);
+  const [pending, startTransition] = useTransition();
+
+  function handleStatusUpdate(status: "sent" | "paid") {
+    startTransition(async () => {
+      await updateInvoiceStatus(id, status);
+      await refresh();
+    });
+  }
 
   if (loading) {
     return (
@@ -57,15 +66,15 @@ export default function InvoiceDetailPage({ params }: Props) {
               Back
             </Button>
             {invoice.status === "Draft" && (
-              <Button size="sm">
+              <Button size="sm" disabled={pending} onClick={() => handleStatusUpdate("sent")}>
                 <Send className="size-3.5" data-icon="inline-start" />
-                Send Invoice
+                {pending ? "Sending..." : "Send Invoice"}
               </Button>
             )}
             {invoice.status === "Sent" && (
-              <Button size="sm">
+              <Button size="sm" disabled={pending} onClick={() => handleStatusUpdate("paid")}>
                 <CheckCircle className="size-3.5" data-icon="inline-start" />
-                Mark Paid
+                {pending ? "Updating..." : "Mark Paid"}
               </Button>
             )}
           </div>

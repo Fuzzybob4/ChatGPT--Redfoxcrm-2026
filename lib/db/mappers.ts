@@ -12,6 +12,7 @@ import type {
   InvoiceStatus,
   EstimateStatus,
   JobStatus,
+  JobType,
   ServiceType,
 } from '@/lib/data';
 
@@ -156,20 +157,44 @@ export function mapEstimate(row: Record<string, any>): Estimate & { total: numbe
 }
 
 export function mapJob(row: Record<string, any>): Job {
-  const status = (titleCase(row.status) as JobStatus) || 'Scheduled';
+  // Normalise status: DB stores lowercase, UI uses Title Case + "En Route"
+  const rawStatus = (row.status ?? row.status_key ?? 'scheduled').toLowerCase();
+  let status: JobStatus = 'Scheduled';
+  if (rawStatus === 'en_route' || rawStatus === 'en route') status = 'En Route';
+  else if (rawStatus === 'in_progress' || rawStatus === 'in progress') status = 'In Progress';
+  else if (rawStatus === 'completed') status = 'Completed';
+  else if (rawStatus === 'cancelled') status = 'Cancelled';
+
+  // Normalise job_type
+  const rawType = (row.job_type ?? 'install').toLowerCase();
+  let jobType: JobType = 'install';
+  if (rawType.includes('remov') || rawType.includes('takedown')) jobType = 'removal';
+  else if (!rawType.includes('install')) jobType = 'other';
+
   return {
     id: row.id,
     customerId: row.customer_id ?? '',
     propertyId: row.property_id ?? '',
     locationId: row.location_id ?? '',
-    title: row.title ?? row.job_type ?? 'Job',
+    invoiceId: row.invoice_id ?? '',
+    title: row.title ?? 'Work Order',
     serviceType: (row.job_type as ServiceType) || 'Custom Installation',
+    jobType,
     status,
     scheduledDate: row.scheduled_date ?? '',
     scheduledTime: (row.start_time ?? '').slice(0, 5),
     durationMins: row.duration_minutes ?? 0,
     technicianName: row.crew_name ?? '',
+    assignedEmployees: Array.isArray(row.assigned_employees) ? row.assigned_employees : [],
+    address: row.address ?? '',
+    city: row.city ?? '',
     notes: row.notes ?? undefined,
+    internalNotes: row.internal_notes ?? undefined,
     amount: 0,
+    estimateId: row.estimate_id ?? undefined,
+    enRouteAt: row.en_route_at ?? undefined,
+    startedAt: row.started_at ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    seasonYear: row.season_year ?? undefined,
   };
 }

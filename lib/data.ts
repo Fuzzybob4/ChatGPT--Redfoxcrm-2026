@@ -11,7 +11,8 @@ export type ServiceType =
   | "Removal & Storage"
   | "Design Consultation";
 
-export type JobStatus = "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+export type JobStatus = "Scheduled" | "En Route" | "In Progress" | "Completed" | "Cancelled";
+export type JobType = "install" | "removal" | "other";
 export type InvoiceStatus = "Draft" | "Sent" | "Paid" | "Overdue";
 export type CustomerStatus = "Active" | "Inactive" | "Lead";
 export type EstimateStatus = "Draft" | "Sent" | "Accepted" | "Rejected" | "Converted";
@@ -93,16 +94,26 @@ export interface Job {
   customerId: string;
   propertyId: string;
   locationId: string;
+  invoiceId: string;
   title: string;
   serviceType: ServiceType;
+  jobType: JobType;
   status: JobStatus;
   scheduledDate: string;
   scheduledTime: string;
   durationMins: number;
   technicianName: string;
+  assignedEmployees: string[];
+  address: string;
+  city: string;
   notes?: string;
+  internalNotes?: string;
   amount: number;
   estimateId?: string;
+  enRouteAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  seasonYear?: number;
 }
 
 export interface EstimateLineItem {
