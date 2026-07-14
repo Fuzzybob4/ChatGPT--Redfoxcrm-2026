@@ -13,7 +13,7 @@ export default async function MappingPage() {
 
   const { data: customers } = await supabase
     .from("customers")
-    .select("id, full_name, first_name, last_name, email, phone, status");
+    .select("id, full_name, first_name, last_name, email, phone, status, address, city, state, zip_code, lat, lng");
 
   const { data: properties } = await supabase
     .from("customer_properties")
@@ -80,35 +80,66 @@ export default async function MappingPage() {
     return "all_customers";
   }
 
-  // Build pins from properties with coordinates
-  const mapPins: MapPin[] = (properties ?? [])
-    .map((p) => {
-      const customer = customerMap.get(p.customer_id);
-      if (!customer || !p.lat || !p.lng) return null;
+  const customerName = (c: any) =>
+    c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
 
-      return {
-        id: p.id,
-        customerId: p.customer_id,
-        propertyId: p.id,
-        propertyName: p.property_name || "Property",
-        customerName: customer.full_name ?? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim(),
-        email: customer.email ?? "",
-        phone: customer.phone ?? "",
-        address: [p.address, p.city, p.state, p.zip_code].filter(Boolean).join(", "),
-        city: p.city ?? "",
-        lat: p.lat as number,
-        lng: p.lng as number,
-        isPrimary: !!p.is_primary,
-        mapStatus: getCustomerStatus(p.customer_id),
-      };
-    })
-    .filter((p) => p !== null) as MapPin[];
+  // Track which customers have at least one geocoded property, so we can
+  // suppress the customer's main-address pin when properties cover them.
+  const customersWithProperties = new Set(
+    (properties ?? []).map((p) => p.customer_id)
+  );
+
+  const mapPins: MapPin[] = [];
+
+  // 1. Property pins (one per geocoded property)
+  for (const p of properties ?? []) {
+    const customer = customerMap.get(p.customer_id);
+    if (!customer || p.lat == null || p.lng == null) continue;
+
+    mapPins.push({
+      id: `prop-${p.id}`,
+      customerId: p.customer_id,
+      propertyId: p.id,
+      propertyName: p.property_name || "Property",
+      customerName: customerName(customer),
+      email: customer.email ?? "",
+      phone: customer.phone ?? "",
+      address: [p.address, p.city, p.state, p.zip_code].filter(Boolean).join(", "),
+      city: p.city ?? "",
+      lat: p.lat as number,
+      lng: p.lng as number,
+      isPrimary: !!p.is_primary,
+      mapStatus: getCustomerStatus(p.customer_id),
+    });
+  }
+
+  // 2. Customer main-address pins (only when the customer has no properties yet)
+  for (const c of customers ?? []) {
+    if (c.lat == null || c.lng == null) continue;
+    if (customersWithProperties.has(c.id)) continue;
+
+    mapPins.push({
+      id: `cust-${c.id}`,
+      customerId: c.id,
+      propertyId: "",
+      propertyName: "",
+      customerName: customerName(c),
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      address: [c.address, c.city, c.state, c.zip_code].filter(Boolean).join(", "),
+      city: c.city ?? "",
+      lat: c.lat as number,
+      lng: c.lng as number,
+      isPrimary: true,
+      mapStatus: getCustomerStatus(c.id),
+    });
+  }
 
   return (
     <div className="flex flex-col h-full">
       <PageHeader
         title="Mapping"
-        description="Visualize properties on the map by payment and installation status."
+        description="Visualize customers and their properties on the map by payment and installation status."
       />
       <div className="flex-1 min-h-0 px-4 pb-4 lg:px-6 lg:pb-6">
         <CustomerMap pins={mapPins} />
