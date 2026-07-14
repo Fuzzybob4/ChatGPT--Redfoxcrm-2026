@@ -43,6 +43,16 @@ export interface Property {
   photos?: string[];
 }
 
+export interface CustomerPhoto {
+  id: string;
+  customerId: string;
+  photoUrl: string;
+  photoType?: string;
+  description?: string;
+  fileSize?: number;
+  createdAt?: string;
+}
+
 export interface Customer {
   id: string;
   locationId: string;

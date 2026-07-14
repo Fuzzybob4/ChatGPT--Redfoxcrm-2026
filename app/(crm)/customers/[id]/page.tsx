@@ -25,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
+import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
 interface Props {
@@ -33,8 +34,9 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices } = useData();
+  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos } = useData();
   const customer = getCustomerById(id);
+  const photos = getCustomerPhotos(id);
   const [editOpen, setEditOpen] = useState(false);
 
   if (loading) {
@@ -413,6 +415,9 @@ export default function CustomerDetailPage({ params }: Props) {
                 )}
               </CardContent>
             </Card>
+
+            {/* Photo Gallery */}
+            <CustomerPhotoGallery photos={photos} />
           </div>
         </div>
       </div>
