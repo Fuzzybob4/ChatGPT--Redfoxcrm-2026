@@ -139,8 +139,8 @@ function WorkOrderCard({
             </div>
             {/* Always-visible menu — no hover required on mobile */}
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8 shrink-0 -mr-1 -mt-0.5">
+              <DropdownMenuTrigger>
+                <Button variant="ghost" size="icon" className="size-8 shrink-0 -mr-1 -mt-0.5" type="button">
                   <MoreVertical className="size-4" />
                   <span className="sr-only">Work order actions</span>
                 </Button>
