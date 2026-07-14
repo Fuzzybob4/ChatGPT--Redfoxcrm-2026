@@ -44,6 +44,8 @@ export function mapCustomer(row: Record<string, any>): Customer & {
   installStatus: string | null;
   tags: string[];
   notes: string;
+  isPropertyManager: boolean;
+  propertyManagerCompany: string;
 } {
   const name =
     row.full_name?.trim() ||
@@ -72,6 +74,8 @@ export function mapCustomer(row: Record<string, any>): Customer & {
     installStatus: row.install_status ?? null,
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     notes: row.notes ?? '',
+    isPropertyManager: !!row.is_property_manager,
+    propertyManagerCompany: row.property_manager_company ?? '',
   };
 }
 

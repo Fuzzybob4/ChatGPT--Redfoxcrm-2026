@@ -9,7 +9,7 @@ import {
   mapEstimate,
   mapJob,
 } from '@/lib/db/mappers';
-import type { Customer, Invoice, Estimate, Location, Job, CustomerPhoto } from '@/lib/data';
+import type { Customer, Invoice, Estimate, Location, Job, CustomerPhoto, CustomerProperty } from '@/lib/data';
 
 export interface Employee {
   id: string;
@@ -58,6 +58,7 @@ interface DataContextType {
   employees: Employee[];
   addons: Addon[];
   photos: CustomerPhoto[];
+  properties: CustomerProperty[];
   refresh: () => Promise<void>;
   // helper API (mirrors the former mock lib/data.ts)
   getCustomerById: (id: string) => LiveCustomer | undefined;
@@ -66,6 +67,7 @@ interface DataContextType {
   getCustomerInvoices: (customerId: string) => LiveInvoice[];
   getCustomerJobs: (customerId: string) => Job[];
   getCustomerPhotos: (customerId: string) => CustomerPhoto[];
+  getCustomerProperties: (customerId: string) => CustomerProperty[];
   getLocationCustomers: (locationId: string) => LiveCustomer[];
   getLocationJobs: (locationId: string) => Job[];
   getLocationEstimates: (locationId: string) => LiveEstimate[];
@@ -91,6 +93,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
   const [photos, setPhotos] = useState<CustomerPhoto[]>([]);
+  const [properties, setProperties] = useState<CustomerProperty[]>([]);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -132,6 +135,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: empRows },
       { data: addonRows },
       { data: photoRows },
+      { data: propertyRows },
     ] = await Promise.all([
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('locations').select('*').order('created_at', { ascending: true }),
@@ -141,6 +145,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('employees').select('*').order('created_at', { ascending: true }),
       supabase.from('addon_catalog').select('*').order('price_cents', { ascending: true }),
       supabase.from('customer_photos').select('*').order('created_at', { ascending: false }),
+      supabase.from('customer_properties').select('*').order('created_at', { ascending: true }),
     ]);
 
     setCustomers((custRows ?? []).map(mapCustomer));
@@ -185,6 +190,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         createdAt: r.created_at,
       })),
     );
+    setProperties(
+      (propertyRows ?? []).map((r: Record<string, any>) => ({
+        id: r.id,
+        customerId: r.customer_id,
+        propertyName: r.property_name ?? '',
+        address: r.address ?? '',
+        city: r.city ?? '',
+        state: r.state ?? '',
+        zip: r.zip_code ?? '',
+        propertyType: r.property_type ?? '',
+        isPrimary: !!r.is_primary,
+        isBillingAddress: !!r.is_billing_address,
+        isServiceAddress: !!r.is_service_address,
+        isActive: r.is_active ?? true,
+        notes: r.notes ?? '',
+        createdAt: r.created_at,
+      })),
+    );
     setLoading(false);
   }, []);
 
@@ -199,6 +222,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     invoices.filter((i) => i.customerId === customerId);
   const getCustomerJobs = (customerId: string) => jobs.filter((j) => j.customerId === customerId);
   const getCustomerPhotos = (customerId: string) => photos.filter((p) => p.customerId === customerId);
+  const getCustomerProperties = (customerId: string) =>
+    properties.filter((p) => p.customerId === customerId);
   const getLocationCustomers = (locationId: string) =>
     locationId ? customers.filter((c) => c.locationId === locationId) : customers;
   const getLocationJobs = (locationId: string) =>
@@ -239,6 +264,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         employees,
         addons,
         photos,
+        properties,
         refresh,
         getCustomerById,
         getLocationById,
@@ -246,6 +272,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         getCustomerInvoices,
         getCustomerJobs,
         getCustomerPhotos,
+        getCustomerProperties,
         getLocationCustomers,
         getLocationJobs,
         getLocationEstimates,

@@ -252,9 +252,35 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 onBlur={() => addTag(tagInput)}
-                placeholder={tags.length === 0 ? "vip, repeat-customer, commercial…" : ""}
+                placeholder={tags.length === 0 ? "installed-2026, wreaths, colored-lights…" : ""}
                 className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
+            </div>
+
+            {/* Quick-add suggestions */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[
+                `installed-${new Date().getFullYear()}`,
+                `installed-${new Date().getFullYear() - 1}`,
+                "wreaths",
+                "colored-lights",
+                "white-lights",
+                "garland",
+                "commercial",
+                "vip",
+              ]
+                .filter((s) => !tags.includes(s))
+                .map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => addTag(s)}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-input px-2 py-0.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  >
+                    <Plus className="size-3" />
+                    {s}
+                  </button>
+                ))}
             </div>
           </div>
 

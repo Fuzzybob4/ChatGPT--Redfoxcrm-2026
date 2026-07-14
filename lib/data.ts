@@ -53,6 +53,23 @@ export interface CustomerPhoto {
   createdAt?: string;
 }
 
+export interface CustomerProperty {
+  id: string;
+  customerId: string;
+  propertyName: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  propertyType: string;
+  isPrimary: boolean;
+  isBillingAddress: boolean;
+  isServiceAddress: boolean;
+  isActive: boolean;
+  notes: string;
+  createdAt?: string;
+}
+
 export interface Customer {
   id: string;
   locationId: string;

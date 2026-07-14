@@ -26,6 +26,7 @@ import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
+import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
 interface Props {
@@ -34,9 +35,10 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos } = useData();
+  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
   const photos = getCustomerPhotos(id);
+  const properties = getCustomerProperties(id);
   const [editOpen, setEditOpen] = useState(false);
 
   if (loading) {
@@ -311,6 +313,9 @@ export default function CustomerDetailPage({ params }: Props) {
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* Properties (multi-address) */}
+            <CustomerProperties customerId={customer.id} properties={properties} />
 
             {/* Jobs */}
             <Card>
