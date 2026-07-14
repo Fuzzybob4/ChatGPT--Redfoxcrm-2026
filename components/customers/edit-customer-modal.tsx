@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { updateCustomer } from "@/app/(crm)/customers/actions";
 import { useData } from "@/lib/data-context";
 
@@ -38,6 +39,7 @@ interface CustomerForEdit {
   status: string;
   notes: string;
   tags: string[];
+  marketingOptIn?: boolean;
 }
 
 interface Props {
@@ -61,6 +63,7 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
   const [notes, setNotes] = useState(customer.notes ?? "");
   const [tags, setTags] = useState<string[]>(customer.tags ?? []);
   const [tagInput, setTagInput] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(customer.marketingOptIn ?? false);
   const [error, setError] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,6 +108,7 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
           status,
           notes: notes.trim(),
           tags,
+          marketingOptIn,
         });
         await refresh();
         onOpenChange(false);
@@ -252,9 +256,54 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 onBlur={() => addTag(tagInput)}
-                placeholder={tags.length === 0 ? "vip, repeat-customer, commercial…" : ""}
+                placeholder={tags.length === 0 ? "installed-2026, wreaths, colored-lights…" : ""}
                 className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
+            </div>
+
+            {/* Quick-add suggestions */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[
+                `installed-${new Date().getFullYear()}`,
+                `installed-${new Date().getFullYear() - 1}`,
+                "wreaths",
+                "colored-lights",
+                "white-lights",
+                "garland",
+                "commercial",
+                "vip",
+              ]
+                .filter((s) => !tags.includes(s))
+                .map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => addTag(s)}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-input px-2 py-0.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  >
+                    <Plus className="size-3" />
+                    {s}
+                  </button>
+                ))}
+            </div>
+          </div>
+
+          {/* Marketing opt-in */}
+          <div className="flex items-start gap-3 rounded-lg border p-3">
+            <input
+              type="checkbox"
+              id="edit-marketing-opt-in"
+              checked={marketingOptIn}
+              onChange={(e) => setMarketingOptIn(e.target.checked)}
+              className="mt-1 size-4 rounded border-input accent-primary cursor-pointer"
+            />
+            <div>
+              <Label htmlFor="edit-marketing-opt-in" className="cursor-pointer font-medium">
+                Marketing emails
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Customer has opted in to receive marketing campaigns from your business. Required before including them in email campaigns.
+              </p>
             </div>
           </div>
 

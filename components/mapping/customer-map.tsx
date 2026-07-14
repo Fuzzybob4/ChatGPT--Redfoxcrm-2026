@@ -16,86 +16,82 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export interface MapCustomer {
+export interface MapPin {
   id: string;
-  name: string;
+  customerId: string;
+  propertyId: string;
+  propertyName: string;
+  customerName: string;
   email: string;
   phone: string;
   address: string;
   city: string;
   lat: number;
   lng: number;
-  installStatus: "pending_install" | "installed" | "pending_removal" | "removed" | "none";
-  hasUnpaidInvoice: boolean;
-  hasPaidInvoice: boolean;
+  isPrimary: boolean;
+  mapStatus: "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 }
 
-type MapView = "unpaid" | "pending_install" | "pending_removal" | "all";
+type MapView = "all" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 
-const VIEWS: { id: MapView; label: string; color: string }[] = [
-  { id: "unpaid", label: "Invoiced, Not Paid", color: "#dc2626" },
-  { id: "pending_install", label: "Paid, Pending Install", color: "#f59e0b" },
-  { id: "pending_removal", label: "Installed, Pending Removal", color: "#2563eb" },
-  { id: "all", label: "All Customers", color: "#16a34a" },
-];
-
-const STATUS_COLORS: Record<string, string> = {
-  pending_install: "#f59e0b",
-  installed: "#16a34a",
-  pending_removal: "#2563eb",
-  removed: "#6b7280",
-  none: "#6b7280",
+const STATUS_CONFIG: Record<Exclude<MapView, "all">, { label: string; description: string; color: string }> = {
+  pending_installs: { label: "Pending Install",  description: "Job scheduled, not yet started",       color: "#dc2626" },
+  estimates_sent:   { label: "Estimate Sent",    description: "Estimate sent, no job scheduled yet",  color: "#f59e0b" },
+  installed:        { label: "Installed",         description: "Install job completed",                color: "#16a34a" },
+  removed:          { label: "Removed",           description: "Removal job completed",               color: "#6b7280" },
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending_install: "Pending Install",
-  installed: "Installed",
-  pending_removal: "Pending Removal",
-  removed: "Removed",
-  none: "No Status",
-};
-
-function pinColor(c: MapCustomer, view: MapView): string {
-  if (view === "unpaid") return "#dc2626";
-  if (view === "pending_install") return "#f59e0b";
-  if (view === "pending_removal") return "#2563eb";
-  return STATUS_COLORS[c.installStatus] ?? "#6b7280";
+function pinColor(p: MapPin): string {
+  if (p.mapStatus === "all_customers") return "#111827";
+  return STATUS_CONFIG[p.mapStatus].color;
 }
 
-function matchesView(c: MapCustomer, view: MapView): boolean {
-  switch (view) {
-    case "unpaid":
-      return c.hasUnpaidInvoice;
-    case "pending_install":
-      return c.hasPaidInvoice && c.installStatus === "pending_install";
-    case "pending_removal":
-      return c.installStatus === "installed" || c.installStatus === "pending_removal";
-    case "all":
-      return true;
-  }
+function matchesView(p: MapPin, view: MapView): boolean {
+  if (view === "all") return true;
+  return p.mapStatus === view;
 }
 
-export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
+export function CustomerMap({ pins }: { pins: MapPin[] }) {
   const [view, setView] = useState<MapView>("all");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<MapCustomer | null>(null);
+  const [selected, setSelected] = useState<MapPin | null>(null);
 
   const cities = useMemo(
-    () => Array.from(new Set(customers.map((c) => c.city).filter(Boolean))).sort(),
-    [customers]
+    () => Array.from(new Set(pins.map((p) => p.city).filter(Boolean))).sort(),
+    [pins]
   );
+
+  // Build filter tabs with all status options
+  const views = useMemo(() => {
+    const present = new Set(pins.map((p) => p.mapStatus).filter((s) => s !== "all_customers"));
+    return [
+      { id: "all" as MapView, label: "All Customers", color: "#111827" },
+      ...(present.has("pending_installs")
+        ? [{ id: "pending_installs" as MapView, label: STATUS_CONFIG.pending_installs.label, color: STATUS_CONFIG.pending_installs.color }]
+        : []),
+      ...(present.has("estimates_sent")
+        ? [{ id: "estimates_sent" as MapView, label: STATUS_CONFIG.estimates_sent.label, color: STATUS_CONFIG.estimates_sent.color }]
+        : []),
+      ...(present.has("installed")
+        ? [{ id: "installed" as MapView, label: STATUS_CONFIG.installed.label, color: STATUS_CONFIG.installed.color }]
+        : []),
+      ...(present.has("removed")
+        ? [{ id: "removed" as MapView, label: STATUS_CONFIG.removed.label, color: STATUS_CONFIG.removed.color }]
+        : []),
+    ];
+  }, [pins]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return customers.filter((c) => {
-      if (!matchesView(c, view)) return false;
-      if (cityFilter !== "all" && c.city !== cityFilter) return false;
-      if (q && !c.name.toLowerCase().includes(q) && !c.address.toLowerCase().includes(q))
+    return pins.filter((p) => {
+      if (!matchesView(p, view)) return false;
+      if (cityFilter !== "all" && p.city !== cityFilter) return false;
+      if (q && !p.customerName.toLowerCase().includes(q) && !p.propertyName.toLowerCase().includes(q) && !p.address.toLowerCase().includes(q))
         return false;
       return true;
     });
-  }, [customers, view, search, cityFilter]);
+  }, [pins, view, search, cityFilter]);
 
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -117,8 +113,8 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
     <div className="flex flex-col gap-3 h-full">
       {/* View tabs */}
       <div className="flex flex-wrap gap-2">
-        {VIEWS.map((v) => {
-          const count = customers.filter((c) => matchesView(c, v.id)).length;
+        {views.map((v) => {
+          const count = pins.filter((p) => matchesView(p, v.id)).length;
           return (
             <button
               key={v.id}
@@ -199,20 +195,20 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
           mapStyle="mapbox://styles/mapbox/streets-v12"
         >
           <NavigationControl position="top-right" />
-          {filtered.map((c) => (
+          {filtered.map((p) => (
             <Marker
-              key={c.id}
-              latitude={c.lat}
-              longitude={c.lng}
+              key={p.id}
+              latitude={p.lat}
+              longitude={p.lng}
               anchor="bottom"
               onClick={(e) => {
                 e.originalEvent.stopPropagation();
-                setSelected(c);
+                setSelected(p);
               }}
             >
               <MapPin
                 className="w-7 h-7 cursor-pointer drop-shadow-md"
-                style={{ color: pinColor(c, view), fill: pinColor(c, view), fillOpacity: 0.25 }}
+                style={{ color: pinColor(p), fill: pinColor(p), fillOpacity: 0.25 }}
               />
             </Marker>
           ))}
@@ -228,7 +224,10 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
             >
               <div className="space-y-1.5 p-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold text-sm text-gray-900">{selected.name}</p>
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900">{selected.customerName}</p>
+                    {selected.propertyName && <p className="text-xs text-gray-600">{selected.propertyName}</p>}
+                  </div>
                   <button
                     onClick={() => setSelected(null)}
                     className="text-gray-400 hover:text-gray-600"
@@ -239,26 +238,21 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
                 </div>
                 <p className="text-xs text-gray-600">{selected.address}</p>
                 <p className="text-xs text-gray-600">{selected.phone}</p>
-                <div className="flex flex-wrap gap-1 pt-1">
-                  <span
-                    className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white"
-                    style={{ backgroundColor: STATUS_COLORS[selected.installStatus] }}
-                  >
-                    {STATUS_LABELS[selected.installStatus]}
-                  </span>
-                  {selected.hasUnpaidInvoice && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-600 text-white">
-                      Unpaid Invoice
+                {selected.mapStatus !== "all_customers" && (
+                  <div className="pt-1 space-y-0.5">
+                    <span
+                      className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
+                      style={{ backgroundColor: STATUS_CONFIG[selected.mapStatus].color }}
+                    >
+                      {STATUS_CONFIG[selected.mapStatus].label}
                     </span>
-                  )}
-                  {selected.hasPaidInvoice && !selected.hasUnpaidInvoice && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-600 text-white">
-                      Paid
-                    </span>
-                  )}
-                </div>
+                    <p className="text-[10px] text-gray-500">
+                      {STATUS_CONFIG[selected.mapStatus].description}
+                    </p>
+                  </div>
+                )}
                 <a
-                  href={`/customers/${selected.id}`}
+                  href={`/customers/${selected.customerId}`}
                   className="block text-xs font-medium text-red-600 hover:underline pt-1"
                 >
                   View customer
@@ -272,15 +266,15 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
       {/* Legend for All view */}
       {view === "all" && (
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-          {Object.entries(STATUS_LABELS)
-            .filter(([k]) => k !== "none")
-            .map(([key, label]) => (
-              <span key={key} className="flex items-center gap-1.5">
+          {views
+            .filter((v) => v.id !== "all")
+            .map((v) => (
+              <span key={v.id} className="flex items-center gap-1.5">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: STATUS_COLORS[key] }}
+                  style={{ backgroundColor: v.color }}
                 />
-                {label}
+                {v.label}
               </span>
             ))}
         </div>

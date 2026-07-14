@@ -25,6 +25,9 @@ import { Separator } from "@/components/ui/separator";
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
+import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
+import { CustomerProperties } from "@/components/customers/customer-properties";
+import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -32,8 +35,10 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices } = useData();
+  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
+  const photos = getCustomerPhotos(id);
+  const properties = getCustomerProperties(id);
   const [editOpen, setEditOpen] = useState(false);
 
   if (loading) {
@@ -48,6 +53,23 @@ export default function CustomerDetailPage({ params }: Props) {
 
   const jobs = getCustomerJobs(customer.id);
   const invs = getCustomerInvoices(customer.id);
+
+  // Derive the live pipeline status from real invoices + jobs so it stays in
+  // sync with the mapping page (both use lib/lifecycle).
+  const hasUnpaidInvoice = invs.some(
+    (i) => i.status === "Sent" || i.status === "Overdue",
+  );
+  const hasPaidInvoice = invs.some((i) => i.status === "Paid");
+  const lifecycle = deriveLifecycleStatus({
+    hasUnpaidInvoice,
+    hasPaidInvoice,
+    jobs: jobs.map((j) => ({
+      status: j.status,
+      hasCrew: Boolean(j.technicianName?.trim()),
+    })),
+    installStatus: customer.installStatus,
+  });
+  const lifecycleMeta = LIFECYCLE_META[lifecycle];
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const hasCoords = customer.lat != null && customer.lng != null;
@@ -101,9 +123,17 @@ export default function CustomerDetailPage({ params }: Props) {
                       {customer.name.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
+                  <div className="flex flex-col items-center gap-1.5">
                     <p className="font-semibold text-base">{customer.name}</p>
                     <StatusBadge status={customer.status} className="mt-1" />
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
+                      style={{ backgroundColor: lifecycleMeta.color }}
+                      title={lifecycleMeta.description}
+                    >
+                      <span className="inline-block size-1.5 rounded-full bg-white/90" />
+                      {lifecycleMeta.label}
+                    </span>
                   </div>
                 </div>
 
@@ -241,11 +271,13 @@ export default function CustomerDetailPage({ params }: Props) {
                         {customer.zip ? ` ${customer.zip}` : ""}
                       </p>
                     </div>
-                    {customer.installStatus && (
-                      <Badge variant="secondary" className="shrink-0 text-xs">
-                        {customer.installStatus}
-                      </Badge>
-                    )}
+                    <span
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
+                      style={{ backgroundColor: lifecycleMeta.color }}
+                      title={lifecycleMeta.description}
+                    >
+                      {lifecycleMeta.label}
+                    </span>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-4">
@@ -281,6 +313,9 @@ export default function CustomerDetailPage({ params }: Props) {
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* Properties (multi-address) */}
+            <CustomerProperties customerId={customer.id} properties={properties} />
 
             {/* Jobs */}
             <Card>
@@ -385,6 +420,9 @@ export default function CustomerDetailPage({ params }: Props) {
                 )}
               </CardContent>
             </Card>
+
+            {/* Photo Gallery */}
+            <CustomerPhotoGallery photos={photos} />
           </div>
         </div>
       </div>
