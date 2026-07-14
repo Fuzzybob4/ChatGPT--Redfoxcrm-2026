@@ -34,14 +34,15 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
 
-const ADD_ONS = [
-  { id: "recurring_services", name: "Recurring Services", price: "$29/mo", description: "Manage recurring service contracts and billing cycles" },
-  { id: "route_optimization", name: "Route Optimization", price: "$49/mo", description: "Optimize routes for your crews to save time and fuel" },
-  { id: "portal_upsells", name: "Customer Portal Upsells", price: "$19/mo", description: "Allow customers to add optional services when paying invoices" },
-  { id: "sms_notifications", name: "SMS Notifications", price: "$29/mo", description: "Send text messages to customers about jobs and appointments" },
-  { id: "email_campaigns", name: "Email Campaigns", price: "$19/mo", description: "Send marketing emails and newsletters to customers" },
-];
+// Display shape derived from the shared pricing source of truth.
+const ADD_ONS = ADDONS.map((a) => ({
+  id: a.id,
+  name: a.name,
+  price: `${formatCents(a.monthlyCents)}/mo`,
+  description: a.description,
+}));
 
 const INTEGRATIONS = [
   {
@@ -88,7 +89,14 @@ export function SettingsContent({
 }: SettingsContentProps) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeAddons, setActiveAddons] = useState<Set<string>>(new Set());
+  // Add-ons already paid for and active on the account.
+  const [persistedAddons, setPersistedAddons] = useState<Set<string>>(
+    new Set<string>(orgData?.active_addons ?? []),
+  );
+  // Currently toggled-on add-ons (includes persisted + any newly selected).
+  const [activeAddons, setActiveAddons] = useState<Set<string>>(
+    new Set<string>(orgData?.active_addons ?? []),
+  );
   const [saved, setSaved] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingAddons, setPendingAddons] = useState<string[]>([]);
@@ -100,7 +108,12 @@ export function SettingsContent({
       integration.id === "stripe" && orgData?.stripe_account_id && orgData?.stripe_charges_enabled,
   }));
 
+  // Only add-ons toggled on that haven't been paid for yet.
+  const newlySelected = Array.from(activeAddons).filter((id) => !persistedAddons.has(id));
+  const newChargeCents = getAddonsMonthlyCents(newlySelected);
+
   function toggleAddon(id: string) {
+    // Prevent un-toggling something already paid for from this quick view.
     setActiveAddons((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -109,14 +122,16 @@ export function SettingsContent({
   }
 
   const handleSaveAddons = useCallback(() => {
-    const newAddons = Array.from(activeAddons);
-    if (newAddons.length > 0) {
-      setPendingAddons(newAddons);
+    if (newlySelected.length > 0) {
+      setPendingAddons(newlySelected);
       setShowPaymentModal(true);
     }
-  }, [activeAddons]);
+  }, [newlySelected]);
 
   const handlePaymentSuccess = useCallback((addons: string[]) => {
+    // Mark the returned active add-ons as persisted so the paywall clears.
+    setPersistedAddons(new Set<string>(addons));
+    setActiveAddons(new Set<string>(addons));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }, []);
@@ -317,12 +332,19 @@ export function SettingsContent({
               <CardContent className="divide-y divide-border space-y-0 p-0 px-6 pb-6">
                 {ADD_ONS.map((addon) => {
                   const active = activeAddons.has(addon.id);
+                  const isPaid = persistedAddons.has(addon.id);
                   return (
                     <div key={addon.id} className="flex items-center justify-between gap-4 py-4 first:pt-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium">{addon.name}</p>
                           <span className="text-xs font-semibold text-primary">{addon.price}</span>
+                          {isPaid && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 text-emerald-700 border-emerald-200 bg-emerald-50 gap-1">
+                              <Check className="size-2.5" />
+                              Active
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">{addon.description}</p>
                       </div>
@@ -336,19 +358,18 @@ export function SettingsContent({
                 })}
               </CardContent>
             </Card>
-            {activeAddons.size > 0 && (
+            {newlySelected.length > 0 && (
               <div className="mt-4 rounded-lg bg-primary/5 border border-primary/20 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium">Selected Add-Ons</p>
+                    <p className="text-sm font-medium">New Add-Ons to Activate</p>
                     <p className="text-xs text-muted-foreground">
-                      {ADD_ONS.filter((a) => activeAddons.has(a.id)).map((a) => a.name).join(", ")}
+                      {ADD_ONS.filter((a) => newlySelected.includes(a.id)).map((a) => a.name).join(", ")}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-base font-bold text-primary">
-                      ${ADD_ONS.filter((a) => activeAddons.has(a.id))
-                        .reduce((s, a) => s + parseInt(a.price.replace(/\D/g, "")), 0)}/mo
+                      {formatCents(newChargeCents)}/mo
                     </p>
                     <p className="text-xs text-muted-foreground">billed monthly</p>
                   </div>
@@ -414,6 +435,8 @@ export function SettingsContent({
           onOpenChange={setShowPaymentModal}
           selectedAddons={pendingAddons}
           onSuccess={handlePaymentSuccess}
+          cardBrand={orgData?.card_brand}
+          cardLast4={orgData?.card_last4}
         />
       </div>
     </div>

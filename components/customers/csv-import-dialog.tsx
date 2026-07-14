@@ -75,16 +75,16 @@ export function CSVImportDialog() {
           </Button>
         }
       />
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader className="min-w-0">
           <DialogTitle>Import Customers from CSV</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-pretty">
             Upload a CSV file with columns: name, email, phone, address, city, state, zip.
             Only "name" is required.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {/* File Upload */}
           <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
             <input
@@ -116,8 +116,8 @@ export function CSVImportDialog() {
 
           {/* CSV Preview */}
           {csvText && !result && (
-            <div className="bg-muted p-4 rounded-lg max-h-48 overflow-y-auto">
-              <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+            <div className="bg-muted p-4 rounded-lg max-h-48 overflow-auto">
+              <pre className="text-xs whitespace-pre-wrap break-all font-mono">
                 {csvText.split("\n").slice(0, 5).join("\n")}
                 {csvText.split("\n").length > 5 && "\n..."}
               </pre>
@@ -154,9 +154,10 @@ export function CSVImportDialog() {
           )}
 
           {/* Actions */}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => {
                 setCsvText("");
                 setResult(null);
@@ -166,6 +167,7 @@ export function CSVImportDialog() {
               Clear
             </Button>
             <Button
+              className="w-full sm:w-auto"
               onClick={handleImport}
               disabled={!csvText || loading}
             >

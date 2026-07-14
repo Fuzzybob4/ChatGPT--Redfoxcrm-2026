@@ -8,6 +8,13 @@ export interface OrgMembership {
   businessName: string;
   isEnterprise: boolean;
   locationCount: number;
+  plan: string;
+  trialEndsAt: string | null;
+  subscriptionStatus: string;
+  subscriptionInterval: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
 }
 
 /**
@@ -25,7 +32,9 @@ export async function getCurrentOrg(): Promise<OrgMembership | null> {
 
   const { data: membership } = await supabase
     .from('user_memberships')
-    .select('user_id, org_id, role, organizations(name, is_enterprise, location_count)')
+    .select(
+      'user_id, org_id, role, organizations(name, is_enterprise, location_count, plan, trial_ends_at, subscription_status, subscription_interval, subscription_current_period_end, card_brand, card_last4)',
+    )
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -55,5 +64,12 @@ export async function getCurrentOrg(): Promise<OrgMembership | null> {
     businessName: businessProfile?.business_name ?? orgName,
     isEnterprise,
     locationCount,
+    plan: orgData?.plan ?? 'starter',
+    trialEndsAt: orgData?.trial_ends_at ?? null,
+    subscriptionStatus: orgData?.subscription_status ?? 'trialing',
+    subscriptionInterval: orgData?.subscription_interval ?? null,
+    subscriptionCurrentPeriodEnd: orgData?.subscription_current_period_end ?? null,
+    cardBrand: orgData?.card_brand ?? null,
+    cardLast4: orgData?.card_last4 ?? null,
   };
 }

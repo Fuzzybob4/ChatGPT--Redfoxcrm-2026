@@ -47,12 +47,23 @@ export async function createOrganization(
   let orgId = existing?.org_id as string | undefined;
 
   if (!orgId) {
+    // Card + plan details captured at signup live in the user's auth metadata.
+    const meta = (user.user_metadata ?? {}) as Record<string, string>;
+    const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
     const { data: org, error: orgErr } = await supabase
       .from('organizations')
       .insert({
         name: input.businessName,
         owner_user_id: user.id,
         vertical: input.vertical ?? null,
+        plan: meta.plan ?? 'starter',
+        trial_ends_at: trialEndsAt,
+        subscription_status: 'trialing',
+        stripe_customer_id: meta.stripe_customer_id ?? null,
+        default_payment_method_id: meta.default_payment_method_id ?? null,
+        card_brand: meta.card_brand ?? null,
+        card_last4: meta.card_last4 ?? null,
       })
       .select('id')
       .single();

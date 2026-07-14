@@ -3,158 +3,146 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
 import { stripe } from "@/lib/stripe/server";
+import { getAddon, getAddonsMonthlyCents, formatCents } from "@/lib/pricing";
 
-const ADD_ONS = {
-  recurring_services: { name: "Recurring Services", price: 2900 },
-  route_optimization: { name: "Route Optimization", price: 4900 },
-  portal_upsells: { name: "Customer Portal Upsells", price: 1900 },
-  sms_notifications: { name: "SMS Notifications", price: 2900 },
-  email_campaigns: { name: "Email Campaigns", price: 1900 },
-};
+interface PurchaseResult {
+  ok: boolean;
+  error?: string;
+  activeAddons?: string[];
+}
 
-export async function createAddonPaymentIntent(addonIds: string[]) {
+/**
+ * Charges the card on file (off-session) for the selected add-ons and, on
+ * success, activates them on the organization. Because we collect a payment
+ * method at signup, no in-modal card entry is required.
+ */
+export async function purchaseAddons(addonIds: string[]): Promise<PurchaseResult> {
   try {
     const org = await getCurrentOrg();
-    if (!org) return { error: "Organization not found" };
+    if (!org) return { ok: false, error: "Organization not found" };
+
+    // Validate the requested add-ons against our pricing source of truth.
+    const validIds = addonIds.filter((id) => getAddon(id));
+    if (validIds.length === 0) {
+      return { ok: false, error: "No valid add-ons selected" };
+    }
 
     const supabase = await createClient();
 
-    // Get or create Stripe customer
-    let customerId: string = "";
-    
-    // Check if org already has a Stripe customer ID
-    const { data: existingOrg } = await supabase
+    // Fetch the org's Stripe customer + saved payment method.
+    const { data: orgRow, error: orgErr } = await supabase
       .from("organizations")
-      .select("stripe_customer_id")
+      .select("stripe_customer_id, default_payment_method_id, active_addons")
       .eq("id", org.orgId)
       .single();
 
-    if (existingOrg?.stripe_customer_id) {
-      customerId = existingOrg.stripe_customer_id;
-    } else if (org.orgId) {
-      // Create a new Stripe customer for this org if it doesn't exist
-      const customer = await stripe.customers.create({
-        email: "business@" + org.orgName.toLowerCase().replace(/\s+/g, "-"),
-        metadata: {
-          org_id: org.orgId,
-          org_name: org.orgName,
-        },
-      });
-      customerId = customer.id;
-
-      // Store the Stripe customer ID in the org
-      await supabase
-        .from("organizations")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", org.orgId);
+    if (orgErr) {
+      console.error("[v0] Error loading org for add-on purchase:", orgErr);
+      return { ok: false, error: "Could not load your account" };
     }
 
-    // Calculate total amount from selected add-ons
-    let totalAmount = 0;
-    for (const addonId of addonIds) {
-      const addon = ADD_ONS[addonId as keyof typeof ADD_ONS];
-      if (addon) {
-        totalAmount += addon.price;
-      }
+    if (!orgRow?.stripe_customer_id || !orgRow?.default_payment_method_id) {
+      return {
+        ok: false,
+        error: "No card on file. Please add a payment method in Billing first.",
+      };
     }
 
-    if (totalAmount === 0) {
-      return { error: "No valid add-ons selected" };
+    // Only charge for add-ons that aren't already active.
+    const current: string[] = orgRow.active_addons ?? [];
+    const toActivate = validIds.filter((id) => !current.includes(id));
+    if (toActivate.length === 0) {
+      return { ok: true, activeAddons: current };
     }
 
-    // Create payment intent
+    const amountCents = getAddonsMonthlyCents(toActivate);
+    const names = toActivate.map((id) => getAddon(id)!.name).join(", ");
+
+    // Charge the card on file off-session.
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalAmount,
+      amount: amountCents,
       currency: "usd",
-      customer: customerId,
+      customer: orgRow.stripe_customer_id,
+      payment_method: orgRow.default_payment_method_id,
+      off_session: true,
+      confirm: true,
+      description: `Add-ons (${names}) — ${formatCents(amountCents)}/mo for ${org.orgName}`,
       metadata: {
         org_id: org.orgId,
-        addons: addonIds.join(","),
-        type: "addon_subscription",
+        addons: toActivate.join(","),
+        kind: "addon",
       },
-      description: `Add-on subscription for ${org.orgName}`,
     });
 
-    return {
-      clientSecret: paymentIntent.client_secret,
-      amount: totalAmount,
-      addons: addonIds,
-    };
+    if (paymentIntent.status !== "succeeded") {
+      return { ok: false, error: "Payment could not be completed" };
+    }
+
+    // Record the charge for history.
+    const { error: chargeErr } = await supabase.from("subscription_charges").insert({
+      org_id: org.orgId,
+      kind: "addon",
+      amount_cents: amountCents,
+      interval: "monthly",
+      description: `Add-ons: ${names}`,
+      stripe_payment_intent_id: paymentIntent.id,
+      status: "succeeded",
+    });
+    if (chargeErr) {
+      console.error("[v0] Error recording add-on charge:", chargeErr);
+    }
+
+    // Activate the add-ons.
+    const newActive = Array.from(new Set([...current, ...toActivate]));
+    const { error: updateErr } = await supabase
+      .from("organizations")
+      .update({ active_addons: newActive })
+      .eq("id", org.orgId);
+
+    if (updateErr) {
+      console.error("[v0] Error activating add-ons:", updateErr);
+      return { ok: false, error: "Payment succeeded but activation failed. Contact support." };
+    }
+
+    return { ok: true, activeAddons: newActive };
   } catch (error) {
-    console.error("[v0] Error creating addon payment intent:", error);
-    return { error: "Failed to create payment intent" };
+    // Stripe throws for declined off-session charges.
+    const message =
+      error instanceof Error ? error.message : "Failed to process add-on payment";
+    console.error("[v0] Error purchasing add-ons:", error);
+    return { ok: false, error: message };
   }
 }
 
-export async function confirmAddonPayment(
-  paymentIntentId: string,
-  addonIds: string[]
-) {
+/** Deactivates an add-on (no proration/refund — stops at next cycle). */
+export async function removeAddon(addonId: string): Promise<PurchaseResult> {
   try {
     const org = await getCurrentOrg();
-    if (!org) return { error: "Organization not found" };
+    if (!org) return { ok: false, error: "Organization not found" };
 
     const supabase = await createClient();
-
-    // Verify payment intent status
-    const paymentIntent = await stripe.paymentIntents.retrieve(
-      paymentIntentId
-    );
-
-    if (paymentIntent.status !== "succeeded") {
-      return { error: "Payment was not successful" };
-    }
-
-    // Store the payment record
-    const { error: paymentError } = await supabase
-      .from("payments")
-      .insert({
-        org_id: org.orgId,
-        amount: paymentIntent.amount,
-        currency: paymentIntent.currency,
-        stripe_payment_intent_id: paymentIntentId,
-        status: "succeeded",
-        type: "addon_subscription",
-        metadata: {
-          addons: addonIds,
-        },
-      });
-
-    if (paymentError) {
-      console.error("[v0] Error storing payment:", paymentError);
-      return { error: "Failed to record payment" };
-    }
-
-    // Update organization with active add-ons
-    const activeAddons = await supabase
+    const { data: orgRow } = await supabase
       .from("organizations")
       .select("active_addons")
       .eq("id", org.orgId)
       .single();
 
-    const currentAddons = activeAddons.data?.active_addons || [];
-    const newAddons = Array.from(new Set([...currentAddons, ...addonIds]));
+    const current: string[] = orgRow?.active_addons ?? [];
+    const newActive = current.filter((id) => id !== addonId);
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from("organizations")
-      .update({
-        active_addons: newAddons,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ active_addons: newActive })
       .eq("id", org.orgId);
 
-    if (updateError) {
-      console.error("[v0] Error updating add-ons:", updateError);
-      return { error: "Failed to activate add-ons" };
+    if (error) {
+      console.error("[v0] Error removing add-on:", error);
+      return { ok: false, error: "Failed to remove add-on" };
     }
 
-    return {
-      success: true,
-      message: "Add-ons activated successfully",
-      addons: newAddons,
-    };
+    return { ok: true, activeAddons: newActive };
   } catch (error) {
-    console.error("[v0] Error confirming addon payment:", error);
-    return { error: "Failed to confirm payment" };
+    console.error("[v0] Error removing add-on:", error);
+    return { ok: false, error: "Failed to remove add-on" };
   }
 }

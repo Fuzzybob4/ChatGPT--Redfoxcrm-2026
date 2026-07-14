@@ -14,6 +14,8 @@ import {
   BarChart3,
   Receipt,
   Mail,
+  Building,
+  Truck,
 } from "lucide-react";
 
 import {
@@ -49,16 +51,22 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
+    title: "Multi-Location",
+    href: "/dashboard/multi-location",
+    icon: Building,
+    enterprise: true,
+  },
+  {
     title: "Customers",
     href: "/customers",
     icon: Users,
-    badge: "6",
+    badge: true,
   },
   {
     title: "Estimates",
     href: "/estimates",
     icon: FileText,
-    badge: "3",
+    badge: true,
     children: [
       {
         title: "Invoices",
@@ -71,7 +79,7 @@ const navItems = [
     title: "Jobs & Schedule",
     href: "/jobs",
     icon: CalendarDays,
-    badge: "4",
+    badge: true,
   },
   {
     title: "Mapping",
@@ -82,6 +90,11 @@ const navItems = [
     title: "Crew",
     href: "/crew",
     icon: HardHat,
+  },
+  {
+    title: "Fleet Management",
+    href: "/vehicles",
+    icon: Truck,
   },
   {
     title: "Reports",
@@ -103,6 +116,29 @@ export async function AppSidebar() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Fetch live counts from Supabase
+  const [customersRes, estimatesRes, jobsRes] = await Promise.all([
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+    supabase
+      .from("estimates")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+    supabase
+      .from("work_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+  ]);
+
+  // Build badges map with live counts
+  const badgeCounts: Record<string, string> = {
+    "/customers": (customersRes.count ?? 0).toString(),
+    "/estimates": (estimatesRes.count ?? 0).toString(),
+    "/jobs": (jobsRes.count ?? 0).toString(),
+  };
 
   const userEmail = user?.email ?? "";
   const userInitials = (org.businessName || user?.email || "?")
@@ -135,7 +171,11 @@ export async function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {navItems.map((item: any) => {
+                // Skip enterprise-only items if not enterprise
+                if (item.enterprise && !org.isEnterprise) {
+                  return null;
+                }
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -144,18 +184,26 @@ export async function AppSidebar() {
                     >
                       <item.icon className="size-4 shrink-0" />
                       <span>{item.title}</span>
-                      {item.badge && (
+                      {item.enterprise && (
+                        <Badge
+                          variant="outline"
+                          className="ml-auto text-[10px] h-5 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
+                        >
+                          Enterprise
+                        </Badge>
+                      )}
+                      {item.badge && badgeCounts[item.href] && (
                         <Badge
                           variant="secondary"
                           className="ml-auto text-[10px] h-5 px-1.5 bg-sidebar-accent text-sidebar-accent-foreground"
                         >
-                          {item.badge}
+                          {badgeCounts[item.href]}
                         </Badge>
                       )}
                     </SidebarMenuButton>
                     {item.children && (
                       <SidebarMenuSub>
-                        {item.children.map((child) => {
+                        {item.children.map((child: any) => {
                           return (
                             <SidebarMenuSubItem key={child.href}>
                               <SidebarMenuSubButton
