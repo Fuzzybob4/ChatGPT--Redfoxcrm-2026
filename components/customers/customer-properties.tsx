@@ -3,16 +3,12 @@
 import { useState, useTransition } from "react";
 import {
   Building2, MapPin, Plus, Pencil, Trash2, Loader2,
-  Star, Receipt, Wrench,
+  Star, Receipt, Wrench, Navigation,
 } from "lucide-react";
-
-import {
-  Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { geocodePropertyAddress } from "@/lib/geocoding";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -21,6 +17,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 import type { CustomerProperty } from "@/lib/data";
 import { useData } from "@/lib/data-context";
@@ -54,6 +52,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
 
   function openAdd() {
     setEditingId(null);
@@ -118,6 +117,32 @@ export function CustomerProperties({ customerId, properties }: Props) {
         setDeletingId(null);
       }
     });
+  }
+
+  async function handleGeocode() {
+    if (!form.address.trim()) {
+      setError("Enter an address to geocode.");
+      return;
+    }
+    setGeocoding(true);
+    try {
+      const result = await geocodePropertyAddress(
+        form.address,
+        form.city,
+        form.state,
+        form.zip
+      );
+      if (result) {
+        setForm((f) => ({ ...f, ...result }));
+        setError("");
+      } else {
+        setError("Address not found. Try a more complete address.");
+      }
+    } catch (err) {
+      setError("Geocoding failed. Please try again.");
+    } finally {
+      setGeocoding(false);
+    }
   }
 
   return (
@@ -317,6 +342,28 @@ export function CustomerProperties({ customerId, properties }: Props) {
                 />
               </div>
             </div>
+
+            {/* Geocode button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleGeocode}
+              disabled={geocoding}
+              className="w-full"
+            >
+              {geocoding ? (
+                <>
+                  <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                  Finding coordinates...
+                </>
+              ) : (
+                <>
+                  <Navigation className="size-3.5 mr-1.5" />
+                  Geocode Address
+                </>
+              )}
+            </Button>
 
             {/* Role flags */}
             <div className="space-y-2.5 rounded-lg border border-border p-3">

@@ -67,6 +67,8 @@ export interface CustomerProperty {
   isServiceAddress: boolean;
   isActive: boolean;
   notes: string;
+  lat?: number;
+  lng?: number;
   createdAt?: string;
 }
 

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { CustomerMap, type MapCustomer } from "@/components/mapping/customer-map";
+import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata = {
@@ -13,9 +13,11 @@ export default async function MappingPage() {
 
   const { data: customers } = await supabase
     .from("customers")
-    .select(
-      "id, full_name, first_name, last_name, email, phone, address, city, state, zip_code, lat, lng, status"
-    )
+    .select("id, full_name, first_name, last_name, email, phone, status");
+
+  const { data: properties } = await supabase
+    .from("customer_properties")
+    .select("id, customer_id, property_name, address, city, state, zip_code, lat, lng, is_primary")
     .not("lat", "is", null)
     .not("lng", "is", null);
 
@@ -27,12 +29,15 @@ export default async function MappingPage() {
     .from("estimates")
     .select("customer_id, status");
 
-  // Build status lookup per customer
   type MapStatus = "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
-  
-  const statusByCustomer = new Map<string, MapStatus>();
-  
-  // First pass: invoices determine paid/unpaid
+
+  // Build customer lookup for quick name resolution
+  const customerMap = new Map<string, any>();
+  for (const c of customers ?? []) {
+    customerMap.set(c.id, c);
+  }
+
+  // First pass: invoices determine paid/unpaid per customer
   const invoicesByCustomer = new Map<string, any[]>();
   const hasInvoiceByCustomer = new Map<string, boolean>();
   for (const inv of invoices ?? []) {
@@ -54,58 +59,59 @@ export default async function MappingPage() {
     hasEstimateByCustomer.set(est.customer_id, true);
   }
 
-  // Determine status for each customer
-  const mapCustomers: MapCustomer[] = (customers ?? []).map((c) => {
-    let mapStatus: MapStatus = "all_customers";
+  // Helper to determine status for a customer
+  function getCustomerStatus(customerId: string): MapStatus {
+    const customer = customerMap.get(customerId);
+    if (customer?.status === "removed") return "removed";
 
-    // Check if removed
-    if (c.status === "removed") {
-      mapStatus = "removed";
-    }
-    // Check if has paid invoices (deposit or full payment)
-    else if (hasInvoiceByCustomer.has(c.id)) {
-      const invs = invoicesByCustomer.get(c.id) ?? [];
+    if (hasInvoiceByCustomer.has(customerId)) {
+      const invs = invoicesByCustomer.get(customerId) ?? [];
       const hasPaid = invs.some((inv: any) => inv.status === "paid");
-      if (hasPaid) {
-        mapStatus = "installed";
-      } else {
-        // Has unpaid invoices
-        const hasUnpaid = invs.some(
-          (inv: any) =>
-            (inv.status === "sent" || inv.status === "overdue") &&
-            Number(inv.amount_paid ?? 0) < Number(inv.total_amount ?? 0)
-        );
-        if (hasUnpaid) {
-          mapStatus = "pending_installs";
-        }
-      }
-    }
-    // Check if has estimates but no invoices
-    else if (hasEstimateByCustomer.has(c.id)) {
-      mapStatus = "estimates_sent";
+      if (hasPaid) return "installed";
+      const hasUnpaid = invs.some(
+        (inv: any) =>
+          (inv.status === "sent" || inv.status === "overdue") &&
+          Number(inv.amount_paid ?? 0) < Number(inv.total_amount ?? 0)
+      );
+      if (hasUnpaid) return "pending_installs";
     }
 
-    return {
-      id: c.id,
-      name: c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
-      email: c.email ?? "",
-      phone: c.phone ?? "",
-      address: [c.address, c.city, c.state, c.zip_code].filter(Boolean).join(", "),
-      city: c.city ?? "",
-      lat: c.lat as number,
-      lng: c.lng as number,
-      mapStatus,
-    };
-  });
+    if (hasEstimateByCustomer.has(customerId)) return "estimates_sent";
+    return "all_customers";
+  }
+
+  // Build pins from properties with coordinates
+  const mapPins: MapPin[] = (properties ?? [])
+    .map((p) => {
+      const customer = customerMap.get(p.customer_id);
+      if (!customer || !p.lat || !p.lng) return null;
+
+      return {
+        id: p.id,
+        customerId: p.customer_id,
+        propertyId: p.id,
+        propertyName: p.property_name || "Property",
+        customerName: customer.full_name ?? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim(),
+        email: customer.email ?? "",
+        phone: customer.phone ?? "",
+        address: [p.address, p.city, p.state, p.zip_code].filter(Boolean).join(", "),
+        city: p.city ?? "",
+        lat: p.lat as number,
+        lng: p.lng as number,
+        isPrimary: !!p.is_primary,
+        mapStatus: getCustomerStatus(p.customer_id),
+      };
+    })
+    .filter((p) => p !== null) as MapPin[];
 
   return (
     <div className="flex flex-col h-full">
       <PageHeader
         title="Mapping"
-        description="Visualize customers on the map by payment and installation status."
+        description="Visualize properties on the map by payment and installation status."
       />
       <div className="flex-1 min-h-0 px-4 pb-4 lg:px-6 lg:pb-6">
-        <CustomerMap customers={mapCustomers} />
+        <CustomerMap pins={mapPins} />
       </div>
     </div>
   );

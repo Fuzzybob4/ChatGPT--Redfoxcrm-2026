@@ -205,6 +205,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         isServiceAddress: !!r.is_service_address,
         isActive: r.is_active ?? true,
         notes: r.notes ?? '',
+        lat: r.lat,
+        lng: r.lng,
         createdAt: r.created_at,
       })),
     );
