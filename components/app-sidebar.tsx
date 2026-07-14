@@ -60,13 +60,13 @@ const navItems = [
     title: "Customers",
     href: "/customers",
     icon: Users,
-    badge: "6",
+    badge: true,
   },
   {
     title: "Estimates",
     href: "/estimates",
     icon: FileText,
-    badge: "3",
+    badge: true,
     children: [
       {
         title: "Invoices",
@@ -79,7 +79,7 @@ const navItems = [
     title: "Jobs & Schedule",
     href: "/jobs",
     icon: CalendarDays,
-    badge: "4",
+    badge: true,
   },
   {
     title: "Mapping",
@@ -116,6 +116,29 @@ export async function AppSidebar() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Fetch live counts from Supabase
+  const [customersRes, estimatesRes, jobsRes] = await Promise.all([
+    supabase
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+    supabase
+      .from("estimates")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+    supabase
+      .from("work_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId),
+  ]);
+
+  // Build badges map with live counts
+  const badgeCounts: Record<string, string> = {
+    "/customers": (customersRes.count ?? 0).toString(),
+    "/estimates": (estimatesRes.count ?? 0).toString(),
+    "/jobs": (jobsRes.count ?? 0).toString(),
+  };
 
   const userEmail = user?.email ?? "";
   const userInitials = (org.businessName || user?.email || "?")
@@ -169,12 +192,12 @@ export async function AppSidebar() {
                           Enterprise
                         </Badge>
                       )}
-                      {item.badge && (
+                      {item.badge && badgeCounts[item.href] && (
                         <Badge
                           variant="secondary"
                           className="ml-auto text-[10px] h-5 px-1.5 bg-sidebar-accent text-sidebar-accent-foreground"
                         >
-                          {item.badge}
+                          {badgeCounts[item.href]}
                         </Badge>
                       )}
                     </SidebarMenuButton>
