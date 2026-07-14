@@ -14,6 +14,8 @@ import {
   BarChart3,
   Receipt,
   Mail,
+  Building,
+  Truck,
 } from "lucide-react";
 
 import {
@@ -49,6 +51,12 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
+    title: "Multi-Location",
+    href: "/dashboard/multi-location",
+    icon: Building,
+    enterprise: true,
+  },
+  {
     title: "Customers",
     href: "/customers",
     icon: Users,
@@ -82,6 +90,11 @@ const navItems = [
     title: "Crew",
     href: "/crew",
     icon: HardHat,
+  },
+  {
+    title: "Fleet Management",
+    href: "/vehicles",
+    icon: Truck,
   },
   {
     title: "Reports",
@@ -135,7 +148,11 @@ export async function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {navItems.map((item: any) => {
+                // Skip enterprise-only items if not enterprise
+                if (item.enterprise && !org.isEnterprise) {
+                  return null;
+                }
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -144,6 +161,14 @@ export async function AppSidebar() {
                     >
                       <item.icon className="size-4 shrink-0" />
                       <span>{item.title}</span>
+                      {item.enterprise && (
+                        <Badge
+                          variant="outline"
+                          className="ml-auto text-[10px] h-5 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
+                        >
+                          Enterprise
+                        </Badge>
+                      )}
                       {item.badge && (
                         <Badge
                           variant="secondary"
@@ -155,7 +180,7 @@ export async function AppSidebar() {
                     </SidebarMenuButton>
                     {item.children && (
                       <SidebarMenuSub>
-                        {item.children.map((child) => {
+                        {item.children.map((child: any) => {
                           return (
                             <SidebarMenuSubItem key={child.href}>
                               <SidebarMenuSubButton
