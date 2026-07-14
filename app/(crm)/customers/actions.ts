@@ -15,6 +15,7 @@ export interface CustomerUpdateInput {
   status: string;
   notes: string;
   tags: string[];
+  marketingOptIn: boolean;
 }
 
 export async function updateCustomer(customerId: string, input: CustomerUpdateInput) {
@@ -35,6 +36,8 @@ export async function updateCustomer(customerId: string, input: CustomerUpdateIn
       status: input.status.toLowerCase(),
       notes: input.notes,
       tags: input.tags,
+      marketing_opt_in: input.marketingOptIn,
+      marketing_opt_in_at: input.marketingOptIn ? new Date().toISOString() : null,
     })
     .eq("id", customerId)
     .eq("org_id", org.orgId);

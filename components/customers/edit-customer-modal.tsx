@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { updateCustomer } from "@/app/(crm)/customers/actions";
 import { useData } from "@/lib/data-context";
 
@@ -38,6 +39,7 @@ interface CustomerForEdit {
   status: string;
   notes: string;
   tags: string[];
+  marketingOptIn?: boolean;
 }
 
 interface Props {
@@ -61,6 +63,7 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
   const [notes, setNotes] = useState(customer.notes ?? "");
   const [tags, setTags] = useState<string[]>(customer.tags ?? []);
   const [tagInput, setTagInput] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(customer.marketingOptIn ?? false);
   const [error, setError] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,6 +108,7 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
           status,
           notes: notes.trim(),
           tags,
+          marketingOptIn,
         });
         await refresh();
         onOpenChange(false);
@@ -281,6 +285,25 @@ export function EditCustomerModal({ customer, open, onOpenChange }: Props) {
                     {s}
                   </button>
                 ))}
+            </div>
+          </div>
+
+          {/* Marketing opt-in */}
+          <div className="flex items-start gap-3 rounded-lg border p-3">
+            <input
+              type="checkbox"
+              id="edit-marketing-opt-in"
+              checked={marketingOptIn}
+              onChange={(e) => setMarketingOptIn(e.target.checked)}
+              className="mt-1 size-4 rounded border-input accent-primary cursor-pointer"
+            />
+            <div>
+              <Label htmlFor="edit-marketing-opt-in" className="cursor-pointer font-medium">
+                Marketing emails
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Customer has opted in to receive marketing campaigns from your business. Required before including them in email campaigns.
+              </p>
             </div>
           </div>
 
