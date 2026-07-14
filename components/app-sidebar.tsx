@@ -95,6 +95,7 @@ const navItems = [
     title: "Fleet Management",
     href: "/vehicles",
     icon: Truck,
+    comingSoon: true,
   },
   {
     title: "Reports",
