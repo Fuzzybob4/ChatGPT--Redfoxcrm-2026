@@ -34,11 +34,11 @@ export interface MapPin {
 
 type MapView = "all" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 
-const STATUS_CONFIG: Record<Exclude<MapView, "all">, { label: string; color: string }> = {
-  pending_installs: { label: "Pending Installs", color: "#dc2626" },
-  estimates_sent: { label: "Estimates Sent", color: "#f59e0b" },
-  installed: { label: "Installed", color: "#16a34a" },
-  removed: { label: "Removed", color: "#6b7280" },
+const STATUS_CONFIG: Record<Exclude<MapView, "all">, { label: string; description: string; color: string }> = {
+  pending_installs: { label: "Pending Install",  description: "Job scheduled, not yet started",       color: "#dc2626" },
+  estimates_sent:   { label: "Estimate Sent",    description: "Estimate sent, no job scheduled yet",  color: "#f59e0b" },
+  installed:        { label: "Installed",         description: "Install job completed",                color: "#16a34a" },
+  removed:          { label: "Removed",           description: "Removal job completed",               color: "#6b7280" },
 };
 
 function pinColor(p: MapPin): string {
@@ -66,7 +66,7 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
   const views = useMemo(() => {
     const present = new Set(pins.map((p) => p.mapStatus).filter((s) => s !== "all_customers"));
     return [
-      { id: "all" as MapView, label: "All Properties", color: "#111827" },
+      { id: "all" as MapView, label: "All Customers", color: "#111827" },
       ...(present.has("pending_installs")
         ? [{ id: "pending_installs" as MapView, label: STATUS_CONFIG.pending_installs.label, color: STATUS_CONFIG.pending_installs.color }]
         : []),
@@ -238,16 +238,19 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                 </div>
                 <p className="text-xs text-gray-600">{selected.address}</p>
                 <p className="text-xs text-gray-600">{selected.phone}</p>
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {selected.mapStatus !== "all_customers" && (
+                {selected.mapStatus !== "all_customers" && (
+                  <div className="pt-1 space-y-0.5">
                     <span
-                      className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white"
+                      className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
                       style={{ backgroundColor: STATUS_CONFIG[selected.mapStatus].color }}
                     >
                       {STATUS_CONFIG[selected.mapStatus].label}
                     </span>
-                  )}
-                </div>
+                    <p className="text-[10px] text-gray-500">
+                      {STATUS_CONFIG[selected.mapStatus].description}
+                    </p>
+                  </div>
+                )}
                 <a
                   href={`/customers/${selected.customerId}`}
                   className="block text-xs font-medium text-red-600 hover:underline pt-1"

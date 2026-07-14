@@ -21,9 +21,10 @@ export default async function MappingPage() {
     .not("lat", "is", null)
     .not("lng", "is", null);
 
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select("customer_id, status, total_amount, amount_paid");
+  const { data: jobs } = await supabase
+    .from("scheduled_jobs")
+    .select("customer_id, job_type, status, completed_at, scheduled_date")
+    .order("scheduled_date", { ascending: false });
 
   const { data: estimates } = await supabase
     .from("estimates")
@@ -31,52 +32,62 @@ export default async function MappingPage() {
 
   type MapStatus = "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 
-  // Build customer lookup for quick name resolution
+  // Build customer lookup
   const customerMap = new Map<string, any>();
-  for (const c of customers ?? []) {
-    customerMap.set(c.id, c);
+  for (const c of customers ?? []) customerMap.set(c.id, c);
+
+  // Group jobs per customer (already ordered by scheduled_date desc)
+  const jobsByCustomer = new Map<string, any[]>();
+  for (const j of jobs ?? []) {
+    if (!j.customer_id) continue;
+    const list = jobsByCustomer.get(j.customer_id) ?? [];
+    list.push(j);
+    jobsByCustomer.set(j.customer_id, list);
   }
 
-  // First pass: invoices determine paid/unpaid per customer
-  const invoicesByCustomer = new Map<string, any[]>();
-  const hasInvoiceByCustomer = new Map<string, boolean>();
-  for (const inv of invoices ?? []) {
-    if (!inv.customer_id) continue;
-    const list = invoicesByCustomer.get(inv.customer_id) ?? [];
-    list.push(inv);
-    invoicesByCustomer.set(inv.customer_id, list);
-    hasInvoiceByCustomer.set(inv.customer_id, true);
-  }
-
-  // Second pass: estimates
+  // Group estimates per customer
   const estimatesByCustomer = new Map<string, any[]>();
-  const hasEstimateByCustomer = new Map<string, boolean>();
-  for (const est of estimates ?? []) {
-    if (!est.customer_id) continue;
-    const list = estimatesByCustomer.get(est.customer_id) ?? [];
-    list.push(est);
-    estimatesByCustomer.set(est.customer_id, list);
-    hasEstimateByCustomer.set(est.customer_id, true);
+  for (const e of estimates ?? []) {
+    if (!e.customer_id) continue;
+    const list = estimatesByCustomer.get(e.customer_id) ?? [];
+    list.push(e);
+    estimatesByCustomer.set(e.customer_id, list);
   }
 
-  // Helper to determine status for a customer
-  function getCustomerStatus(customerId: string): MapStatus {
-    const customer = customerMap.get(customerId);
-    if (customer?.status === "removed") return "removed";
+  // Normalise job_type strings to "install" | "removal" | "other"
+  function normalizeJobType(raw: string | null): "install" | "removal" | "other" {
+    const t = (raw ?? "").toLowerCase();
+    if (t.includes("remov") || t.includes("takedown") || t.includes("take_down") || t.includes("take down")) return "removal";
+    if (t.includes("install") || t.includes("hang") || t.includes("setup") || t.includes("set_up")) return "install";
+    return "other";
+  }
 
-    if (hasInvoiceByCustomer.has(customerId)) {
-      const invs = invoicesByCustomer.get(customerId) ?? [];
-      const hasPaid = invs.some((inv: any) => inv.status === "paid");
-      if (hasPaid) return "installed";
-      const hasUnpaid = invs.some(
-        (inv: any) =>
-          (inv.status === "sent" || inv.status === "overdue") &&
-          Number(inv.amount_paid ?? 0) < Number(inv.total_amount ?? 0)
-      );
-      if (hasUnpaid) return "pending_installs";
+  // Determine map status driven entirely by jobs, falling back to estimates
+  function getCustomerStatus(customerId: string): MapStatus {
+    const customerJobs = jobsByCustomer.get(customerId) ?? [];
+
+    // Find the most recent completed job to determine last known work state
+    const lastCompleted = customerJobs.find((j) => j.status === "completed");
+
+    if (lastCompleted) {
+      const type = normalizeJobType(lastCompleted.job_type);
+      if (type === "removal") return "removed";
+      if (type === "install") return "installed";
     }
 
-    if (hasEstimateByCustomer.has(customerId)) return "estimates_sent";
+    // Any active (scheduled or in-progress) job means pending install
+    const hasActiveJob = customerJobs.some(
+      (j) => j.status === "scheduled" || j.status === "in_progress" || j.status === "in progress"
+    );
+    if (hasActiveJob) return "pending_installs";
+
+    // No jobs — check for a sent/approved estimate
+    const custEstimates = estimatesByCustomer.get(customerId) ?? [];
+    const hasSentEstimate = custEstimates.some(
+      (e) => e.status === "sent" || e.status === "approved"
+    );
+    if (hasSentEstimate) return "estimates_sent";
+
     return "all_customers";
   }
 
