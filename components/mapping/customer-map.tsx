@@ -15,6 +15,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  LIFECYCLE_META,
+  LIFECYCLE_ORDER,
+  type LifecycleStatus,
+} from "@/lib/lifecycle";
 
 export interface MapCustomer {
   id: string;
@@ -25,54 +30,19 @@ export interface MapCustomer {
   city: string;
   lat: number;
   lng: number;
-  installStatus: "pending_install" | "installed" | "pending_removal" | "removed" | "none";
+  lifecycleStatus: LifecycleStatus;
   hasUnpaidInvoice: boolean;
   hasPaidInvoice: boolean;
 }
 
-type MapView = "unpaid" | "pending_install" | "pending_removal" | "all";
+type MapView = LifecycleStatus | "all";
 
-const VIEWS: { id: MapView; label: string; color: string }[] = [
-  { id: "unpaid", label: "Invoiced, Not Paid", color: "#dc2626" },
-  { id: "pending_install", label: "Paid, Pending Install", color: "#f59e0b" },
-  { id: "pending_removal", label: "Installed, Pending Removal", color: "#2563eb" },
-  { id: "all", label: "All Customers", color: "#16a34a" },
-];
-
-const STATUS_COLORS: Record<string, string> = {
-  pending_install: "#f59e0b",
-  installed: "#16a34a",
-  pending_removal: "#2563eb",
-  removed: "#6b7280",
-  none: "#6b7280",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending_install: "Pending Install",
-  installed: "Installed",
-  pending_removal: "Pending Removal",
-  removed: "Removed",
-  none: "No Status",
-};
-
-function pinColor(c: MapCustomer, view: MapView): string {
-  if (view === "unpaid") return "#dc2626";
-  if (view === "pending_install") return "#f59e0b";
-  if (view === "pending_removal") return "#2563eb";
-  return STATUS_COLORS[c.installStatus] ?? "#6b7280";
+function pinColor(c: MapCustomer): string {
+  return LIFECYCLE_META[c.lifecycleStatus].color;
 }
 
 function matchesView(c: MapCustomer, view: MapView): boolean {
-  switch (view) {
-    case "unpaid":
-      return c.hasUnpaidInvoice;
-    case "pending_install":
-      return c.hasPaidInvoice && c.installStatus === "pending_install";
-    case "pending_removal":
-      return c.installStatus === "installed" || c.installStatus === "pending_removal";
-    case "all":
-      return true;
-  }
+  return view === "all" || c.lifecycleStatus === view;
 }
 
 export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
@@ -85,6 +55,20 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
     () => Array.from(new Set(customers.map((c) => c.city).filter(Boolean))).sort(),
     [customers]
   );
+
+  // Build filter tabs from the lifecycle statuses actually present in the data.
+  const views = useMemo(() => {
+    const present = new Set(customers.map((c) => c.lifecycleStatus));
+    const statusViews = LIFECYCLE_ORDER.filter((s) => present.has(s)).map((s) => ({
+      id: s as MapView,
+      label: LIFECYCLE_META[s].label,
+      color: LIFECYCLE_META[s].color,
+    }));
+    return [
+      { id: "all" as MapView, label: "All Customers", color: "#111827" },
+      ...statusViews,
+    ];
+  }, [customers]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -117,7 +101,7 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
     <div className="flex flex-col gap-3 h-full">
       {/* View tabs */}
       <div className="flex flex-wrap gap-2">
-        {VIEWS.map((v) => {
+        {views.map((v) => {
           const count = customers.filter((c) => matchesView(c, v.id)).length;
           return (
             <button
@@ -212,7 +196,7 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
             >
               <MapPin
                 className="w-7 h-7 cursor-pointer drop-shadow-md"
-                style={{ color: pinColor(c, view), fill: pinColor(c, view), fillOpacity: 0.25 }}
+                style={{ color: pinColor(c), fill: pinColor(c), fillOpacity: 0.25 }}
               />
             </Marker>
           ))}
@@ -242,9 +226,9 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
                 <div className="flex flex-wrap gap-1 pt-1">
                   <span
                     className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white"
-                    style={{ backgroundColor: STATUS_COLORS[selected.installStatus] }}
+                    style={{ backgroundColor: LIFECYCLE_META[selected.lifecycleStatus].color }}
                   >
-                    {STATUS_LABELS[selected.installStatus]}
+                    {LIFECYCLE_META[selected.lifecycleStatus].label}
                   </span>
                   {selected.hasUnpaidInvoice && (
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-600 text-white">
@@ -272,15 +256,15 @@ export function CustomerMap({ customers }: { customers: MapCustomer[] }) {
       {/* Legend for All view */}
       {view === "all" && (
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-          {Object.entries(STATUS_LABELS)
-            .filter(([k]) => k !== "none")
-            .map(([key, label]) => (
-              <span key={key} className="flex items-center gap-1.5">
+          {views
+            .filter((v) => v.id !== "all")
+            .map((v) => (
+              <span key={v.id} className="flex items-center gap-1.5">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: STATUS_COLORS[key] }}
+                  style={{ backgroundColor: v.color }}
                 />
-                {label}
+                {v.label}
               </span>
             ))}
         </div>

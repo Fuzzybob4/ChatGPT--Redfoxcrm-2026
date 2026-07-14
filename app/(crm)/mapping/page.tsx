@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapCustomer } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
+import { deriveLifecycleStatus, type LifecycleJobSignal } from "@/lib/lifecycle";
 
 export const metadata = {
   title: "Mapping - RedFox CRM",
@@ -23,6 +24,10 @@ export default async function MappingPage() {
     .from("invoices")
     .select("customer_id, status, total_amount, amount_paid");
 
+  const { data: jobs } = await supabase
+    .from("scheduled_jobs")
+    .select("customer_id, status, crew_name, assigned_employees");
+
   // Aggregate payment state per customer
   const paymentByCustomer = new Map<string, { hasUnpaid: boolean; hasPaid: boolean }>();
   for (const inv of invoices ?? []) {
@@ -36,8 +41,26 @@ export default async function MappingPage() {
     paymentByCustomer.set(inv.customer_id, entry);
   }
 
+  // Aggregate job signals per customer (crew assigned + status)
+  const jobsByCustomer = new Map<string, LifecycleJobSignal[]>();
+  for (const j of jobs ?? []) {
+    if (!j.customer_id) continue;
+    const hasCrew =
+      Boolean((j.crew_name ?? "").trim()) ||
+      (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0);
+    const list = jobsByCustomer.get(j.customer_id) ?? [];
+    list.push({ status: j.status ?? "", hasCrew });
+    jobsByCustomer.set(j.customer_id, list);
+  }
+
   const mapCustomers: MapCustomer[] = (customers ?? []).map((c) => {
     const pay = paymentByCustomer.get(c.id) ?? { hasUnpaid: false, hasPaid: false };
+    const lifecycleStatus = deriveLifecycleStatus({
+      hasUnpaidInvoice: pay.hasUnpaid,
+      hasPaidInvoice: pay.hasPaid,
+      jobs: jobsByCustomer.get(c.id) ?? [],
+      installStatus: c.install_status,
+    });
     return {
       id: c.id,
       name: c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
@@ -47,7 +70,7 @@ export default async function MappingPage() {
       city: c.city ?? "",
       lat: c.lat as number,
       lng: c.lng as number,
-      installStatus: (c.install_status ?? "none") as MapCustomer["installStatus"],
+      lifecycleStatus,
       hasUnpaidInvoice: pay.hasUnpaid,
       hasPaidInvoice: pay.hasPaid,
     };
