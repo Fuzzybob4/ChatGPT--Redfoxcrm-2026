@@ -42,6 +42,8 @@ export function mapCustomer(row: Record<string, any>): Customer & {
   lat: number | null;
   lng: number | null;
   installStatus: string | null;
+  tags: string[];
+  notes: string;
 } {
   const name =
     row.full_name?.trim() ||
@@ -68,6 +70,8 @@ export function mapCustomer(row: Record<string, any>): Customer & {
     lat: row.latitude ?? row.lat ?? null,
     lng: row.longitude ?? row.lng ?? null,
     installStatus: row.install_status ?? null,
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    notes: row.notes ?? '',
   };
 }
 

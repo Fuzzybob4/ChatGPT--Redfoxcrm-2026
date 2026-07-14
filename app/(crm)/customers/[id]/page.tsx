@@ -1,9 +1,12 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MapPin, Phone, Mail, CalendarDays, FileText, ArrowLeft, Plus } from "lucide-react";
+import {
+  MapPin, Phone, Mail, CalendarDays, FileText,
+  ArrowLeft, Plus, Pencil, Tag, StickyNote,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -21,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
+import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -30,6 +34,7 @@ export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
   const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices } = useData();
   const customer = getCustomerById(id);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (loading) {
     return (
@@ -43,6 +48,20 @@ export default function CustomerDetailPage({ params }: Props) {
 
   const jobs = getCustomerJobs(customer.id);
   const invs = getCustomerInvoices(customer.id);
+
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const hasCoords = customer.lat != null && customer.lng != null;
+  const hasTags = (customer as any).tags?.length > 0;
+  const hasNotes = (customer as any).notes?.trim();
+
+  // Build a static map URL for the mini-map (no JS bundle weight)
+  const staticMapUrl = hasCoords && mapboxToken
+    ? `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+dc2626(${customer.lng},${customer.lat})/${customer.lng},${customer.lat},14,0/600x200@2x?access_token=${mapboxToken}`
+    : null;
+
+  const fullAddress = [customer.address, customer.city, customer.state, customer.zip]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -59,15 +78,20 @@ export default function CustomerDetailPage({ params }: Props) {
               <ArrowLeft className="size-3.5" data-icon="inline-start" />
               Back
             </Button>
-            <Button size="sm">Edit Customer</Button>
+            <Button size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="size-3.5" data-icon="inline-start" />
+              Edit Customer
+            </Button>
           </div>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left column */}
+
+          {/* ── Left column ── */}
           <div className="flex flex-col gap-4 lg:col-span-1">
+
             {/* Contact card */}
             <Card>
               <CardContent className="pt-5 pb-5">
@@ -82,22 +106,28 @@ export default function CustomerDetailPage({ params }: Props) {
                     <StatusBadge status={customer.status} className="mt-1" />
                   </div>
                 </div>
+
                 <Separator className="my-4" />
+
                 <div className="flex flex-col gap-2.5 text-sm">
-                  <a
-                    href={`mailto:${customer.email}`}
-                    className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Mail className="size-4 shrink-0 text-primary" />
-                    {customer.email}
-                  </a>
-                  <a
-                    href={`tel:${customer.phone}`}
-                    className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Phone className="size-4 shrink-0 text-primary" />
-                    {customer.phone}
-                  </a>
+                  {customer.email && (
+                    <a
+                      href={`mailto:${customer.email}`}
+                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Mail className="size-4 shrink-0 text-primary" />
+                      {customer.email}
+                    </a>
+                  )}
+                  {customer.phone && (
+                    <a
+                      href={`tel:${customer.phone}`}
+                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Phone className="size-4 shrink-0 text-primary" />
+                      {customer.phone}
+                    </a>
+                  )}
                   <span className="flex items-center gap-2 text-muted-foreground">
                     <CalendarDays className="size-4 shrink-0 text-primary" />
                     Since{" "}
@@ -107,6 +137,49 @@ export default function CustomerDetailPage({ params }: Props) {
                     })}
                   </span>
                 </div>
+
+                {/* Tags */}
+                {hasTags && (
+                  <>
+                    <Separator className="my-4" />
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Tag className="size-3.5" />
+                        Tags
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(customer as any).tags.map((tag: string) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Notes */}
+                {hasNotes && (
+                  <>
+                    <Separator className="my-4" />
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <StickyNote className="size-3.5" />
+                        Notes
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
+                        {(customer as any).notes}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="mt-4 w-full text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-md py-2 transition-colors"
+                >
+                  {hasTags || hasNotes ? "Edit tags & notes" : "Add tags & notes"}
+                </button>
               </CardContent>
             </Card>
 
@@ -130,17 +203,32 @@ export default function CustomerDetailPage({ params }: Props) {
             </Card>
           </div>
 
-          {/* Right column */}
+          {/* ── Right column ── */}
           <div className="flex flex-col gap-4 lg:col-span-2">
-            {/* Service Address */}
+
+            {/* Service Address + Mini-Map */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">Service Address</CardTitle>
-                <CardDescription className="text-xs mt-0.5">
-                  Primary location for this customer
-                </CardDescription>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">Service Address</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Primary location for this customer
+                    </CardDescription>
+                  </div>
+                  {customer.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline shrink-0"
+                    >
+                      Open in Maps
+                    </a>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 space-y-3">
                 {customer.address ? (
                   <div className="flex items-start gap-3">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted mt-0.5">
@@ -160,22 +248,47 @@ export default function CustomerDetailPage({ params }: Props) {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-6">
+                  <p className="text-sm text-muted-foreground text-center py-4">
                     No address on file
                   </p>
                 )}
+
+                {/* Mini-map */}
+                {staticMapUrl ? (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-lg overflow-hidden border border-border hover:opacity-90 transition-opacity"
+                  >
+                    <img
+                      src={staticMapUrl}
+                      alt={`Map showing location of ${customer.name}`}
+                      className="w-full object-cover"
+                      style={{ height: 180 }}
+                      crossOrigin="anonymous"
+                    />
+                  </a>
+                ) : customer.address && !mapboxToken ? (
+                  <div className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 h-32">
+                    <div className="text-center space-y-1 px-4">
+                      <MapPin className="size-5 text-muted-foreground mx-auto" />
+                      <p className="text-xs text-muted-foreground">
+                        Add NEXT_PUBLIC_MAPBOX_TOKEN to enable the map
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
             {/* Jobs */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div>
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <CalendarDays className="size-4 text-primary" />
-                    Jobs
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <CalendarDays className="size-4 text-primary" />
+                  Jobs
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
@@ -189,7 +302,10 @@ export default function CustomerDetailPage({ params }: Props) {
                 {jobs.length > 0 ? (
                   <div className="flex flex-col divide-y divide-border">
                     {jobs.map((job) => (
-                      <div key={job.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <div
+                        key={job.id}
+                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                      >
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{job.title}</p>
                           <p className="text-xs text-muted-foreground">
@@ -221,12 +337,10 @@ export default function CustomerDetailPage({ params }: Props) {
             {/* Invoices */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div>
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <FileText className="size-4 text-primary" />
-                    Invoices
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="size-4 text-primary" />
+                  Invoices
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
@@ -240,7 +354,10 @@ export default function CustomerDetailPage({ params }: Props) {
                 {invs.length > 0 ? (
                   <div className="flex flex-col divide-y divide-border">
                     {invs.map((inv) => (
-                      <div key={inv.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <div
+                        key={inv.id}
+                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                      >
                         <div className="min-w-0">
                           <p className="text-sm font-medium">{inv.invoiceNumber}</p>
                           <p className="text-xs text-muted-foreground">
@@ -271,6 +388,25 @@ export default function CustomerDetailPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Edit modal */}
+      <EditCustomerModal
+        customer={{
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+          address: customer.address ?? "",
+          city: customer.city ?? "",
+          state: customer.state ?? "",
+          zip: customer.zip ?? "",
+          status: customer.status,
+          notes: (customer as any).notes ?? "",
+          tags: (customer as any).tags ?? [],
+        }}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </div>
   );
 }
