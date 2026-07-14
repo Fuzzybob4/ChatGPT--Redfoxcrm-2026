@@ -318,30 +318,32 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
 
                     {visibleColumns.includes("name") && (
                       <TableCell className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="size-8 shrink-0">
-                            <AvatarFallback className="bg-accent text-accent-foreground text-xs font-semibold">
-                              {customer.name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <span className="font-medium text-sm block">{customer.name}</span>
-                            {((customer as any).tags ?? []).length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {((customer as any).tags as string[]).slice(0, 3).map((tag) => (
-                                  <Badge key={tag} variant="outline" className="text-[10px] h-4 px-1 py-0 font-normal">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {((customer as any).tags as string[]).length > 3 && (
-                                  <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 font-normal text-muted-foreground">
-                                    +{((customer as any).tags as string[]).length - 3}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
+                        <Link href={`/customers/${customer.id}`} className="block hover:opacity-80 transition-opacity">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="size-8 shrink-0">
+                              <AvatarFallback className="bg-accent text-accent-foreground text-xs font-semibold">
+                                {customer.name.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <span className="font-medium text-sm block">{customer.name}</span>
+                              {((customer as any).tags ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {((customer as any).tags as string[]).slice(0, 3).map((tag) => (
+                                    <Badge key={tag} variant="outline" className="text-[10px] h-4 px-1 py-0 font-normal">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                  {((customer as any).tags as string[]).length > 3 && (
+                                    <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 font-normal text-muted-foreground">
+                                      +{((customer as any).tags as string[]).length - 3}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        </Link>
                       </TableCell>
                     )}
 
