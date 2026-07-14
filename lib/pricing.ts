@@ -10,6 +10,10 @@ export interface PlanDefinition {
   /** Monthly price in cents. */
   monthlyCents: number;
   description: string;
+  /** Marketing emails included per calendar month. */
+  emailsPerMonth: number;
+  /** Overage rate in cents per email above the monthly allowance. */
+  emailOverageCentsPerEmail: number;
 }
 
 // Base subscription plans — matches the public landing/pricing page.
@@ -17,20 +21,26 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   starter: {
     id: "starter",
     name: "Starter",
-    monthlyCents: 4900,
+    monthlyCents: 2900,
     description: "Perfect for solo operators and small teams",
+    emailsPerMonth: 2000,
+    emailOverageCentsPerEmail: 1.5, // $0.015
   },
   professional: {
     id: "professional",
     name: "Professional",
-    monthlyCents: 14900,
+    monthlyCents: 7900,
     description: "For growing businesses with multiple crews",
+    emailsPerMonth: 4000,
+    emailOverageCentsPerEmail: 1.2, // $0.012
   },
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    monthlyCents: 19900,
+    monthlyCents: 14900,
     description: "For large organizations needing custom solutions",
+    emailsPerMonth: 6000,
+    emailOverageCentsPerEmail: 1.0, // $0.010
   },
 };
 
@@ -40,9 +50,10 @@ export const YEARLY_DISCOUNT = 0.2;
 export interface AddonDefinition {
   id: string;
   name: string;
-  /** Monthly price in cents. */
-  monthlyCents: number;
+  /** Monthly price in cents. Null = price TBD / coming soon. */
+  monthlyCents: number | null;
   description: string;
+  comingSoon?: boolean;
 }
 
 export const ADDONS: AddonDefinition[] = [
@@ -74,8 +85,32 @@ export const ADDONS: AddonDefinition[] = [
     id: "email_campaigns",
     name: "Email Campaigns",
     monthlyCents: 1900,
-    description: "Send marketing emails and newsletters to customers",
+    description: "Send marketing emails and newsletters to customers (coming soon)",
+    comingSoon: true,
   },
+  {
+    id: "fleet_management",
+    name: "Fleet Management",
+    monthlyCents: null,
+    description: "Live GPS tracking for your crews and vehicles using their phones",
+    comingSoon: true,
+  },
+];
+
+// ── Email pack add-ons (future) ───────────────────────────────────────────────
+// These are one-time credit top-ups, not recurring subscriptions.
+// Prices in cents. Backend (email_pack_purchases table) is already built.
+export interface EmailPackDefinition {
+  id: string;
+  size: number;       // additional emails
+  priceCents: number;
+  comingSoon: boolean;
+}
+
+export const EMAIL_PACKS: EmailPackDefinition[] = [
+  { id: "pack_5k",  size: 5_000,  priceCents: 5000,  comingSoon: true },
+  { id: "pack_10k", size: 10_000, priceCents: 9000,  comingSoon: true },
+  { id: "pack_25k", size: 25_000, priceCents: 20000, comingSoon: true },
 ];
 
 export const TRIAL_DAYS = 30;
@@ -101,9 +136,44 @@ export function getPlanChargeCents(planId: string, interval: BillingInterval): n
   return plan.monthlyCents;
 }
 
-/** Sum of monthly add-on prices (in cents) for the given add-on ids. */
+/** Sum of monthly add-on prices (in cents) for the given add-on ids. Skips coming-soon add-ons with no price. */
 export function getAddonsMonthlyCents(addonIds: string[]): number {
   return addonIds.reduce((sum, id) => sum + (getAddon(id)?.monthlyCents ?? 0), 0);
+}
+
+/**
+ * Returns how many emails remain in this month's allowance.
+ * Returns 0 if already over the limit (use emailsOverage for that).
+ */
+export function emailsRemaining(planId: string, sentThisMonth: number, packCredits = 0): number {
+  const plan = getPlan(planId);
+  return Math.max(0, plan.emailsPerMonth + packCredits - sentThisMonth);
+}
+
+/**
+ * Returns the number of emails sent beyond the monthly allowance.
+ */
+export function emailsOverage(planId: string, sentThisMonth: number, packCredits = 0): number {
+  const plan = getPlan(planId);
+  return Math.max(0, sentThisMonth - (plan.emailsPerMonth + packCredits));
+}
+
+/**
+ * Returns the overage charge in cents for emails sent beyond the allowance.
+ */
+export function emailOverageCents(planId: string, sentThisMonth: number, packCredits = 0): number {
+  const plan = getPlan(planId);
+  const over = emailsOverage(planId, sentThisMonth, packCredits);
+  return Math.round(over * plan.emailOverageCentsPerEmail);
+}
+
+/**
+ * Returns 0–100 usage percentage (capped at 100) for the progress bar.
+ */
+export function emailUsagePercent(planId: string, sentThisMonth: number, packCredits = 0): number {
+  const plan = getPlan(planId);
+  const total = plan.emailsPerMonth + packCredits;
+  return Math.min(100, Math.round((sentThisMonth / total) * 100));
 }
 
 /** Formats a cent amount as a USD currency string, e.g. 4900 -> "$49". */

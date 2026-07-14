@@ -80,7 +80,9 @@ export function AddonPaymentModal({
               return (
                 <div key={addonId} className="flex items-center justify-between text-sm">
                   <span>{addon.name}</span>
-                  <span className="font-semibold">{formatCents(addon.monthlyCents)}/mo</span>
+                  <span className="font-semibold">
+                    {addon.monthlyCents != null ? `${formatCents(addon.monthlyCents)}/mo` : 'Pricing TBD'}
+                  </span>
                 </div>
               );
             })}

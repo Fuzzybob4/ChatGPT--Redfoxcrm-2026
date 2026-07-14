@@ -40,7 +40,7 @@ import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
 const ADD_ONS = ADDONS.map((a) => ({
   id: a.id,
   name: a.name,
-  price: `${formatCents(a.monthlyCents)}/mo`,
+  price: a.monthlyCents != null ? `${formatCents(a.monthlyCents)}/mo` : 'Coming soon',
   description: a.description,
 }));
 
