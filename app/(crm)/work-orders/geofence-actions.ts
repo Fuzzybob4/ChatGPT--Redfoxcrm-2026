@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getCurrentOrg } from '@/lib/org-context-server';
+import { getCurrentOrg } from '@/lib/org';
 
 /**
  * Fetch geofence events for a specific work order
@@ -36,13 +36,16 @@ export async function getWorkOrderGeofenceEvents(workOrderId: string) {
     throw error;
   }
 
-  return data?.map((event) => ({
-    id: event.id,
-    employeeName: `${event.employees?.first_name} ${event.employees?.last_name}`,
-    eventType: event.event_type as 'arrived' | 'departed',
-    distance_meters: event.distance_meters,
-    occurred_at: event.occurred_at,
-  }));
+  return data?.map((event) => {
+    const emp = Array.isArray(event.employees) ? event.employees[0] : event.employees;
+    return {
+      id: event.id,
+      employeeName: `${emp?.first_name} ${emp?.last_name}`,
+      eventType: event.event_type as 'arrived' | 'departed',
+      distance_meters: event.distance_meters,
+      occurred_at: event.occurred_at,
+    };
+  });
 }
 
 /**
@@ -78,11 +81,14 @@ export async function getWorkOrderFleetEvents(workOrderId: string) {
     throw error;
   }
 
-  return data?.map((event) => ({
-    id: event.id,
-    employeeName: `${event.employees?.first_name} ${event.employees?.last_name}`,
-    eventType: event.event_type,
-    metadata: event.metadata,
-    occurred_at: event.occurred_at,
-  }));
+  return data?.map((event) => {
+    const emp = Array.isArray(event.employees) ? event.employees[0] : event.employees;
+    return {
+      id: event.id,
+      employeeName: `${emp?.first_name} ${emp?.last_name}`,
+      eventType: event.event_type,
+      metadata: event.metadata,
+      occurred_at: event.occurred_at,
+    };
+  });
 }
