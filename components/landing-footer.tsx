@@ -95,12 +95,12 @@ export function LandingFooter() {
         <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-sm text-gray-500">
             © 2025 RedFox CRM. All rights reserved.
-            {/* Hidden admin entry — intentionally invisible */}
+            {/* Hidden admin entry — discoverable on mobile and hover */}
             <Link
               href="/admin/login"
-              className="inline-block w-1.5 h-1.5 rounded-full bg-transparent ml-2 opacity-0 hover:opacity-100 hover:bg-[#C8392B] transition-opacity duration-300"
-              aria-hidden="true"
-              tabIndex={-1}
+              className="inline-block w-3 h-3 rounded-full bg-transparent ml-2 opacity-20 sm:opacity-0 hover:opacity-100 hover:bg-[#C8392B] transition-opacity duration-200 cursor-pointer"
+              title="Admin portal"
+              tabIndex={0}
             />
           </p>
           <div className="flex gap-6">
