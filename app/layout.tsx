@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description:
     "Holiday lighting CRM for professional installers — manage customers, estimates, jobs, schedules, and invoices.",
   keywords: ["CRM", "holiday lighting", "installer software", "scheduling", "invoices", "estimates"],
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export const viewport: Viewport = {
