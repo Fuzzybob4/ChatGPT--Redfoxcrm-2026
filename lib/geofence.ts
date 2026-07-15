@@ -3,6 +3,7 @@
  */
 
 import { createAdminClient } from './supabase/admin';
+import { sendFleetNotification } from './fleet-notifications';
 
 export const GEOFENCE_RADIUS_METERS = 50;
 
@@ -49,12 +50,11 @@ export async function handleGeofenceStateChange(
         id,
         customer_id,
         status,
-        location,
         customers (
           id,
           address,
-          lat,
-          lng
+          latitude,
+          longitude
         )
       `)
       .eq('id', work_order_id)
@@ -65,9 +65,13 @@ export async function handleGeofenceStateChange(
       return;
     }
 
-    // Get customer location (prefer work_order location field, fallback to customer)
-    const customerLat = workOrder.location?.latitude || workOrder.customers?.lat;
-    const customerLng = workOrder.location?.longitude || workOrder.customers?.lng;
+    // Supabase returns joins as arrays; extract first element
+    const customer = Array.isArray(workOrder.customers)
+      ? workOrder.customers[0]
+      : workOrder.customers;
+
+    const customerLat = customer?.latitude;
+    const customerLng = customer?.longitude;
 
     if (!customerLat || !customerLng) {
       console.error('[geofence] Customer location not available');
@@ -107,6 +111,14 @@ export async function handleGeofenceStateChange(
       // Update work order status
       await updateWorkOrderStatus(supabase, work_order_id, 'in_progress');
 
+      // Notify customer
+      sendFleetNotification({
+        orgId: org_id,
+        workOrderId: work_order_id,
+        employeeId: employee_id,
+        eventType: 'arrived',
+      }).catch((err) => console.error('[geofence] Arrival notification error:', err));
+
       console.log(
         `[geofence] Employee ${employee_id} arrived at job ${work_order_id}`
       );
@@ -125,6 +137,14 @@ export async function handleGeofenceStateChange(
 
       // Update work order status
       await updateWorkOrderStatus(supabase, work_order_id, 'completed');
+
+      // Notify customer
+      sendFleetNotification({
+        orgId: org_id,
+        workOrderId: work_order_id,
+        employeeId: employee_id,
+        eventType: 'completed',
+      }).catch((err) => console.error('[geofence] Completion notification error:', err));
 
       console.log(
         `[geofence] Employee ${employee_id} departed from job ${work_order_id}`

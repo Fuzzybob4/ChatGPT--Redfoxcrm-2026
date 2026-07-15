@@ -14,6 +14,7 @@ export interface OrgContextType {
   subscriptionCurrentPeriodEnd: string | null;
   cardBrand: string | null;
   cardLast4: string | null;
+  addonIds: string[];
 }
 
 const OrgContext = createContext<OrgContextType | undefined>(undefined);

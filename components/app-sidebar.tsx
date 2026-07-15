@@ -94,9 +94,9 @@ const navItems = [
   },
   {
     title: "Fleet Management",
-    href: "/vehicles",
+    href: "/fleet",
     icon: Truck,
-    comingSoon: true,
+    addonRequired: "fleet_management",
   },
   {
     title: "Inventory",
@@ -185,11 +185,18 @@ export async function AppSidebar() {
                 if (item.enterprise && !org.isEnterprise) {
                   return null;
                 }
+                const addonActive = item.addonRequired
+                  ? org.addonIds.includes(item.addonRequired)
+                  : true;
+                const locked = item.addonRequired && !addonActive;
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      render={<Link href={item.href} />}
-                      className="gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground"
+                      render={locked ? <span /> : <Link href={item.href} />}
+                      className={cn(
+                        "gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground",
+                        locked && "opacity-50 cursor-default pointer-events-none"
+                      )}
                     >
                       <item.icon className="size-4 shrink-0" />
                       <span>{item.title}</span>
@@ -207,6 +214,14 @@ export async function AppSidebar() {
                           className="ml-auto text-[10px] h-5 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
                         >
                           Soon
+                        </Badge>
+                      )}
+                      {locked && (
+                        <Badge
+                          variant="outline"
+                          className="ml-auto text-[10px] h-5 px-1.5 bg-muted text-muted-foreground border-border"
+                        >
+                          Add-on
                         </Badge>
                       )}
                       {item.badge && badgeCounts[item.href] && (
