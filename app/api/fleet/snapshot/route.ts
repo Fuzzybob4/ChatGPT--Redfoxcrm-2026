@@ -78,10 +78,14 @@ export async function GET(request: Request) {
     const employeeMap = new Map();
     for (const loc of locations || []) {
       if (!employeeMap.has(loc.employee_id)) {
+        const emp = loc.employees?.[0];
+        const wo = loc.work_orders?.[0];
+        const customer = wo?.customers?.[0];
+        
         employeeMap.set(loc.employee_id, {
           employee_id: loc.employee_id,
-          name: `${loc.employees?.first_name ?? ''} ${loc.employees?.last_name ?? ''}`.trim(),
-          phone: loc.employees?.phone,
+          name: `${emp?.first_name ?? ''} ${emp?.last_name ?? ''}`.trim(),
+          phone: emp?.phone,
           latitude: loc.latitude,
           longitude: loc.longitude,
           speed_mps: loc.speed_mps,
@@ -89,11 +93,11 @@ export async function GET(request: Request) {
           last_update: loc.timestamp,
           work_order: loc.work_order_id
             ? {
-                id: loc.work_orders?.id,
-                title: loc.work_orders?.title,
-                status: loc.work_orders?.status,
-                customer: loc.work_orders?.customers?.name,
-                address: loc.work_orders?.customers?.address,
+                id: wo?.id,
+                title: wo?.title,
+                status: wo?.status,
+                customer: customer?.name,
+                address: customer?.address,
               }
             : null,
         });
