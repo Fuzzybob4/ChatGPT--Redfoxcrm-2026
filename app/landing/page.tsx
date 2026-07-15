@@ -114,7 +114,7 @@ export default function LandingPage() {
             {/* Left copy */}
             <div className="pb-20 space-y-8">
               <div className="inline-flex items-center gap-2 border border-primary/40 bg-primary/10 text-primary text-xs font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full">
-                Built for Outdoor Service Pros
+                Built for Holiday &amp; Landscape Lighting Pros
               </div>
 
               <div className="space-y-3">
@@ -127,7 +127,7 @@ export default function LandingPage() {
               </div>
 
               <p className="text-lg text-gray-300 max-w-md leading-relaxed">
-                RedFox CRM is the all-in-one platform for holiday lighting, landscape, and outdoor service companies.
+                RedFox CRM is the all-in-one platform built specifically for holiday lighting and landscape lighting companies.
               </p>
 
               <ul className="space-y-3">
