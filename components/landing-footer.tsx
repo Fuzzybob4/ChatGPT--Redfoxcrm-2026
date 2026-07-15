@@ -93,16 +93,22 @@ export function LandingFooter() {
 
         {/* Bottom section */}
         <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-500">
-            © 2025 RedFox CRM. All rights reserved.
-            {/* Hidden admin entry — discoverable on mobile and hover */}
+          <div className="flex items-center gap-3 text-sm text-gray-500">
+            <p>© 2025 RedFox CRM. All rights reserved.</p>
+            {/* Admin entry — visible on mobile */}
             <Link
               href="/admin/login"
-              className="inline-block w-3 h-3 rounded-full bg-transparent ml-2 opacity-20 sm:opacity-0 hover:opacity-100 hover:bg-[#C8392B] transition-opacity duration-200 cursor-pointer"
+              className="hidden sm:inline-block w-2 h-2 rounded-full bg-gray-600 hover:bg-[#C8392B] transition-colors"
               title="Admin portal"
-              tabIndex={0}
             />
-          </p>
+            <Link
+              href="/admin/login"
+              className="sm:hidden px-2 py-1 text-xs rounded bg-gray-800 hover:bg-[#C8392B] hover:text-white transition-colors"
+              title="Admin login"
+            >
+              Admin
+            </Link>
+          </div>
           <div className="flex gap-6">
             <Link href="/landing/privacy" className="text-sm text-gray-500 hover:text-white transition-colors">
               Privacy Policy
