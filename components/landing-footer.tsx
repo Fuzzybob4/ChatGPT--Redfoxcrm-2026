@@ -93,7 +93,16 @@ export function LandingFooter() {
 
         {/* Bottom section */}
         <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-500">© 2025 RedFox CRM. All rights reserved.</p>
+          <p className="text-sm text-gray-500">
+            © 2025 RedFox CRM. All rights reserved.
+            {/* Hidden admin entry — intentionally invisible */}
+            <Link
+              href="/admin/login"
+              className="inline-block w-1.5 h-1.5 rounded-full bg-transparent ml-2 opacity-0 hover:opacity-100 hover:bg-[#C8392B] transition-opacity duration-300"
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </p>
           <div className="flex gap-6">
             <Link href="/landing/privacy" className="text-sm text-gray-500 hover:text-white transition-colors">
               Privacy Policy
