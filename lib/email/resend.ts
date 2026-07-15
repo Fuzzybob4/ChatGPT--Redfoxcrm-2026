@@ -1,27 +1,32 @@
-"use server";
+/**
+ * Email helpers — server-side only, but NOT declared as "use server" at the
+ * module level. Only the individual exported async functions that are called
+ * directly from server actions carry that context through their callers.
+ *
+ * buildHtmlEmail is a pure function (no DB, no RPC) so it must NOT be tagged
+ * as a server action — doing so would make it callable from the client as an
+ * RPC endpoint, which is a security surface we don't want.
+ */
 
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentOrg } from "@/lib/org";
 
-// Lazily instantiated – each call creates a client using the org's own API key
-// if they've configured one, otherwise falls back to the platform key.
-export async function getResendClient(): Promise<Resend> {
-  // Platform-level key stored in env (for sending on behalf of the platform
-  // before orgs add their own custom domain). Orgs send from their own
-  // verified domain via Resend's sending domains API.
+// ── Resend client ─────────────────────────────────────────────────────────────
+
+export function getResendClient(): Resend {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY is not configured.");
   return new Resend(key);
 }
 
 // ── Plan quota limits ─────────────────────────────────────────────────────────
+
 const PLAN_LIMITS: Record<string, number> = {
   basic: 2000,
   starter: 2000,
   pro: 4000,
   professional: 4000,
-  enterprise: Infinity, // billed per 1 000 over 8 000 base
+  enterprise: 8000,
 };
 
 export async function getMonthlyQuota(orgId: string): Promise<{
@@ -40,7 +45,6 @@ export async function getMonthlyQuota(orgId: string): Promise<{
     .maybeSingle();
 
   const planType = (sub?.plan_type ?? "basic").toLowerCase();
-  const baseLimit = planType === "enterprise" ? 8000 : (PLAN_LIMITS[planType] ?? 2000);
   const hardLimit = PLAN_LIMITS[planType] ?? 2000;
 
   const { data: settings } = await supabase
@@ -56,7 +60,7 @@ export async function getMonthlyQuota(orgId: string): Promise<{
     if (now.getMonth() !== resetAt.getMonth() || now.getFullYear() !== resetAt.getFullYear()) {
       await supabase
         .from("org_email_settings")
-        .update({ emails_sent_this_month: 0, month_reset_at: new Date().toISOString() })
+        .update({ emails_sent_this_month: 0, month_reset_at: now.toISOString() })
         .eq("org_id", orgId);
       settings.emails_sent_this_month = 0;
     }
@@ -64,15 +68,16 @@ export async function getMonthlyQuota(orgId: string): Promise<{
 
   const used = settings?.emails_sent_this_month ?? 0;
   const remaining = Math.max(0, hardLimit - used);
-  const overageCount = planType === "enterprise" ? Math.max(0, used - baseLimit) : 0;
+  const overageCount = planType === "enterprise" ? Math.max(0, used - hardLimit) : 0;
 
   return { used, limit: hardLimit, planType, remaining, overageCount };
 }
 
-// ── Build recipient list from opted-in customers ──────────────────────────────
+// ── Build recipient list ──────────────────────────────────────────────────────
+
 export async function buildRecipientList(
   orgId: string,
-  segmentFilter: Record<string, any>,
+  segmentFilter: Record<string, unknown>,
 ): Promise<{ email: string; customerId: string; name: string }[]> {
   const supabase = await createClient();
 
@@ -86,9 +91,9 @@ export async function buildRecipientList(
     .not("email", "is", null)
     .neq("email", "");
 
-  // Optional tag filter
-  if (segmentFilter?.tags?.length > 0) {
-    query = query.overlaps("tags", segmentFilter.tags);
+  const tags = (segmentFilter?.tags as string[] | undefined) ?? [];
+  if (tags.length > 0) {
+    query = query.overlaps("tags", tags);
   }
 
   const { data, error } = await query;
@@ -103,7 +108,18 @@ export async function buildRecipientList(
     }));
 }
 
-// ── Wrap a plain-text body into a minimal compliant HTML email ────────────────
+// ── HTML email builder ────────────────────────────────────────────────────────
+// Pure function — no DB access, no async, must NOT be a "use server" action.
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function buildHtmlEmail({
   body,
   fromName,
@@ -115,7 +131,13 @@ export function buildHtmlEmail({
   physicalAddress: string;
   unsubscribeUrl: string;
 }): string {
-  const escaped = body
+  // Escape every value that appears in the HTML, including org-supplied strings
+  const safeFromName = escapeHtml(fromName);
+  const safeAddress = escapeHtml(physicalAddress);
+  // unsubscribeUrl goes into an href — escape as an attribute value
+  const safeUnsubUrl = encodeURI(unsubscribeUrl).replace(/'/g, "%27");
+
+  const bodyHtml = body
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -131,14 +153,14 @@ export function buildHtmlEmail({
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px;width:100%;">
         <tr><td style="padding:40px 48px 32px;">
-          <p style="margin:0 0 24px 0;font-size:14px;color:#6b7280;">From: ${fromName}</p>
-          <div style="font-size:15px;color:#111827;">${escaped}</div>
+          <p style="margin:0 0 24px 0;font-size:14px;color:#6b7280;">From: ${safeFromName}</p>
+          <div style="font-size:15px;color:#111827;">${bodyHtml}</div>
         </td></tr>
         <tr><td style="background:#f9fafb;padding:24px 48px;border-top:1px solid #e5e7eb;">
-          <p style="margin:0 0 8px 0;font-size:12px;color:#9ca3af;line-height:1.6;">${physicalAddress}</p>
+          <p style="margin:0 0 8px 0;font-size:12px;color:#9ca3af;line-height:1.6;">${safeAddress}</p>
           <p style="margin:0;font-size:12px;color:#9ca3af;">
             You are receiving this email because you opted in to marketing communications.
-            <a href="${unsubscribeUrl}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+            <a href="${safeUnsubUrl}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
           </p>
         </td></tr>
       </table>

@@ -1,70 +1,106 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
 
-export interface CreateInvoiceInput {
-  customerId: string;
-  locationId?: string;
-  title: string;
-  description?: string;
-  totalAmount: number;
-  dueDate: string;
-  notes?: string;
-  /** If provided, the invoice is linked to this estimate (and estimate → Converted) */
-  estimateId?: string;
-  /**
-   * Work order fields — if supplied, an install work order is auto-created
-   * and linked to this invoice.
-   */
-  workOrder?: {
-    scheduledDate: string;
-    startTime: string;
-    endTime: string;
-    address?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-    crewName?: string;
-    assignedEmployees?: string[];
-    notes?: string;
-    seasonYear?: number;
-  };
-}
+// ── Input schemas ─────────────────────────────────────────────────────────────
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuidSchema = z.string().regex(UUID_REGEX, "Invalid ID format");
+
+const workOrderSchema = z.object({
+  scheduledDate: z.string().min(1),
+  startTime: z.string().min(1),
+  endTime: z.string().min(1),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  crewName: z.string().optional(),
+  assignedEmployees: z.array(z.string()).optional(),
+  notes: z.string().optional(),
+  seasonYear: z.number().int().min(2000).max(2100).optional(),
+});
+
+const createInvoiceSchema = z.object({
+  customerId: uuidSchema,
+  locationId: uuidSchema.optional(),
+  estimateId: uuidSchema.optional(),
+  title: z.string().min(1, "Title is required").max(200),
+  description: z.string().max(2000).optional(),
+  totalAmount: z.number().positive("Total amount must be greater than zero").max(1_000_000),
+  dueDate: z.string().min(1, "Due date is required"),
+  notes: z.string().max(2000).optional(),
+  workOrder: workOrderSchema.optional(),
+});
+
+const updateStatusSchema = z.object({
+  invoiceId: uuidSchema,
+  status: z.enum(["draft", "sent", "paid", "overdue"]),
+});
+
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 
 /**
  * Creates an invoice and, if workOrder details are provided, automatically
  * creates a linked install work order tagged to that invoice.
- *
- * This is the single source of truth for invoice creation — call it from any
- * UI surface (customer page, estimate conversion, quick-create modal, etc.).
  */
 export async function createInvoice(input: CreateInvoiceInput) {
+  const parsed = createInvoiceSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
+  }
+  const data = parsed.data;
+
   const supabase = await createClient();
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
 
-  // 1. Generate an invoice number (INV-YYYYMMDD-XXXX)
+  // Verify the customer belongs to this org before using their ID
+  const { data: customer, error: custErr } = await supabase
+    .from("customers")
+    .select("id, address, city, state, zip_code")
+    .eq("id", data.customerId)
+    .eq("org_id", org.orgId)
+    .single();
+
+  if (custErr || !customer) {
+    throw new Error("Customer not found or does not belong to your organisation");
+  }
+
+  // Verify the estimate (if provided) belongs to this org
+  if (data.estimateId) {
+    const { data: est } = await supabase
+      .from("estimates")
+      .select("id")
+      .eq("id", data.estimateId)
+      .eq("org_id", org.orgId)
+      .single();
+    if (!est) throw new Error("Estimate not found or does not belong to your organisation");
+  }
+
+  // Generate invoice number (INV-YYYYMMDD-XXXX)
   const today = new Date();
   const datePart = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
   const randomPart = Math.floor(1000 + Math.random() * 9000);
   const invoiceNumber = `INV-${datePart}-${randomPart}`;
 
-  // 2. Insert the invoice
+  // Insert the invoice
   const { data: invoice, error: invErr } = await supabase
     .from("invoices")
     .insert({
       org_id: org.orgId,
-      customer_id: input.customerId,
-      location_id: input.locationId ?? null,
-      estimate_id: input.estimateId ?? null,
+      customer_id: data.customerId,
+      location_id: data.locationId ?? null,
+      estimate_id: data.estimateId ?? null,
       invoice_number: invoiceNumber,
-      title: input.title,
-      description: input.description ?? null,
-      total_amount: input.totalAmount,
-      due_date: input.dueDate,
-      notes: input.notes ?? null,
+      title: data.title,
+      description: data.description ?? null,
+      total_amount: data.totalAmount,
+      due_date: data.dueDate,
+      notes: data.notes ?? null,
       status: "draft",
     })
     .select("id")
@@ -72,54 +108,38 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
   if (invErr || !invoice) throw new Error(invErr?.message ?? "Failed to create invoice");
 
-  // 3. If the invoice came from an estimate, mark it as Converted
-  if (input.estimateId) {
+  // Mark estimate as converted
+  if (data.estimateId) {
     await supabase
       .from("estimates")
       .update({ status: "converted" })
-      .eq("id", input.estimateId)
+      .eq("id", data.estimateId)
       .eq("org_id", org.orgId);
   }
 
-  // 4. Auto-create an install work order if scheduling details were provided
-  if (input.workOrder) {
-    const wo = input.workOrder;
-
-    // Fetch customer address for the work order if not explicitly provided
-    let address = wo.address;
-    let city = wo.city;
-    let state = wo.state;
-    let zipCode = wo.zipCode;
-
-    if (!address) {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("address, city, state, zip_code")
-        .eq("id", input.customerId)
-        .single();
-      if (customer) {
-        address = customer.address ?? undefined;
-        city = customer.city ?? undefined;
-        state = customer.state ?? undefined;
-        zipCode = customer.zip_code ?? undefined;
-      }
-    }
+  // Auto-create install work order if scheduling details provided
+  if (data.workOrder) {
+    const wo = data.workOrder;
+    const address = wo.address ?? customer.address ?? null;
+    const city = wo.city ?? customer.city ?? null;
+    const state = wo.state ?? customer.state ?? null;
+    const zipCode = wo.zipCode ?? customer.zip_code ?? null;
 
     await supabase.from("scheduled_jobs").insert({
       org_id: org.orgId,
-      customer_id: input.customerId,
+      customer_id: data.customerId,
       invoice_id: invoice.id,
-      estimate_id: input.estimateId ?? null,
-      location_id: input.locationId ?? null,
-      title: `Install – ${input.title}`,
+      estimate_id: data.estimateId ?? null,
+      location_id: data.locationId ?? null,
+      title: `Install – ${data.title}`,
       job_type: "install",
       scheduled_date: wo.scheduledDate,
       start_time: wo.startTime,
       end_time: wo.endTime,
-      address: address ?? null,
-      city: city ?? null,
-      state: state ?? null,
-      zip_code: zipCode ?? null,
+      address,
+      city,
+      state,
+      zip_code: zipCode,
       crew_name: wo.crewName ?? null,
       assigned_employees: wo.assignedEmployees ?? [],
       notes: wo.notes ?? null,
@@ -137,12 +157,17 @@ export async function createInvoice(input: CreateInvoiceInput) {
 }
 
 /**
- * Update invoice status (draft → sent, sent → paid, etc.)
+ * Update invoice status — always verifies org ownership before mutating.
  */
 export async function updateInvoiceStatus(
   invoiceId: string,
   status: "draft" | "sent" | "paid" | "overdue",
 ) {
+  const parsed = updateStatusSchema.safeParse({ invoiceId, status });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
+  }
+
   const supabase = await createClient();
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
@@ -151,13 +176,15 @@ export async function updateInvoiceStatus(
     status,
     updated_at: new Date().toISOString(),
   };
-  if (status === "paid") patch.amount_paid = null; // handled by separate payment flow
+  if (status === "paid") {
+    patch.paid_at = new Date().toISOString();
+  }
 
   const { error } = await supabase
     .from("invoices")
     .update(patch)
     .eq("id", invoiceId)
-    .eq("org_id", org.orgId);
+    .eq("org_id", org.orgId); // ownership check in the WHERE clause
 
   if (error) throw new Error(error.message);
 
