@@ -1,9 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Check, CreditCard, Mail, AlertTriangle, Truck } from 'lucide-react';
+import { Check, CreditCard, Mail, AlertTriangle, Truck, Loader2 } from 'lucide-react';
 import { useOrgContext } from '@/lib/org-context';
 import {
   PLANS,
@@ -18,6 +19,7 @@ import {
   getPlan,
 } from '@/lib/pricing';
 import { getTrialState } from '@/lib/trial';
+import { createSignupSetupIntent } from '@/app/(auth)/signup/actions';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -216,6 +218,9 @@ export default function BillingPage() {
             </CardContent>
           </Card>
 
+          {/* Payment Method */}
+          <PaymentMethodSection org={org} isTrialing={isTrialing} daysLeft={daysLeft} />
+
           {/* Email Usage Meter */}
           <EmailUsageMeter planId={currentPlanId} />
 
@@ -235,6 +240,16 @@ export default function BillingPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
+                        {isTrialing && current && (
+                          <div className="mb-3 pb-3 border-b">
+                            <p className="text-xs font-semibold text-primary mb-1">
+                              FREE TRIAL
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {daysLeft} day{daysLeft === 1 ? '' : 's'} free, then starts at:
+                            </p>
+                          </div>
+                        )}
                         <p className="text-2xl font-bold">
                           {formatCents(plan.monthlyCents)}
                           <span className="text-sm font-normal text-muted-foreground">/mo</span>
@@ -312,35 +327,106 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Payment Method */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Method</CardTitle>
-              <CardDescription>The card charged for your subscription and any overage</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {org.cardLast4 ? (
-                <div className="flex items-center gap-3 rounded-lg border p-3">
-                  <CreditCard className="size-5 text-muted-foreground" />
-                  <div className="text-sm">
-                    <p className="font-medium capitalize">
-                      {org.cardBrand ?? 'Card'} ending in {org.cardLast4}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Used for your subscription and any email overage charges.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No card on file yet. Add one to keep your account active after the trial.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+
 
         </div>
       </div>
     </div>
   );
 }
+
+// Separate component to handle payment method setup with Stripe
+function PaymentMethodSection({ org, isTrialing, daysLeft }: {
+  org: ReturnType<typeof useOrgContext>;
+  isTrialing: boolean;
+  daysLeft: number | null;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAddPaymentMethod = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Use orgId as a safe email-like identifier (Stripe accepts UUIDs in email field)
+      const result = await createSignupSetupIntent(`${org.orgId}@redfoxcrm.app`);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      // Open Stripe card setup modal in a new window/tab
+      // In production, you'd want to use Stripe.js Elements for a better UX
+      const setupUrl = `${window.location.origin}/payment-setup?clientSecret=${result.clientSecret}&customerId=${result.customerId}`;
+      window.open(setupUrl, '_blank');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start payment setup');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payment Method</CardTitle>
+        <CardDescription>The card charged for your subscription and any overage</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {org.cardLast4 ? (
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <CreditCard className="size-5 text-muted-foreground" />
+              <div className="text-sm">
+                <p className="font-medium capitalize">
+                  {org.cardBrand ?? 'Card'} ending in {org.cardLast4}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Used for your subscription and any email overage charges.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleAddPaymentMethod}
+              disabled={isLoading}
+              className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground border rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? <Loader2 className="size-4 animate-spin" /> : 'Change'}
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="size-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-amber-900">
+                <p className="font-medium">No payment method on file</p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  {isTrialing ? (
+                    <>Add a card now to keep your account active after your {daysLeft}-day trial ends.</>
+                  ) : (
+                    <>Add a card to activate your subscription.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleAddPaymentMethod}
+              disabled={isLoading}
+              className="w-full px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isLoading ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+              {isLoading ? 'Setting up...' : 'Add Payment Method'}
+            </button>
+            {error && (
+              <p className="text-xs text-amber-900 bg-amber-100 border border-amber-200 rounded px-2 py-1.5">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+

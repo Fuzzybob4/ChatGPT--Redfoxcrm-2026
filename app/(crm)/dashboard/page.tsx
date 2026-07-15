@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import useSWR from "swr";
 import {
   DollarSign,
   Users,
@@ -9,6 +10,10 @@ import {
   AlertCircle,
   ArrowRight,
   Clock,
+  MapPin,
+  Truck,
+  Route,
+  Activity,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -30,11 +35,25 @@ import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
 import { useOrgContext } from "@/lib/org-context";
 
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
 export default function DashboardPage() {
   const { selectedLocationId } = useLocation();
   const { loading, getDashboardStats, getCustomerById, getLocationJobs, invoices, locations } = useData();
   const org = useOrgContext();
   const stats = getDashboardStats(selectedLocationId);
+
+  // Fleet metrics — only loaded when fleet_management add-on is active
+  const hasFleet = org.addonIds?.includes('fleet_management');
+  const { data: fleetData } = useSWR(
+    hasFleet ? '/api/fleet/snapshot' : null,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
+  const fleetEmployees: Array<{ employee_id: string; name: string; work_order: { status: string } | null; speed_mps: number | null; last_update: string }> = fleetData?.employees ?? [];
+  const activeCount = fleetEmployees.filter((e) => e.work_order?.status === 'in_progress').length;
+  const drivingCount = fleetEmployees.filter((e) => e.speed_mps != null && e.speed_mps > 0.5).length;
+  const onlineCount = fleetEmployees.length;
 
   const locationJobs = getLocationJobs(selectedLocationId);
   const locationInvoices = selectedLocationId
@@ -113,6 +132,51 @@ export default function DashboardPage() {
             trendLabel={`${stats.completedJobs} completed`}
           />
         </div>
+
+        {/* Fleet metrics row — only shown when fleet add-on is active */}
+        {hasFleet && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <Truck className="size-3.5" />
+                Fleet — Live
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/fleet" className="flex items-center gap-1 text-xs" />}
+              >
+                Open map <ArrowRight className="size-3" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                title="Crew Online"
+                value={onlineCount}
+                icon={MapPin}
+                trendLabel="Sharing location"
+              />
+              <StatCard
+                title="On a Job"
+                value={activeCount}
+                icon={Activity}
+                trendLabel="In progress"
+              />
+              <StatCard
+                title="In Transit"
+                value={drivingCount}
+                icon={Route}
+                trendLabel="Currently driving"
+              />
+              <StatCard
+                title="Idle"
+                value={Math.max(0, onlineCount - activeCount - drivingCount)}
+                icon={Clock}
+                trendLabel="Between jobs"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Main content row */}
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -269,6 +333,16 @@ export default function DashboardPage() {
                   <CheckCircle className="size-3.5" data-icon="inline-start" />
                   Customer Portal
                 </Button>
+                {hasFleet && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link href="/fleet" />}
+                  >
+                    <Truck className="size-3.5" data-icon="inline-start" />
+                    Fleet Map
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

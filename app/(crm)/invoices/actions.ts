@@ -31,7 +31,9 @@ const createInvoiceSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().max(2000).optional(),
   totalAmount: z.number().positive("Total amount must be greater than zero").max(1_000_000),
-  dueDate: z.string().min(1, "Due date is required"),
+  dueDate: z.string()
+    .min(1, "Due date is required")
+    .refine((dateStr) => !isNaN(Date.parse(dateStr)), "Due date must be a valid date"),
   notes: z.string().max(2000).optional(),
   workOrder: workOrderSchema.optional(),
 });
@@ -79,6 +81,17 @@ export async function createInvoice(input: CreateInvoiceInput) {
       .eq("org_id", org.orgId)
       .single();
     if (!est) throw new Error("Estimate not found or does not belong to your organisation");
+  }
+
+  // Verify the location (if provided) belongs to this org
+  if (data.locationId) {
+    const { data: loc } = await supabase
+      .from("locations")
+      .select("id")
+      .eq("id", data.locationId)
+      .eq("org_id", org.orgId)
+      .single();
+    if (!loc) throw new Error("Location not found or does not belong to your organisation");
   }
 
   // Generate invoice number (INV-YYYYMMDD-XXXX)

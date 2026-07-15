@@ -82,18 +82,10 @@ export const ADDONS: AddonDefinition[] = [
     description: "Send text messages to customers about jobs and appointments",
   },
   {
-    id: "email_campaigns",
-    name: "Email Campaigns",
-    monthlyCents: 1900,
-    description: "Send marketing emails and newsletters to customers (coming soon)",
-    comingSoon: true,
-  },
-  {
     id: "fleet_management",
     name: "Fleet Management",
-    monthlyCents: null,
-    description: "Live GPS tracking for your crews and vehicles using their phones",
-    comingSoon: true,
+    monthlyCents: 2900,
+    description: "Live GPS tracking for your crews using their phones. Track crew location, route history, and job arrival/departure in real-time.",
   },
 ];
 

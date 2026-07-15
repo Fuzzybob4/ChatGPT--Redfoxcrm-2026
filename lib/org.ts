@@ -15,6 +15,7 @@ export interface OrgMembership {
   subscriptionCurrentPeriodEnd: string | null;
   cardBrand: string | null;
   cardLast4: string | null;
+  addonIds: string[];
 }
 
 /**
@@ -33,7 +34,7 @@ export async function getCurrentOrg(): Promise<OrgMembership | null> {
   const { data: membership } = await supabase
     .from('user_memberships')
     .select(
-      'user_id, org_id, role, organizations(name, is_enterprise, location_count, plan, trial_ends_at, subscription_status, subscription_interval, subscription_current_period_end, card_brand, card_last4)',
+      'user_id, org_id, role, organizations(name, is_enterprise, location_count, plan, trial_ends_at, subscription_status, subscription_interval, subscription_current_period_end, card_brand, card_last4, active_addons)',
     )
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
@@ -71,5 +72,6 @@ export async function getCurrentOrg(): Promise<OrgMembership | null> {
     subscriptionCurrentPeriodEnd: orgData?.subscription_current_period_end ?? null,
     cardBrand: orgData?.card_brand ?? null,
     cardLast4: orgData?.card_last4 ?? null,
+    addonIds: (orgData?.active_addons as string[] | null) ?? [],
   };
 }
