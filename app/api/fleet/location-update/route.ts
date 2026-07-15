@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { handleGeofenceStateChange } from '@/lib/geofence';
 import { z } from 'zod';
 
 const locationUpdateSchema = z.object({
@@ -57,8 +58,7 @@ export async function POST(request: Request) {
 
     // Check for geofence events if work order is assigned
     if (locationData.work_order_id) {
-      await checkGeofenceEvents(
-        supabase,
+      await handleGeofenceStateChange(
         locationData.org_id,
         locationData.employee_id,
         locationData.work_order_id,
@@ -84,138 +84,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
-
-/**
- * Check if the employee is within 50m of the work order location
- * Trigger arrival/departure events and update work order status
- */
-async function checkGeofenceEvents(
-  supabase: ReturnType<typeof createAdminClient>,
-  org_id: string,
-  employee_id: string,
-  work_order_id: string,
-  latitude: number,
-  longitude: number
-) {
-  try {
-    // Get work order with customer location
-    const { data: workOrder, error: woError } = await supabase
-      .from('work_orders')
-      .select('id, customer_id, status, location')
-      .eq('id', work_order_id)
-      .single();
-
-    if (woError || !workOrder) {
-      console.error('[fleet-api] Work order not found:', woError);
-      return;
-    }
-
-    // Get customer location (latitude/longitude stored in JSON)
-    const customerLat = workOrder.location?.latitude;
-    const customerLng = workOrder.location?.longitude;
-
-    if (!customerLat || !customerLng) {
-      console.error('[fleet-api] Customer location not available');
-      return;
-    }
-
-    // Calculate distance using haversine formula
-    const distance = calculateDistance(latitude, longitude, customerLat, customerLng);
-    const GEOFENCE_RADIUS_M = 50;
-
-    // Check if just arrived
-    if (distance <= GEOFENCE_RADIUS_M && workOrder.status === 'assigned') {
-      // Employee arrived
-      const { error: eventError } = await supabase
-        .from('geofence_events')
-        .insert({
-          org_id,
-          employee_id,
-          work_order_id,
-          event_type: 'arrived',
-          latitude,
-          longitude,
-          distance_meters: Math.round(distance),
-          occurred_at: new Date().toISOString(),
-        });
-
-      if (!eventError) {
-        // Update work order status to in_progress
-        await supabase
-          .from('work_orders')
-          .update({ status: 'in_progress' })
-          .eq('id', work_order_id);
-
-        // Log fleet event
-        await supabase.from('fleet_events').insert({
-          org_id,
-          employee_id,
-          work_order_id,
-          event_type: 'arrival_detected',
-          metadata: { distance_meters: Math.round(distance) },
-          occurred_at: new Date().toISOString(),
-        });
-      }
-    }
-
-    // Check if just departed (was in progress, now far away)
-    if (distance > GEOFENCE_RADIUS_M && workOrder.status === 'in_progress') {
-      // Employee departed
-      const { error: eventError } = await supabase
-        .from('geofence_events')
-        .insert({
-          org_id,
-          employee_id,
-          work_order_id,
-          event_type: 'departed',
-          latitude,
-          longitude,
-          distance_meters: Math.round(distance),
-          occurred_at: new Date().toISOString(),
-        });
-
-      if (!eventError) {
-        // Update work order status to completed
-        await supabase
-          .from('work_orders')
-          .update({ status: 'completed' })
-          .eq('id', work_order_id);
-
-        // Log fleet event
-        await supabase.from('fleet_events').insert({
-          org_id,
-          employee_id,
-          work_order_id,
-          event_type: 'departure_detected',
-          metadata: { distance_meters: Math.round(distance) },
-          occurred_at: new Date().toISOString(),
-        });
-      }
-    }
-  } catch (error) {
-    console.error('[fleet-api] Geofence check error:', error);
-  }
-}
-
-/**
- * Calculate distance between two lat/lng points in meters (haversine formula)
- */
-function calculateDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371000; // Earth radius in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
