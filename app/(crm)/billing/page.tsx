@@ -218,6 +218,9 @@ export default function BillingPage() {
             </CardContent>
           </Card>
 
+          {/* Payment Method */}
+          <PaymentMethodSection org={org} isTrialing={isTrialing} daysLeft={daysLeft} />
+
           {/* Email Usage Meter */}
           <EmailUsageMeter planId={currentPlanId} />
 
@@ -324,8 +327,7 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Payment Method */}
-          <PaymentMethodSection org={org} isTrialing={isTrialing} daysLeft={daysLeft} />
+
 
         </div>
       </div>
@@ -347,7 +349,8 @@ function PaymentMethodSection({ org, isTrialing, daysLeft }: {
     setError(null);
     
     try {
-      const result = await createSignupSetupIntent(`${org.businessName}@redfoxcrm.app`);
+      // Use orgId as a safe email-like identifier (Stripe accepts UUIDs in email field)
+      const result = await createSignupSetupIntent(`${org.orgId}@redfoxcrm.app`);
       if (!result.ok) {
         setError(result.error);
         return;
