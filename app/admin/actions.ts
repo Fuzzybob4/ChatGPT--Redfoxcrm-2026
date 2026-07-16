@@ -49,7 +49,6 @@ export async function adminRequestAccessAction(formData: FormData) {
 
   const adminClient = createAdminClient();
 
-  // Only employees pre-approved in platform_admins may request access.
   const { data: adminRecord, error: adminQueryError } = await adminClient
     .from('platform_admins')
     .select('user_id, is_active')
@@ -57,30 +56,49 @@ export async function adminRequestAccessAction(formData: FormData) {
     .maybeSingle();
 
   if (adminQueryError) {
-    console.error('[v0] platform_admins query error:', adminQueryError);
     redirect('/admin?tab=request&error=server_error');
   }
 
-  if (!adminRecord) {
-    redirect('/admin?tab=request&error=not_authorized');
-  }
-
-  if (!adminRecord.is_active) {
+  if (adminRecord && !adminRecord.is_active) {
     redirect('/admin?tab=request&error=account_deactivated');
   }
 
-  // The platform_admins record references an existing auth.users account.
-  // Supabase sends the recovery email; the callback establishes the session
-  // before forwarding the employee to the password setup screen.
-  const supabase = await createClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.redfoxcrm.com';
-  const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
-  });
 
-  if (resetError) {
-    console.error('[v0] resetPasswordForEmail error:', resetError);
-    redirect('/admin?tab=request&error=invite_failed');
+  if (adminRecord) {
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
+    });
+
+    if (resetError) {
+      redirect('/admin?tab=request&error=invite_failed');
+    }
+  } else {
+    // First-time admins must have an active, unexpired invitation created by the CEO.
+    const { data: invitation, error: invitationError } = await adminClient
+      .from('platform_admin_invitations')
+      .select('id')
+      .eq('email', email)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (invitationError) {
+      redirect('/admin?tab=request&error=server_error');
+    }
+
+    if (!invitation) {
+      redirect('/admin?tab=request&error=not_authorized');
+    }
+
+    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
+    });
+
+    if (inviteError) {
+      redirect('/admin?tab=request&error=invite_failed');
+    }
   }
 
   redirect('/admin?tab=request&success=invite_sent');
