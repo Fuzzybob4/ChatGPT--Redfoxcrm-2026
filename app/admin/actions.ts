@@ -92,12 +92,30 @@ export async function adminRequestAccessAction(formData: FormData) {
       redirect('/admin?tab=request&error=not_authorized');
     }
 
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${siteUrl}/auth/confirm?next=/admin/setup`,
-    });
+    // Check if auth account already exists (from a previous failed invite attempt)
+    const { data: authUsers, error: listError } = await adminClient.auth.admin.listUsers();
+    const authUserExists = authUsers?.users?.some(u => u.email?.toLowerCase() === email);
 
-    if (inviteError) {
-      redirect('/admin?tab=request&error=invite_failed');
+    if (authUserExists) {
+      // Auth account exists — send password reset instead of invite
+      const supabase = await createClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/auth/confirm?next=/admin/setup`,
+      });
+
+      if (resetError) {
+        redirect('/admin?tab=request&error=invite_failed');
+      }
+    } else {
+      // No auth account yet — send invite
+      const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${siteUrl}/auth/confirm?next=/admin/setup`,
+      });
+
+      if (inviteError) {
+        console.error('[v0] inviteUserByEmail error:', inviteError);
+        redirect('/admin?tab=request&error=invite_failed');
+      }
     }
   }
 
