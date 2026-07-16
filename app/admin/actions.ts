@@ -68,7 +68,7 @@ export async function adminRequestAccessAction(formData: FormData) {
   if (adminRecord) {
     const supabase = await createClient();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
+      redirectTo: `${siteUrl}/auth/confirm?next=/admin/setup`,
     });
 
     if (resetError) {
@@ -93,7 +93,7 @@ export async function adminRequestAccessAction(formData: FormData) {
     }
 
     const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
+      redirectTo: `${siteUrl}/auth/confirm?next=/admin/setup`,
     });
 
     if (inviteError) {
