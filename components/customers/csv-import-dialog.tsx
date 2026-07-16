@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, X, AlertCircle } from "lucide-react";
+import { Upload, X, AlertCircle, CheckCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { importCustomersFromCSV } from "@/app/(crm)/customers/import-actions";
 import { useLocation } from "@/lib/location-context";
+import { useData } from "@/lib/data-context";
 
 export function CSVImportDialog() {
   const { selectedLocationId } = useLocation();
+  const { refreshData } = useData();
   const [open, setOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,6 +56,9 @@ export function CSVImportDialog() {
       });
 
       if (res.success && res.imported > 0) {
+        // Refresh the data context to show newly imported customers
+        await refreshData();
+        
         setTimeout(() => {
           setCsvText("");
           setResult(null);
@@ -128,24 +133,28 @@ export function CSVImportDialog() {
           {result && (
             <div className="space-y-3">
               {result.imported > 0 && (
-                <div className="bg-green-50 border border-green-200 p-3 rounded-lg flex items-start gap-2">
-                  <div className="text-green-600 font-medium">✓ {result.imported} imported</div>
+                <div className="bg-green-50 border border-green-200 p-4 rounded-lg flex items-start gap-3">
+                  <CheckCircle className="size-5 text-green-600 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-green-900">Success!</div>
+                    <div className="text-sm text-green-800">{result.imported} customer{result.imported !== 1 ? 's' : ''} imported successfully</div>
+                  </div>
                 </div>
               )}
               {result.failed > 0 && (
-                <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
-                  <div className="flex items-start gap-2 mb-2">
-                    <AlertCircle className="size-4 text-red-600 mt-0.5 shrink-0" />
-                    <span className="font-medium text-red-600">{result.failed} failed</span>
+                <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                  <div className="flex items-start gap-3 mb-2">
+                    <AlertCircle className="size-5 text-red-600 mt-0.5 shrink-0" />
+                    <span className="font-semibold text-red-900">{result.failed} row{result.failed !== 1 ? 's' : ''} failed</span>
                   </div>
-                  <div className="space-y-1 text-xs text-red-600">
+                  <div className="space-y-1 text-xs text-red-700 ml-8">
                     {result.errors.slice(0, 5).map((err, i) => (
                       <div key={i}>
                         Row {err.row}: {err.error}
                       </div>
                     ))}
                     {result.errors.length > 5 && (
-                      <div>... and {result.errors.length - 5} more errors</div>
+                      <div>... and {result.errors.length - 5} more error{result.errors.length - 5 !== 1 ? 's' : ''}</div>
                     )}
                   </div>
                 </div>

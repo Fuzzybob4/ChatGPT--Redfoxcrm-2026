@@ -36,21 +36,28 @@ export async function importCustomersFromCSV(
       return { success: false, imported: 0, failed: 0, errors: [{ row: 0, error: "CSV must have header and at least one data row" }] };
     }
 
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    const nameIdx = headers.indexOf("name");
-    const emailIdx = headers.indexOf("email");
-    const phoneIdx = headers.indexOf("phone");
-    const addressIdx = headers.indexOf("address");
-    const cityIdx = headers.indexOf("city");
-    const stateIdx = headers.indexOf("state");
-    const zipIdx = headers.indexOf("zip");
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/"/g, ""));
+    
+    // Support multiple column name variations
+    const findHeader = (names: string[]) => headers.findIndex((h) => names.includes(h));
+    
+    const firstNameIdx = findHeader(["first name", "firstname"]);
+    const lastNameIdx = findHeader(["last name", "lastname"]);
+    const nameIdx = findHeader(["name"]);
+    const emailIdx = findHeader(["email"]);
+    const phoneIdx = findHeader(["phone", "phone number"]);
+    const addressIdx = findHeader(["address", "street address", "street"]);
+    const cityIdx = findHeader(["city"]);
+    const stateIdx = findHeader(["state"]);
+    const zipIdx = findHeader(["zip", "zip code", "postal code"]);
 
-    if (nameIdx === -1) {
+    // Check if we have a name field or first/last name
+    if (nameIdx === -1 && (firstNameIdx === -1 || lastNameIdx === -1)) {
       return {
         success: false,
         imported: 0,
         failed: 0,
-        errors: [{ row: 0, error: 'CSV must have a "name" column' }],
+        errors: [{ row: 0, error: 'CSV must have either "name" or "first name"/"last name" columns' }],
       };
     }
 
@@ -61,8 +68,15 @@ export async function importCustomersFromCSV(
       const line = lines[i].trim();
       if (!line) continue; // Skip empty lines
 
-      const values = line.split(",").map((v) => v.trim());
-      const name = values[nameIdx]?.trim();
+      const values = line.split(",").map((v) => v.trim().replace(/"/g, ""));
+      
+      // Build name from either "name" column or "first name" + "last name"
+      let name = nameIdx !== -1 ? values[nameIdx] : "";
+      if (!name && firstNameIdx !== -1 && lastNameIdx !== -1) {
+        const first = values[firstNameIdx] || "";
+        const last = values[lastNameIdx] || "";
+        name = `${first} ${last}`.trim();
+      }
 
       if (!name) {
         errors.push({ row: i + 1, error: "Name is required" });
@@ -71,12 +85,12 @@ export async function importCustomersFromCSV(
 
       rows.push({
         name,
-        email: values[emailIdx],
-        phone: values[phoneIdx],
-        address: values[addressIdx],
-        city: values[cityIdx],
-        state: values[stateIdx],
-        zip: values[zipIdx],
+        email: values[emailIdx] || undefined,
+        phone: values[phoneIdx] || undefined,
+        address: values[addressIdx] || undefined,
+        city: values[cityIdx] || undefined,
+        state: values[stateIdx] || undefined,
+        zip: values[zipIdx] || undefined,
         locationId: locationId || undefined,
       });
     }
