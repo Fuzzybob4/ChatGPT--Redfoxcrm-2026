@@ -27,6 +27,7 @@ import {
 } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
+import { InvoiceCSVImportDialog } from "@/components/invoices/invoice-csv-import-dialog";
 
 const ALL_STATUSES: InvoiceStatus[] = ["Draft", "Sent", "Paid", "Overdue"];
 
@@ -82,10 +83,13 @@ export default function InvoicesPage() {
         title="Invoices"
         description={`${invoices.length} total invoices`}
         actions={
-          <Button size="sm" render={<Link href="/invoices/new" />}>
-            <Plus className="size-3.5" data-icon="inline-start" />
-            New Invoice
-          </Button>
+          <div className="flex gap-2">
+            <InvoiceCSVImportDialog />
+            <Button size="sm" render={<Link href="/invoices/new" />}>
+              <Plus className="size-3.5" data-icon="inline-start" />
+              New Invoice
+            </Button>
+          </div>
         }
       />
 

@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { ArrowLeft, Download, Mail, Edit2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Download, Mail, CheckCircle2 } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   Draft: { label: 'Draft', color: 'bg-gray-100 text-gray-800' },
@@ -64,12 +64,7 @@ export default function EstimateDetailPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
-            {estimate.status === 'Draft' && (
-              <Button render={<Link href={`/estimates/${id}/edit`} />} variant="outline" size="sm">
-                <Edit2 className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-            )}
+
             <Button variant="outline" size="sm">
               <Mail className="w-4 h-4 mr-2" />
               Send
