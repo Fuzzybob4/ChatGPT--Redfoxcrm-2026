@@ -41,7 +41,8 @@ export async function saveAdminProfileAction(formData: FormData) {
     .upsert(profile, { onConflict: 'user_id' });
 
   if (error) {
-    redirect('/admin/setup/profile?error=save_failed');
+    console.error('[v0] profile upsert error:', JSON.stringify(error));
+    redirect(`/admin/setup/profile?error=${encodeURIComponent(error.message)}`);
   }
 
   if (invitation) {
