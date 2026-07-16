@@ -84,20 +84,21 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-            >
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </Badge>
-          )}
-        </Button>
-      } />
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger 
+        render={
+          <Button variant="ghost" size="icon" className="relative">
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Badge>
+            )}
+          </Button>
+        }
+      />
       <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
         <div className="p-2">
           <h3 className="font-semibold text-sm mb-2">Notifications</h3>
@@ -126,8 +127,12 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(notif.created_at).toRelativeTime?.() ||
-                              new Date(notif.created_at).toLocaleDateString()}
+                            {new Date(notif.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </p>
                         </div>
                       </div>
