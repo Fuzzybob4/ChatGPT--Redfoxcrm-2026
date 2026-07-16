@@ -75,9 +75,9 @@ export default function NewJobPage() {
               <p className="text-muted-foreground mb-4">
                 No customer selected. Please select a customer to create a work order.
               </p>
-              <Button asChild>
-                <Link href="/jobs">Back to Jobs</Link>
-              </Button>
+              <Link href="/jobs">
+                <Button>Back to Jobs</Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
