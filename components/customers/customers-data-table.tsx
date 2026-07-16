@@ -14,6 +14,8 @@ import {
   MapPin,
   Phone,
   Mail,
+  Merge2,
+  Trash2,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -154,51 +156,114 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
     }
   };
 
+  const handleMergeCustomers = () => {
+    if (selectedRows.size < 2) {
+      alert("Please select at least 2 customers to merge");
+      return;
+    }
+
+    const selectedCustomers = sorted.filter((c) => selectedRows.has(c.id));
+    const confirmMessage = `Merge ${selectedRows.size} customers?\n\nCustomers to merge:\n${selectedCustomers
+      .map((c) => `- ${c.name} (${c.email})`)
+      .join("\n")}\n\nThe first customer will be kept as the primary record.`;
+
+    if (confirm(confirmMessage)) {
+      // TODO: Implement merge logic via API
+      console.log("[v0] Merge customers:", Array.from(selectedRows));
+      alert("Merge functionality coming soon. Selected IDs: " + Array.from(selectedRows).join(", "));
+      setSelectedRows(new Set());
+    }
+  };
+
+  const handleDeleteCustomers = () => {
+    if (selectedRows.size === 0) return;
+
+    const confirmMessage = `Delete ${selectedRows.size} customer(s)? This action cannot be undone.`;
+    if (confirm(confirmMessage)) {
+      // TODO: Implement delete logic via API
+      console.log("[v0] Delete customers:", Array.from(selectedRows));
+      alert("Delete functionality coming soon. Selected IDs: " + Array.from(selectedRows).join(", "));
+      setSelectedRows(new Set());
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Controls Row */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search customers..."
-            className="pl-9 h-9"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search customers..."
+              className="pl-9 h-9"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Download className="size-4" />
+              Export
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger render={
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Settings2 className="size-4" />
+                  Columns
+                </Button>
+              } />
+              <DropdownMenuContent align="end" className="w-48">
+                {ALL_COLUMNS.map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={visibleColumns.includes(col.id)}
+                    onCheckedChange={() => toggleColumnVisibility(col.id)}
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Download className="size-4" />
-            Export
-          </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger render={
-              <Button variant="outline" size="sm" className="gap-2">
-                <Settings2 className="size-4" />
-                Columns
+        {/* Selection Action Bar */}
+        {selectedRows.size > 0 && (
+          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <span className="text-sm font-medium text-foreground">
+              {selectedRows.size} customer{selectedRows.size !== 1 ? "s" : ""} selected
+            </span>
+            <div className="flex gap-2 ml-auto">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleMergeCustomers}
+                disabled={selectedRows.size < 2}
+                className="gap-2"
+              >
+                <Merge2 className="size-3.5" />
+                Merge
               </Button>
-            } />
-            <DropdownMenuContent align="end" className="w-48">
-              {ALL_COLUMNS.map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={visibleColumns.includes(col.id)}
-                  onCheckedChange={() => toggleColumnVisibility(col.id)}
-                >
-                  {col.label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDeleteCustomers}
+                className="gap-2 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
