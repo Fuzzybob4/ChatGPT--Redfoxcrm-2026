@@ -17,7 +17,6 @@ export async function getAdminSession(): Promise<AdminUser | null> {
   try {
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();
-    console.log('[v0] getAdminSession - auth.getUser:', { user: user?.email, error: error?.message });
     if (error || !user) return null;
 
     const admin = createAdminClient();
@@ -27,7 +26,6 @@ export async function getAdminSession(): Promise<AdminUser | null> {
       .eq('user_id', user.id)
       .single();
 
-    console.log('[v0] getAdminSession - platform_admins query:', { data, error: adminError?.message });
     if (adminError || !data || !data.is_active) return null;
 
     return {
@@ -37,8 +35,7 @@ export async function getAdminSession(): Promise<AdminUser | null> {
       role: data.role as AdminRole,
       isActive: data.is_active,
     };
-  } catch (err) {
-    console.error('[v0] getAdminSession error:', err);
+  } catch {
     return null;
   }
 }
@@ -49,15 +46,10 @@ export async function getAdminSession(): Promise<AdminUser | null> {
  */
 export async function requireAdmin(permission?: string): Promise<AdminUser> {
   const session = await getAdminSession();
-  if (!session) {
-    console.log('[v0] requireAdmin: no session, redirecting to /admin');
-    redirect('/admin');
-  }
+  if (!session) redirect('/admin');
   if (permission && !hasPermission(session.role, permission)) {
-    console.log('[v0] requireAdmin: permission denied for', permission, 'role:', session.role);
     redirect('/admin?error=unauthorized');
   }
-  console.log('[v0] requireAdmin: allowed - role:', session.role, 'permission:', permission);
   return session;
 }
 
