@@ -26,6 +26,7 @@ import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
+import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
@@ -421,8 +422,11 @@ export default function CustomerDetailPage({ params }: Props) {
               </CardContent>
             </Card>
 
-            {/* Photo Gallery */}
-            <CustomerPhotoGallery photos={photos} />
+  {/* Photo Gallery */}
+  <div className="space-y-4">
+    <CustomerPhotoUploader customerId={customer.id} />
+    <CustomerPhotoGallery photos={photos} />
+  </div>
           </div>
         </div>
       </div>

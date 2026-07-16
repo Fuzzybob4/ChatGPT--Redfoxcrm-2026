@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,10 +16,13 @@ import type { CustomerPhoto } from "@/lib/data";
 
 interface CustomerPhotoGalleryProps {
   photos: CustomerPhoto[];
+  onPhotoDeleted?: (pathname: string) => void;
+  canDelete?: boolean;
 }
 
-export function CustomerPhotoGallery({ photos }: CustomerPhotoGalleryProps) {
+export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true }: CustomerPhotoGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   if (!photos.length) {
     return (
@@ -46,6 +49,35 @@ export function CustomerPhotoGallery({ photos }: CustomerPhotoGalleryProps) {
     }
   };
 
+  const handleDelete = async (pathname: string) => {
+    if (!confirm('Are you sure you want to delete this photo?')) {
+      return;
+    }
+
+    setDeleting(pathname);
+    try {
+      const response = await fetch('/api/delete/photo', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathname }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete photo');
+      }
+
+      if (onPhotoDeleted) {
+        onPhotoDeleted(pathname);
+      }
+
+      setSelectedIndex(null);
+    } catch (error) {
+      alert('Failed to delete photo: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <>
       <Card>
@@ -64,7 +96,7 @@ export function CustomerPhotoGallery({ photos }: CustomerPhotoGalleryProps) {
                 className="relative group overflow-hidden rounded-lg aspect-square bg-muted hover:opacity-75 transition-opacity"
               >
                 <Image
-                  src={photo.photoUrl}
+                  src={`/api/file/photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
                   alt={photo.description || `Property photo ${idx + 1}`}
                   fill
                   className="object-cover"
@@ -86,18 +118,30 @@ export function CustomerPhotoGallery({ photos }: CustomerPhotoGalleryProps) {
             className="relative max-w-4xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setSelectedIndex(null)}
-              className="absolute -top-12 right-0 text-white hover:text-gray-300 z-10"
-            >
-              <X className="size-8" />
-            </button>
+            {/* Close and Delete buttons */}
+            <div className="absolute -top-12 right-0 flex gap-2 z-10">
+              {canDelete && selected && (
+                <button
+                  onClick={() => handleDelete(selected.photoUrl)}
+                  disabled={deleting === selected.photoUrl}
+                  className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                  title="Delete photo"
+                >
+                  <Trash2 className="size-6" />
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedIndex(null)}
+                className="text-white hover:text-gray-300"
+              >
+                <X className="size-8" />
+              </button>
+            </div>
 
             {/* Image */}
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
               <Image
-                src={selected.photoUrl}
+                src={`/api/file/photo?pathname=${encodeURIComponent(selected.photoUrl)}`}
                 alt={selected.description || "Property photo"}
                 fill
                 className="object-contain"
