@@ -1,5 +1,3 @@
-'use server';
-
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,17 +7,18 @@ export async function POST(request: NextRequest) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.redfoxcrm.com';
+  const redirectTo = (path: string) =>
+    NextResponse.redirect(new URL(path, request.url), { status: 303 });
 
   if (!email || !password) {
-    return NextResponse.redirect(`${siteUrl}/admin?error=missing_fields`, { status: 303 });
+    return redirectTo('/admin?error=missing_fields');
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.user) {
-    return NextResponse.redirect(`${siteUrl}/admin?error=invalid_credentials`, { status: 303 });
+    return redirectTo('/admin?error=invalid_credentials');
   }
 
   // Verify this user is an active platform admin
@@ -32,12 +31,12 @@ export async function POST(request: NextRequest) {
 
   if (adminError || !adminRow || !adminRow.is_active) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(`${siteUrl}/admin?error=unauthorized`, { status: 303 });
+    return redirectTo('/admin?error=unauthorized');
   }
 
   if (!adminRow.profile_completed) {
-    return NextResponse.redirect(`${siteUrl}/admin/setup/profile`, { status: 303 });
+    return redirectTo('/admin/setup/profile');
   }
 
-  return NextResponse.redirect(`${siteUrl}/admin/dashboard`, { status: 303 });
+  return redirectTo('/admin/dashboard');
 }
