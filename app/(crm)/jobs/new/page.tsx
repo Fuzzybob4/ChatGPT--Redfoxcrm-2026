@@ -68,13 +68,7 @@ export default function NewJobPage() {
   if (!customer) {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeader
-          breadcrumbs={[
-            { label: "Jobs", href: "/jobs" },
-            { label: "New Job" },
-          ]}
-          title="Create Work Order"
-        />
+        <PageHeader title="Create Work Order" />
         <div className="flex flex-1 items-center justify-center p-4">
           <Card className="max-w-md w-full">
             <CardContent className="pt-6 text-center">
@@ -93,13 +87,7 @@ export default function NewJobPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <PageHeader
-        breadcrumbs={[
-          { label: "Jobs", href: "/jobs" },
-          { label: "New Job" },
-        ]}
-        title={`Create Work Order for ${customer.name}`}
-      />
+      <PageHeader title={`Create Work Order for ${customer.first_name} ${customer.last_name}`} />
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-2xl mx-auto space-y-6">
