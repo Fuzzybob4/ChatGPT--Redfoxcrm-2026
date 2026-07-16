@@ -14,8 +14,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { AdminRole } from '@/lib/admin-auth';
-import { ROLE_PERMISSIONS } from '@/lib/admin-auth';
+import type { AdminRole } from '@/lib/admin-roles';
+import { ROLE_PERMISSIONS } from '@/lib/admin-roles';
 
 interface NavItem {
   label: string;
