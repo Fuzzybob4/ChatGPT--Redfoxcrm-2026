@@ -14,7 +14,6 @@ export async function adminLoginAction(formData: FormData) {
 
   const supabase = await createClient();
 
-  // Sign in with Supabase Auth
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
     redirect('/admin/login?error=invalid_credentials');
@@ -24,15 +23,63 @@ export async function adminLoginAction(formData: FormData) {
   const adminClient = createAdminClient();
   const { data: adminRow, error: adminError } = await adminClient
     .from('platform_admins')
-    .select('role, is_active')
+    .select('role, is_active, profile_completed')
     .eq('user_id', data.user.id)
     .single();
 
   if (adminError || !adminRow || !adminRow.is_active) {
-    // Sign them back out immediately — not a platform admin
     await supabase.auth.signOut();
     redirect('/admin/login?error=unauthorized');
   }
 
+  // First-time login — send them to complete their profile
+  if (!adminRow.profile_completed) {
+    redirect('/admin/setup/profile');
+  }
+
   redirect('/admin');
+}
+
+export async function adminRequestAccessAction(formData: FormData) {
+  const email = (formData.get('email') as string)?.trim().toLowerCase();
+
+  if (!email) {
+    redirect('/admin/login?tab=request&error=missing_email');
+  }
+
+  const adminClient = createAdminClient();
+
+  // Look up auth user by email — they must already exist in auth.users
+  const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers();
+  if (listError) {
+    redirect('/admin/login?tab=request&error=server_error');
+  }
+
+  const authUser = usersData.users.find(
+    (u) => u.email?.toLowerCase() === email
+  );
+
+  if (!authUser) {
+    // No auth account found — send a Supabase invite so they can set a password
+    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
+    });
+    if (inviteError) {
+      redirect('/admin/login?tab=request&error=invite_failed');
+    }
+  } else {
+    // Auth account exists — send a password reset / setup email
+    const { error: resetError } = await adminClient.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
+      },
+    });
+    if (resetError) {
+      redirect('/admin/login?tab=request&error=invite_failed');
+    }
+  }
+
+  redirect('/admin/login?tab=request&success=invite_sent');
 }

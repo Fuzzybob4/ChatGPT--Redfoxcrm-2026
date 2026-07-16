@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, HardHat, Map, UserX } from "lucide-react";
+import { Plus, Mail, HardHat, Map, UserX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,15 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   addEmployee,
+  inviteEmployee,
   updateEmployeeAccess,
   removeEmployee,
 } from "@/app/(crm)/crew/actions";
@@ -74,9 +82,25 @@ function AccessToggle({
   );
 }
 
+const CREW_ROLES = [
+  { value: "technician", label: "Technician" },
+  { value: "crew_lead", label: "Crew Lead" },
+  { value: "installer", label: "Installer" },
+  { value: "driver", label: "Driver" },
+  { value: "manager", label: "Manager" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "sales", label: "Sales" },
+  { value: "office", label: "Office Staff" },
+];
+
 export function CrewList({ members }: { members: CrewMember[] }) {
   const [open, setOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const active = members.filter((m) => m.isActive);
@@ -108,6 +132,19 @@ export function CrewList({ members }: { members: CrewMember[] }) {
     }
   }
 
+  async function handleInvite(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setInviteError(null);
+    const form = new FormData(e.currentTarget);
+    form.set("role", inviteRole);
+    const result = await inviteEmployee(form);
+    if (result?.error) {
+      setInviteError(result.error);
+    } else {
+      setInviteSent(true);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Summary + Add */}
@@ -129,7 +166,73 @@ export function CrewList({ members }: { members: CrewMember[] }) {
           </div>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <div className="flex gap-2">
+          {/* Invite via email */}
+          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteSent(false); setInviteError(null); setInviteRole(""); } }}>
+            <DialogTrigger render={<Button variant="outline" className="gap-2" />}>
+              <Mail className="w-4 h-4" />
+              Invite Employee
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Invite Employee</DialogTitle>
+              </DialogHeader>
+              {inviteSent ? (
+                <div className="py-6 flex flex-col items-center gap-3 text-center">
+                  <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Invite sent!</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      <span className="text-foreground font-medium">{inviteEmail}</span> will receive an email to set up their account and complete their profile.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" className="mt-2" onClick={() => { setInviteSent(false); setInviteEmail(""); setInviteRole(""); }}>
+                    Invite another
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleInvite} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="invite-email">Employee email</Label>
+                    <Input
+                      id="invite-email"
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="employee@example.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Job role / Access level</Label>
+                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v ?? '')} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CREW_ROLES.map((r) => (
+                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    The employee will receive an email to set their password and complete their profile with legal information before they can access the system.
+                  </p>
+                  <Button type="submit" className="w-full" disabled={!inviteRole || isPending}>
+                    Send Invite
+                  </Button>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual add */}
+          <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button className="gap-2" />}>
             <Plus className="w-4 h-4" />
             Add Crew Member
@@ -185,6 +288,7 @@ export function CrewList({ members }: { members: CrewMember[] }) {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Members table */}
