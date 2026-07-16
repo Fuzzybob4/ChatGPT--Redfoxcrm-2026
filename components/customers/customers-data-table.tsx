@@ -14,7 +14,7 @@ import {
   MapPin,
   Phone,
   Mail,
-  Merge2,
+  Merge,
   Trash2,
 } from "lucide-react";
 
@@ -249,7 +249,7 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
                 disabled={selectedRows.size < 2}
                 className="gap-2"
               >
-                <Merge2 className="size-3.5" />
+                <Merge className="size-3.5" />
                 Merge
               </Button>
               <Button
