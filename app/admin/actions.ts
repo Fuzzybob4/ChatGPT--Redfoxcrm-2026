@@ -9,14 +9,14 @@ export async function adminLoginAction(formData: FormData) {
   const password = formData.get('password') as string;
 
   if (!email || !password) {
-    redirect('/admin/login?error=missing_fields');
+    redirect('/admin?error=missing_fields');
   }
 
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
-    redirect('/admin/login?error=invalid_credentials');
+    redirect('/admin?error=invalid_credentials');
   }
 
   // Verify this user is an active platform admin
@@ -29,7 +29,7 @@ export async function adminLoginAction(formData: FormData) {
 
   if (adminError || !adminRow || !adminRow.is_active) {
     await supabase.auth.signOut();
-    redirect('/admin/login?error=unauthorized');
+    redirect('/admin?error=unauthorized');
   }
 
   // First-time login — send them to complete their profile
@@ -37,14 +37,14 @@ export async function adminLoginAction(formData: FormData) {
     redirect('/admin/setup/profile');
   }
 
-  redirect('/admin');
+  redirect('/admin/dashboard');
 }
 
 export async function adminRequestAccessAction(formData: FormData) {
   const email = (formData.get('email') as string)?.trim().toLowerCase();
 
   if (!email) {
-    redirect('/admin/login?tab=request&error=missing_email');
+    redirect('/admin?tab=request&error=missing_email');
   }
 
   const adminClient = createAdminClient();
@@ -57,25 +57,21 @@ export async function adminRequestAccessAction(formData: FormData) {
     .maybeSingle();
 
   if (adminQueryError) {
-    console.error('[v0] Error checking platform_admins:', adminQueryError);
-    redirect('/admin/login?tab=request&error=server_error');
+    redirect('/admin?tab=request&error=server_error');
   }
 
   if (!adminRecord) {
-    // Email is not in platform_admins — not authorized
-    redirect('/admin/login?tab=request&error=not_authorized');
+    redirect('/admin?tab=request&error=not_authorized');
   }
 
   if (!adminRecord.is_active) {
-    // Account is deactivated
-    redirect('/admin/login?tab=request&error=account_deactivated');
+    redirect('/admin?tab=request&error=account_deactivated');
   }
 
   // Email is approved — look up auth user
   const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers();
   if (listError) {
-    console.error('[v0] Error listing users:', listError);
-    redirect('/admin/login?tab=request&error=server_error');
+    redirect('/admin?tab=request&error=server_error');
   }
 
   const authUser = usersData.users.find(
@@ -83,16 +79,13 @@ export async function adminRequestAccessAction(formData: FormData) {
   );
 
   if (!authUser) {
-    // No auth account found — send a Supabase invite so they can set a password
     const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
     });
     if (inviteError) {
-      console.error('[v0] Error sending invite:', inviteError);
-      redirect('/admin/login?tab=request&error=invite_failed');
+      redirect('/admin?tab=request&error=invite_failed');
     }
   } else {
-    // Auth account exists — send a password reset / setup email
     const { error: resetError } = await adminClient.auth.admin.generateLink({
       type: 'recovery',
       email,
@@ -101,10 +94,9 @@ export async function adminRequestAccessAction(formData: FormData) {
       },
     });
     if (resetError) {
-      console.error('[v0] Error generating reset link:', resetError);
-      redirect('/admin/login?tab=request&error=invite_failed');
+      redirect('/admin?tab=request&error=invite_failed');
     }
   }
 
-  redirect('/admin/login?tab=request&success=invite_sent');
+  redirect('/admin?tab=request&success=invite_sent');
 }

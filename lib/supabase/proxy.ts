@@ -40,7 +40,7 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/auth')
 
   const isAdminSetupPage = 
-    request.nextUrl.pathname.startsWith('/admin/login') ||
+    request.nextUrl.pathname === '/admin' ||
     request.nextUrl.pathname.startsWith('/admin/setup')
 
   const isCrewSetupPage = 

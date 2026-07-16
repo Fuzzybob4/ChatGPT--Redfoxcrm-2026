@@ -100,7 +100,7 @@ export function LandingFooter() {
             <p>© 2025 RedFox CRM. All rights reserved.</p>
             {/* Hidden admin entry dot — visible on mobile, hover on desktop */}
             <Link
-              href="/admin/login"
+              href="/admin"
               className="inline-block w-3 h-3 rounded-full bg-gray-700 sm:bg-transparent sm:hover:bg-[#C8392B] transition-colors"
               title="Admin portal"
             />
