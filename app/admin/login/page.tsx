@@ -21,6 +21,8 @@ const REQUEST_ERRORS: Record<string, string> = {
   missing_email: 'Please enter your email address.',
   invite_failed: 'Failed to send invite. Please contact IT.',
   server_error: 'A server error occurred. Please try again.',
+  not_authorized: 'This email is not authorized for admin access. Contact your administrator to request approval.',
+  account_deactivated: 'This admin account has been deactivated. Please contact your administrator.',
 };
 
 export default async function AdminLoginPage({ searchParams }: Props) {
@@ -132,8 +134,11 @@ export default async function AdminLoginPage({ searchParams }: Props) {
           ) : (
             <>
               <h1 className="text-white font-semibold text-lg mb-1">Request Admin Access</h1>
-              <p className="text-gray-500 text-sm mb-6">
-                Enter your email and we&apos;ll send you a link to set up your password.
+              <p className="text-gray-500 text-sm mb-2">
+                Only pre-approved RedFox employees can request access. Enter your business email below.
+              </p>
+              <p className="text-gray-600 text-xs mb-6 italic">
+                If approved, you&apos;ll receive a link to set up your password. Access attempts are logged.
               </p>
 
               {inviteSent ? (
@@ -163,7 +168,7 @@ export default async function AdminLoginPage({ searchParams }: Props) {
                   <form action={adminRequestAccessAction} className="flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="req-email" className="text-gray-400 text-xs font-medium">
-                        Your email address
+                        Business email address
                       </Label>
                       <Input
                         id="req-email"
@@ -171,7 +176,7 @@ export default async function AdminLoginPage({ searchParams }: Props) {
                         type="email"
                         autoComplete="email"
                         required
-                        placeholder="Christianshirrell@yahoo.com"
+                        placeholder="your.name@redfoxcrm.com"
                         className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-gray-600 focus-visible:ring-[#C8392B]/50 focus-visible:border-[#C8392B]/50 h-10"
                       />
                     </div>
