@@ -27,6 +27,7 @@ import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
 import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
+import { CustomerPortalAccess } from "@/components/customers/customer-portal-access";
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
@@ -101,10 +102,17 @@ export default function CustomerDetailPage({ params }: Props) {
               <ArrowLeft className="size-3.5" data-icon="inline-start" />
               Back
             </Button>
-            <Button size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-3.5" data-icon="inline-start" />
-              Edit Customer
-            </Button>
+  <div className="flex gap-2">
+    <CustomerPortalAccess 
+      customerId={customer.id} 
+      customerName={`${customer.first_name} ${customer.last_name}`}
+      customerEmail={customer.email}
+    />
+    <Button size="sm" onClick={() => setEditOpen(true)}>
+      <Pencil className="size-3.5" data-icon="inline-start" />
+      Edit Customer
+    </Button>
+  </div>
           </div>
         }
       />
