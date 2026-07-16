@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { getAdminSession } from '@/lib/admin-auth';
-import { adminLoginAction, adminRequestAccessAction } from './actions';
+import { adminRequestAccessAction } from './actions';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -94,7 +94,7 @@ export default async function AdminLoginPage({ searchParams }: Props) {
                 </div>
               )}
 
-              <form action={adminLoginAction} className="flex flex-col gap-4">
+              <form action="/admin/login-api" method="POST" className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="email" className="text-gray-400 text-xs font-medium">
                     Email address
