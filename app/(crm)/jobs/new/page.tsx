@@ -32,7 +32,7 @@ export default function NewJobPage() {
     address: customer?.address ?? "",
     city: customer?.city ?? "",
     state: customer?.state ?? "",
-    zipCode: customer?.zipCode ?? "",
+    zipCode: customer?.zip ?? "",
     crewName: "",
     notes: "",
   });
