@@ -1,24 +1,50 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextRequest, NextResponse } from 'next/server';
+
+type PendingCookie = {
+  name: string;
+  value: string;
+  options: CookieOptions;
+};
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
+  const pendingCookies: PendingCookie[] = [];
+
+  const redirectWithCookies = (path: string) => {
+    const response = NextResponse.redirect(new URL(path, request.url), { status: 303 });
+    pendingCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+    return response;
+  };
 
   if (!email || !password) {
-    return NextResponse.redirect(new URL('/admin?error=missing_fields', request.url));
+    return redirectWithCookies('/admin?error=missing_fields');
   }
 
-  const supabase = await createClient();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          pendingCookies.push(...cookiesToSet);
+        },
+      },
+    },
+  );
+
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.user) {
-    return NextResponse.redirect(new URL('/admin?error=invalid_credentials', request.url));
+    return redirectWithCookies('/admin?error=invalid_credentials');
   }
 
-  // Verify this user is an active platform admin
   const adminClient = createAdminClient();
   const { data: adminRow, error: adminError } = await adminClient
     .from('platform_admins')
@@ -28,14 +54,9 @@ export async function POST(request: NextRequest) {
 
   if (adminError || !adminRow || !adminRow.is_active) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(new URL('/admin?error=unauthorized', request.url));
+    return redirectWithCookies('/admin?error=unauthorized');
   }
 
-  // Redirect to dashboard if profile is complete, otherwise to setup
   const nextUrl = adminRow.profile_completed ? '/admin/dashboard' : '/admin/setup/profile';
-  const response = NextResponse.redirect(new URL(nextUrl, request.url));
-
-  // The Supabase SSR client will have set cookies in the response headers
-  // via the proxy, but we need to ensure they're in this response too
-  return response;
+  return redirectWithCookies(nextUrl);
 }
