@@ -49,9 +49,32 @@ export async function adminRequestAccessAction(formData: FormData) {
 
   const adminClient = createAdminClient();
 
-  // Look up auth user by email — they must already exist in auth.users
+  // FIRST: Verify email is in platform_admins (pre-approved by CEO)
+  const { data: adminRecord, error: adminQueryError } = await adminClient
+    .from('platform_admins')
+    .select('id, is_active')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (adminQueryError) {
+    console.error('[v0] Error checking platform_admins:', adminQueryError);
+    redirect('/admin/login?tab=request&error=server_error');
+  }
+
+  if (!adminRecord) {
+    // Email is not in platform_admins — not authorized
+    redirect('/admin/login?tab=request&error=not_authorized');
+  }
+
+  if (!adminRecord.is_active) {
+    // Account is deactivated
+    redirect('/admin/login?tab=request&error=account_deactivated');
+  }
+
+  // Email is approved — look up auth user
   const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers();
   if (listError) {
+    console.error('[v0] Error listing users:', listError);
     redirect('/admin/login?tab=request&error=server_error');
   }
 
@@ -65,6 +88,7 @@ export async function adminRequestAccessAction(formData: FormData) {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
     });
     if (inviteError) {
+      console.error('[v0] Error sending invite:', inviteError);
       redirect('/admin/login?tab=request&error=invite_failed');
     }
   } else {
@@ -77,6 +101,7 @@ export async function adminRequestAccessAction(formData: FormData) {
       },
     });
     if (resetError) {
+      console.error('[v0] Error generating reset link:', resetError);
       redirect('/admin/login?tab=request&error=invite_failed');
     }
   }

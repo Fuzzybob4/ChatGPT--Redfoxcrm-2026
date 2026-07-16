@@ -46,12 +46,17 @@ export async function updateSession(request: NextRequest) {
   const isCrewSetupPage = 
     request.nextUrl.pathname.startsWith('/crew-setup')
 
+  // All /admin/* paths are handled by the (admin) layout's requireAdmin()
+  // Don't redirect them here — let the layout enforce the gate
+  const isAdminPath = request.nextUrl.pathname.startsWith('/admin/')
+
   const isPublicPage =
     request.nextUrl.pathname.startsWith('/landing') ||
     request.nextUrl.pathname === '/' ||
     isAuthPage ||
     isAdminSetupPage ||
-    isCrewSetupPage
+    isCrewSetupPage ||
+    isAdminPath  // Allow all /admin/* paths through — they gate themselves
 
   // CRM routes require auth
   if (!isPublicPage && !user) {
