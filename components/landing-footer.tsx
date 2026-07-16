@@ -1,13 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { NewsletterSubscribeModal } from './newsletter-subscribe-modal';
 
 export function LandingFooter() {
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
+
   return (
-    <footer className="bg-[#0f0f0f] border-t border-white/10">
+    <>
+      <footer className="bg-[#0f0f0f] border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
           {/* Brand */}
@@ -80,20 +84,27 @@ export function LandingFooter() {
           <div>
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Stay Updated</h3>
             <p className="text-sm text-gray-400 mb-3">Get tips, updates, and industry insights delivered to your inbox.</p>
-            <form className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="Enter your email"
-                className="h-10 text-sm"
-              />
-              <Button variant="default" size="sm">Subscribe</Button>
-            </form>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setSubscribeOpen(true)}
+            >
+              Subscribe
+            </Button>
           </div>
         </div>
 
         {/* Bottom section */}
         <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-500">© 2025 RedFox CRM. All rights reserved.</p>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <p>© 2025 RedFox CRM. All rights reserved.</p>
+            {/* Hidden admin entry dot — visible on mobile, hover on desktop */}
+            <Link
+              href="/admin/login"
+              className="inline-block w-3 h-3 rounded-full bg-gray-700 sm:bg-transparent sm:hover:bg-[#C8392B] transition-colors"
+              title="Admin portal"
+            />
+          </div>
           <div className="flex gap-6">
             <Link href="/landing/privacy" className="text-sm text-gray-500 hover:text-white transition-colors">
               Privacy Policy
@@ -105,5 +116,7 @@ export function LandingFooter() {
         </div>
       </div>
     </footer>
+    <NewsletterSubscribeModal open={subscribeOpen} onOpenChange={setSubscribeOpen} />
+    </>
   );
 }
