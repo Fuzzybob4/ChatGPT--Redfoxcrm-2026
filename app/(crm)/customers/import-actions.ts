@@ -46,7 +46,7 @@ export async function importCustomersFromCSV(
     const nameIdx = findHeader(["name"]);
     const emailIdx = findHeader(["email"]);
     const phoneIdx = findHeader(["phone", "phone number"]);
-    const addressIdx = findHeader(["address", "street address", "street"]);
+    const addressIdx = findHeader(["address", "street address", "street", "location"]);
     const cityIdx = findHeader(["city"]);
     const stateIdx = findHeader(["state"]);
     const zipIdx = findHeader(["zip", "zip code", "postal code"]);
