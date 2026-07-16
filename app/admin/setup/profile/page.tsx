@@ -14,9 +14,9 @@ interface Props {
 export default async function AdminProfileSetupPage({ searchParams }: Props) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) redirect('/admin/login');
+  if (authError || !user) redirect('/admin');
 
-  // If profile already complete, skip to admin
+  // If profile already complete, skip straight to dashboard
   const adminClient = createAdminClient();
   const { data: adminRow } = await adminClient
     .from('platform_admins')
@@ -24,8 +24,8 @@ export default async function AdminProfileSetupPage({ searchParams }: Props) {
     .eq('user_id', user.id)
     .single();
 
-  if (!adminRow) redirect('/admin/login?error=unauthorized');
-  if (adminRow.profile_completed) redirect('/admin');
+  if (!adminRow) redirect('/admin?error=unauthorized');
+  if (adminRow.profile_completed) redirect('/admin/dashboard');
 
   const { error } = await searchParams;
 

@@ -7,31 +7,50 @@ import { redirect } from 'next/navigation';
 export async function saveAdminProfileAction(formData: FormData) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) redirect('/admin/login');
+  if (authError || !user || !user.email) redirect('/admin');
 
   const adminClient = createAdminClient();
+  const email = user.email.toLowerCase();
+  const { data: invitation } = await adminClient
+    .from('platform_admin_invitations')
+    .select('id, role')
+    .eq('email', email)
+    .eq('status', 'pending')
+    .maybeSingle();
 
-  // Upsert legal profile into platform_admins
+  const profile = {
+    user_id: user.id,
+    email,
+    role: invitation?.role ?? 'customer_service',
+    is_active: true,
+    name: `${formData.get('first_name')} ${formData.get('last_name')}`,
+    date_of_birth: formData.get('date_of_birth') as string,
+    address: formData.get('address') as string,
+    city: formData.get('city') as string,
+    state: formData.get('state') as string,
+    zip: formData.get('zip') as string,
+    emergency_contact_name: formData.get('emergency_contact_name') as string,
+    emergency_contact_phone: formData.get('emergency_contact_phone') as string,
+    emergency_contact_relationship: formData.get('emergency_contact_relationship') as string,
+    invite_accepted_at: new Date().toISOString(),
+    profile_completed: true,
+  };
+
   const { error } = await adminClient
     .from('platform_admins')
-    .update({
-      name: `${formData.get('first_name')} ${formData.get('last_name')}`,
-      date_of_birth: formData.get('date_of_birth') as string,
-      address: formData.get('address') as string,
-      city: formData.get('city') as string,
-      state: formData.get('state') as string,
-      zip: formData.get('zip') as string,
-      emergency_contact_name: formData.get('emergency_contact_name') as string,
-      emergency_contact_phone: formData.get('emergency_contact_phone') as string,
-      emergency_contact_relationship: formData.get('emergency_contact_relationship') as string,
-      invite_accepted_at: new Date().toISOString(),
-      profile_completed: true,
-    })
-    .eq('user_id', user.id);
+    .upsert(profile, { onConflict: 'user_id' });
 
   if (error) {
-    redirect('/admin/setup/profile?error=save_failed');
+    console.error('[v0] profile upsert error:', JSON.stringify(error));
+    redirect(`/admin/setup/profile?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect('/admin');
+  if (invitation) {
+    await adminClient
+      .from('platform_admin_invitations')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('id', invitation.id);
+  }
+
+  redirect('/admin/dashboard');
 }

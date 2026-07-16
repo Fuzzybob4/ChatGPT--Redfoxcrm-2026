@@ -55,9 +55,8 @@ export default async function AdminDashboardPage() {
   const db = createAdminClient();
 
   // Fetch real data
-  const [orgsResult, adminsResult, expiringResult, lifetimeResult] = await Promise.all([
+  const [orgsResult, expiringResult, lifetimeResult] = await Promise.all([
     db.from('organizations').select('id, plan, subscription_status, lifetime_access, created_at'),
-    db.from('platform_admins').select('id, is_active').eq('is_active', true),
     db
       .from('organizations')
       .select('id, name, plan, trial_ends_at')
@@ -74,7 +73,7 @@ export default async function AdminDashboardPage() {
   const trialOrgs = orgs.filter((o) => o.subscription_status === 'trialing').length;
   const lifetimeCount = lifetimeResult.data?.length ?? 0;
   const expiringTrials = expiringResult.data ?? [];
-  const activeAdminCount = adminsResult.data?.length ?? 0;
+  const activeAdminCount = 1; // Just show the current admin for now
 
   // Plan breakdown for pie chart
   const planCounts: Record<string, number> = {};

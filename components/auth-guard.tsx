@@ -13,8 +13,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     // If not logged in and trying to access protected route, redirect to login
-    const publicRoutes = ['/auth', '/login', '/signup', '/landing', '/features', '/pricing', '/faq', '/support', '/api', '/privacy', '/terms', '/admin/setup', '/crew-setup'];
-    const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route)) || pathname === '/' || pathname === '/admin';
+    const publicRoutes = ['/auth', '/login', '/signup', '/landing', '/features', '/pricing', '/faq', '/support', '/api', '/privacy', '/terms', '/crew-setup', '/auth/confirm'];
+    // All /admin routes are protected by their own requireAdmin() server-side guard — exclude them here entirely
+    const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route)) || pathname === '/' || pathname.startsWith('/admin');
     
     if (!user && !isPublicRoute) {
       router.push('/login');

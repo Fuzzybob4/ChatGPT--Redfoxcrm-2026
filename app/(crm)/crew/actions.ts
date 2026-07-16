@@ -43,7 +43,7 @@ export async function inviteEmployee(formData: FormData) {
 
   // Send Supabase invite email so they can set their password
   const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/crew-setup?employee_id=${empRow.id}`,
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?next=/crew-setup?employee_id=${empRow.id}`,
   });
 
   if (inviteError) {

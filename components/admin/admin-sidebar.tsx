@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { AdminRole } from '@/lib/admin-roles';
 import { ROLE_PERMISSIONS } from '@/lib/admin-roles';
+import { adminLogoutAction } from '@/app/admin/actions';
 
 interface NavItem {
   label: string;
@@ -26,7 +27,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',    href: '/admin',          icon: LayoutDashboard, permission: 'dashboard' },
+  { label: 'Dashboard',    href: '/admin/dashboard', icon: LayoutDashboard, permission: 'dashboard' },
   { label: 'Customers',    href: '/admin/customers', icon: Users,           permission: 'customers' },
   { label: 'Revenue',      href: '/admin/revenue',  icon: DollarSign,      permission: 'revenue' },
   { label: 'Activity',     href: '/admin/activity', icon: Activity,        permission: 'activity' },
@@ -71,10 +72,7 @@ export function AdminSidebar({ role, name, email }: Props) {
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
         {visibleItems.map((item) => {
-          const isActive =
-            item.href === '/admin'
-              ? pathname === '/admin'
-              : pathname.startsWith(item.href);
+          const isActive = pathname === item.href || (item.href !== '/admin/dashboard' && pathname.startsWith(item.href));
           return (
             <Link
               key={item.href}
@@ -105,7 +103,7 @@ export function AdminSidebar({ role, name, email }: Props) {
             <span className="text-[10px] text-gray-500 truncate">{roleLabel[role]}</span>
           </div>
         </div>
-        <form action="/api/admin/logout" method="POST" className="mt-1">
+        <form action={adminLogoutAction} className="mt-1">
           <button
             type="submit"
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] transition-colors"
