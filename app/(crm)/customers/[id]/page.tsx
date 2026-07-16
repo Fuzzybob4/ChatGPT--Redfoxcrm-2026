@@ -37,7 +37,7 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
+  const { loading, refresh, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
@@ -432,7 +432,10 @@ export default function CustomerDetailPage({ params }: Props) {
 
   {/* Photo Gallery */}
   <div className="space-y-4">
-    <CustomerPhotoUploader customerId={customer.id} />
+    <CustomerPhotoUploader 
+      customerId={customer.id}
+      onPhotoAdded={() => refresh()}
+    />
     <CustomerPhotoGallery photos={photos} />
   </div>
           </div>
