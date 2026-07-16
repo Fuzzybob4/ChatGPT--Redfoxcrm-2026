@@ -61,7 +61,17 @@ export async function importCustomersFromCSV(
       };
     }
 
-    const rows: CustomerImportRow[] = [];
+    const rows: Array<{
+      first_name: string;
+      last_name: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip_code?: string;
+      location_id?: string;
+    }> = [];
     const errors: Array<{ row: number; error: string }> = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -70,28 +80,41 @@ export async function importCustomersFromCSV(
 
       const values = line.split(",").map((v) => v.trim().replace(/"/g, ""));
       
-      // Build name from either "name" column or "first name" + "last name"
-      let name = nameIdx !== -1 ? values[nameIdx] : "";
-      if (!name && firstNameIdx !== -1 && lastNameIdx !== -1) {
-        const first = values[firstNameIdx] || "";
-        const last = values[lastNameIdx] || "";
-        name = `${first} ${last}`.trim();
+      // Build first and last names from CSV columns
+      let firstName = firstNameIdx !== -1 ? values[firstNameIdx] : "";
+      let lastName = lastNameIdx !== -1 ? values[lastNameIdx] : "";
+      
+      // Fallback: if no first/last names, try to split the "name" column
+      if ((!firstName || !lastName) && nameIdx !== -1) {
+        const fullName = values[nameIdx] || "";
+        const parts = fullName.split(" ");
+        if (parts.length >= 2) {
+          firstName = firstName || parts[0];
+          lastName = lastName || parts.slice(1).join(" ");
+        } else {
+          firstName = firstName || fullName;
+          lastName = lastName || "";
+        }
       }
 
-      if (!name) {
-        errors.push({ row: i + 1, error: "Name is required" });
+      firstName = firstName.trim();
+      lastName = lastName.trim();
+
+      if (!firstName && !lastName) {
+        errors.push({ row: i + 1, error: "First name or last name is required" });
         continue;
       }
 
       rows.push({
-        name,
+        first_name: firstName || "Unknown",
+        last_name: lastName || "Unknown",
         email: values[emailIdx] || undefined,
         phone: values[phoneIdx] || undefined,
         address: values[addressIdx] || undefined,
         city: values[cityIdx] || undefined,
         state: values[stateIdx] || undefined,
-        zip: values[zipIdx] || undefined,
-        locationId: locationId || undefined,
+        zip_code: values[zipIdx] || undefined,
+        location_id: locationId || undefined,
       });
     }
 
@@ -104,17 +127,22 @@ export async function importCustomersFromCSV(
       };
     }
 
-    // Insert into Supabase
+    // Insert into Supabase - only include columns that exist in the schema
     const customers = rows.map((row) => ({
       org_id: org.orgId,
-      name: row.name,
+      first_name: row.first_name,
+      last_name: row.last_name,
       email: row.email || null,
       phone: row.phone || null,
       address: row.address || null,
       city: row.city || null,
       state: row.state || null,
-      zip: row.zip || null,
-      location_id: row.locationId || null,
+      zip_code: row.zip_code || null,
+      location_id: row.location_id || null,
+      install_status: "not_started" as const,
+      marketing_opt_in: false,
+      marketing_unsubscribed: false,
+      tags: [],
       status: "active" as const,
     }));
 
