@@ -41,10 +41,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { mergeCustomers } from "@/app/(crm)/customers/merge-actions";
 import type { Customer } from "@/lib/data";
 
 interface CustomersDataTableProps {
   customers: Customer[];
+  onRefresh?: () => void;
 }
 
 type SortField = "name" | "email" | "status" | "createdAt";
@@ -68,15 +70,16 @@ const ALL_COLUMNS = [
   { id: "since", label: "Since" },
 ];
 
-export function CustomersDataTable({ customers }: CustomersDataTableProps) {
+export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableProps) {
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(
-    VISIBLE_COLUMNS_DEFAULT
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [visibleColumns, setVisibleColumns] = useState<(typeof ALL_COLUMNS)[number]["id"][]>(
+    DEFAULT_COLUMNS
   );
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [isMerging, setIsMerging] = useState(false);
   const [pageSize, setPageSize] = useState(25);
 
   // Filter customers
@@ -156,7 +159,7 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
     }
   };
 
-  const handleMergeCustomers = () => {
+  const handleMergeCustomers = async () => {
     if (selectedRows.size < 2) {
       alert("Please select at least 2 customers to merge");
       return;
@@ -165,13 +168,23 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
     const selectedCustomers = sorted.filter((c) => selectedRows.has(c.id));
     const confirmMessage = `Merge ${selectedRows.size} customers?\n\nCustomers to merge:\n${selectedCustomers
       .map((c) => `- ${c.name} (${c.email})`)
-      .join("\n")}\n\nThe first customer will be kept as the primary record.`;
+      .join("\n")}\n\nThe first customer will be kept as the primary record.\nAll data from other customers will be moved to the primary.`;
 
     if (confirm(confirmMessage)) {
-      // TODO: Implement merge logic via API
-      console.log("[v0] Merge customers:", Array.from(selectedRows));
-      alert("Merge functionality coming soon. Selected IDs: " + Array.from(selectedRows).join(", "));
-      setSelectedRows(new Set());
+      setIsMerging(true);
+      try {
+        const result = await mergeCustomers(Array.from(selectedRows));
+        alert(result.message);
+        setSelectedRows(new Set());
+        if (onRefresh) {
+          onRefresh();
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        alert(`Failed to merge customers: ${errorMessage}`);
+      } finally {
+        setIsMerging(false);
+      }
     }
   };
 
@@ -246,11 +259,12 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
                 size="sm"
                 variant="ghost"
                 onClick={handleMergeCustomers}
-                disabled={selectedRows.size < 2}
+                disabled={selectedRows.size < 2 || isMerging}
                 className="gap-2"
               >
-                <Merge className="size-3.5" />
-                Merge
+                {isMerging && <div className="size-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />}
+                {!isMerging && <Merge className="size-3.5" />}
+                {isMerging ? "Merging..." : "Merge"}
               </Button>
               <Button
                 size="sm"
