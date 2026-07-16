@@ -100,8 +100,8 @@ export function CSVImportDialog() {
         <DialogHeader className="min-w-0">
           <DialogTitle>Import Customers from CSV</DialogTitle>
           <DialogDescription className="text-pretty">
-            Upload a CSV file. Supported columns: First Name, Last Name, Email, Phone Number, Street Address, City, State, Zip Code.
-            First and Last names are required.
+            Upload a CSV file with: First Name (required), Last Name (required), Email, Phone Number, and Street Address.
+            Extra columns will be ignored.
           </DialogDescription>
         </DialogHeader>
 

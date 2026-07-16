@@ -127,7 +127,8 @@ export async function importCustomersFromCSV(
       };
     }
 
-    // Insert into Supabase - only include columns that exist in the schema
+    // Insert into Supabase - MVP fields only (first_name, last_name, email, phone, address)
+    // Skip fields with NOT NULL constraints that aren't in the CSV
     const customers = rows.map((row) => ({
       org_id: org.orgId,
       first_name: row.first_name,
@@ -135,15 +136,6 @@ export async function importCustomersFromCSV(
       email: row.email || null,
       phone: row.phone || null,
       address: row.address || null,
-      city: row.city || null,
-      state: row.state || null,
-      zip_code: row.zip_code || null,
-      location_id: row.location_id || null,
-      install_status: null,
-      marketing_opt_in: false,
-      marketing_unsubscribed: false,
-      tags: [],
-      status: "active" as const,
     }));
 
     const { error } = await supabase.from("customers").insert(customers);
