@@ -49,10 +49,15 @@ export async function getAdminSession(): Promise<AdminUser | null> {
  */
 export async function requireAdmin(permission?: string): Promise<AdminUser> {
   const session = await getAdminSession();
-  if (!session) redirect('/admin');
+  if (!session) {
+    console.log('[v0] requireAdmin: no session, redirecting to /admin');
+    redirect('/admin');
+  }
   if (permission && !hasPermission(session.role, permission)) {
+    console.log('[v0] requireAdmin: permission denied for', permission, 'role:', session.role);
     redirect('/admin?error=unauthorized');
   }
+  console.log('[v0] requireAdmin: allowed - role:', session.role, 'permission:', permission);
   return session;
 }
 
