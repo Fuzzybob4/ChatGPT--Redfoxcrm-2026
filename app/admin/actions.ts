@@ -49,10 +49,10 @@ export async function adminRequestAccessAction(formData: FormData) {
 
   const adminClient = createAdminClient();
 
-  // FIRST: Verify email is in platform_admins (pre-approved by CEO)
+  // Only employees pre-approved in platform_admins may request access.
   const { data: adminRecord, error: adminQueryError } = await adminClient
     .from('platform_admins')
-    .select('id, is_active')
+    .select('user_id, is_active')
     .eq('email', email)
     .maybeSingle();
 
@@ -69,37 +69,18 @@ export async function adminRequestAccessAction(formData: FormData) {
     redirect('/admin?tab=request&error=account_deactivated');
   }
 
-  // Email is approved — check if auth user exists via email lookup (faster than listUsers)
-  const { data: existingUser, error: lookupError } = await adminClient.auth.admin.getUserByEmail(email);
-  
-  if (lookupError && lookupError.status !== 404) {
-    // Real error, not just "user not found"
-    console.error('[v0] getUserByEmail error:', lookupError);
-    redirect('/admin?tab=request&error=server_error');
-  }
+  // The platform_admins record references an existing auth.users account.
+  // Supabase sends the recovery email; the callback establishes the session
+  // before forwarding the employee to the password setup screen.
+  const supabase = await createClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.redfoxcrm.com';
+  const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${siteUrl}/auth/callback?next=/admin/setup`,
+  });
 
-  if (existingUser) {
-    // Auth user exists — send password reset link
-    const { error: resetError } = await adminClient.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
-      },
-    });
-    if (resetError) {
-      console.error('[v0] generateLink error:', resetError);
-      redirect('/admin?tab=request&error=invite_failed');
-    }
-  } else {
-    // No auth user yet — send invite
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
-    });
-    if (inviteError) {
-      console.error('[v0] inviteUserByEmail error:', inviteError);
-      redirect('/admin?tab=request&error=invite_failed');
-    }
+  if (resetError) {
+    console.error('[v0] resetPasswordForEmail error:', resetError);
+    redirect('/admin?tab=request&error=invite_failed');
   }
 
   redirect('/admin?tab=request&success=invite_sent');
