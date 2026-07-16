@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
 import { useState } from 'react';
-import { Plus, Eye, Edit2 } from 'lucide-react';
+import { Plus, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 
 const statusConfig: Record<EstimateStatus, { label: string; variant: 'default' | 'secondary' | 'outline'; color: string }> = {
@@ -152,15 +152,7 @@ export default function EstimatesPage() {
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            {est.status === 'Draft' && (
-                              <Button
-                                render={<Link href={`/estimates/${est.id}/edit`} />}
-                                variant="outline"
-                                size="sm"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                            )}
+
                           </div>
                         </TableCell>
                       </TableRow>
