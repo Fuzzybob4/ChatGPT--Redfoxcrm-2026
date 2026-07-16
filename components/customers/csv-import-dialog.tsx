@@ -17,7 +17,7 @@ import { useData } from "@/lib/data-context";
 
 export function CSVImportDialog() {
   const { selectedLocationId } = useLocation();
-  const { refreshData } = useData();
+  const { refresh } = useData();
   const [open, setOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,7 +73,7 @@ export function CSVImportDialog() {
 
       if (res.success && res.imported > 0) {
         // Refresh the data context to show newly imported customers
-        await refreshData();
+        await refresh();
         
         setTimeout(() => {
           setCsvText("");
