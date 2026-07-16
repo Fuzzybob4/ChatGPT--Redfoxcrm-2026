@@ -105,7 +105,7 @@ export default function CustomerDetailPage({ params }: Props) {
   <div className="flex gap-2">
     <CustomerPortalAccess 
       customerId={customer.id} 
-      customerName={`${customer.first_name} ${customer.last_name}`}
+      customerName={customer.name}
       customerEmail={customer.email}
     />
     <Button size="sm" onClick={() => setEditOpen(true)}>

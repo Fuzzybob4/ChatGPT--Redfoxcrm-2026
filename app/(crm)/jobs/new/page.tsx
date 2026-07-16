@@ -87,7 +87,7 @@ export default function NewJobPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <PageHeader title={`Create Work Order for ${customer.first_name} ${customer.last_name}`} />
+      <PageHeader title={`Create Work Order for ${customer.name}`} />
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-2xl mx-auto space-y-6">
@@ -218,9 +218,11 @@ export default function NewJobPage() {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-4">
-                  <Button variant="outline" asChild type="button">
-                    <Link href="/jobs">Cancel</Link>
-                  </Button>
+                  <Link href="/jobs">
+                    <Button variant="outline" type="button">
+                      Cancel
+                    </Button>
+                  </Link>
                   <Button className="flex-1" type="submit" disabled={isPending || !formData.title || !formData.scheduledDate}>
                     {isPending ? (
                       <>

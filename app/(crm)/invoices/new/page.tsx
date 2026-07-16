@@ -111,7 +111,7 @@ export default function NewInvoicePage() {
                       <SelectItem value="">Select a customer...</SelectItem>
                       {locationCustomers.map((cust) => (
                         <SelectItem key={cust.id} value={cust.id}>
-                          {cust.first_name} {cust.last_name}
+                          {cust.name}
                         </SelectItem>
                       ))}
                     </SelectGroup>

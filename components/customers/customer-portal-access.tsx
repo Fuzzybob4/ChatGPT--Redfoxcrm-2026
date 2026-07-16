@@ -89,12 +89,12 @@ export function CustomerPortalAccess({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger render={
         <Button variant="outline" size="sm">
           <LinkIcon className="w-4 h-4 mr-2" />
           Portal Access
         </Button>
-      </DialogTrigger>
+      } />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Customer Portal Access</DialogTitle>

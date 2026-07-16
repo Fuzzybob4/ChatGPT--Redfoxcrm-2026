@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
           ticketId: ticket.id,
           customerId,
           orgId: customer.org_id,
-          customerName: customer.first_name + ' ' + customer.last_name,
+          customerName: customer.name,
           subject,
         }),
       }).catch((err) => console.error('Notification failed:', err));

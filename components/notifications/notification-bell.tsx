@@ -84,7 +84,7 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger render={
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
@@ -96,6 +96,7 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
             </Badge>
           )}
         </Button>
+      } />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
         <div className="p-2">
