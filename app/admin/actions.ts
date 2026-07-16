@@ -57,6 +57,7 @@ export async function adminRequestAccessAction(formData: FormData) {
     .maybeSingle();
 
   if (adminQueryError) {
+    console.error('[v0] platform_admins query error:', adminQueryError);
     redirect('/admin?tab=request&error=server_error');
   }
 
@@ -68,24 +69,17 @@ export async function adminRequestAccessAction(formData: FormData) {
     redirect('/admin?tab=request&error=account_deactivated');
   }
 
-  // Email is approved — look up auth user
-  const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers();
-  if (listError) {
+  // Email is approved — check if auth user exists via email lookup (faster than listUsers)
+  const { data: existingUser, error: lookupError } = await adminClient.auth.admin.getUserByEmail(email);
+  
+  if (lookupError && lookupError.status !== 404) {
+    // Real error, not just "user not found"
+    console.error('[v0] getUserByEmail error:', lookupError);
     redirect('/admin?tab=request&error=server_error');
   }
 
-  const authUser = usersData.users.find(
-    (u) => u.email?.toLowerCase() === email
-  );
-
-  if (!authUser) {
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
-    });
-    if (inviteError) {
-      redirect('/admin?tab=request&error=invite_failed');
-    }
-  } else {
+  if (existingUser) {
+    // Auth user exists — send password reset link
     const { error: resetError } = await adminClient.auth.admin.generateLink({
       type: 'recovery',
       email,
@@ -94,6 +88,16 @@ export async function adminRequestAccessAction(formData: FormData) {
       },
     });
     if (resetError) {
+      console.error('[v0] generateLink error:', resetError);
+      redirect('/admin?tab=request&error=invite_failed');
+    }
+  } else {
+    // No auth user yet — send invite
+    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/setup`,
+    });
+    if (inviteError) {
+      console.error('[v0] inviteUserByEmail error:', inviteError);
       redirect('/admin?tab=request&error=invite_failed');
     }
   }
