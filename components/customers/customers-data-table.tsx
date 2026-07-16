@@ -76,7 +76,7 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [visibleColumns, setVisibleColumns] = useState<(typeof ALL_COLUMNS)[number]["id"][]>(
-    DEFAULT_COLUMNS
+    VISIBLE_COLUMNS_DEFAULT as (typeof ALL_COLUMNS)[number]["id"][]
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [isMerging, setIsMerging] = useState(false);
