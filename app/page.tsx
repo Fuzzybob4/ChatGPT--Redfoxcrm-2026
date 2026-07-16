@@ -10,6 +10,8 @@ export default function RootPage() {
 
   useEffect(() => {
     if (!isLoading) {
+      // Don't redirect away from admin routes — they guard themselves server-side
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) return;
       if (user) {
         router.push('/dashboard');
       } else {

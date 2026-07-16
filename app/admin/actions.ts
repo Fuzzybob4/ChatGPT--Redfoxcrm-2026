@@ -121,3 +121,9 @@ export async function adminRequestAccessAction(formData: FormData) {
 
   redirect('/admin?tab=request&success=invite_sent');
 }
+
+export async function adminLogoutAction() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect('/admin');
+}
