@@ -21,6 +21,11 @@ export function CSVImportDialog() {
   const [open, setOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    headers: string[];
+    rows: string[][];
+  } | null>(null);
   const [result, setResult] = useState<{
     imported: number;
     failed: number;
@@ -36,6 +41,17 @@ export function CSVImportDialog() {
       const text = event.target?.result as string;
       setCsvText(text);
       setResult(null);
+      setShowPreview(false);
+      
+      // Parse CSV to show preview
+      const lines = text.trim().split("\n");
+      if (lines.length > 0) {
+        const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
+        const rows = lines.slice(1, 6).map((line) =>
+          line.split(",").map((cell) => cell.trim().replace(/"/g, ""))
+        );
+        setPreviewData({ headers, rows });
+      }
     };
     reader.readAsText(file);
   };
@@ -84,8 +100,8 @@ export function CSVImportDialog() {
         <DialogHeader className="min-w-0">
           <DialogTitle>Import Customers from CSV</DialogTitle>
           <DialogDescription className="text-pretty">
-            Upload a CSV file with columns: name, email, phone, address, city, state, zip.
-            Only "name" is required.
+            Upload a CSV file. Supported columns: First Name, Last Name, Email, Phone Number, Street Address, City, State, Zip Code.
+            First and Last names are required.
           </DialogDescription>
         </DialogHeader>
 
@@ -119,13 +135,41 @@ export function CSVImportDialog() {
             </label>
           </div>
 
-          {/* CSV Preview */}
-          {csvText && !result && (
-            <div className="bg-muted p-4 rounded-lg max-h-48 overflow-auto">
-              <pre className="text-xs whitespace-pre-wrap break-all font-mono">
-                {csvText.split("\n").slice(0, 5).join("\n")}
-                {csvText.split("\n").length > 5 && "\n..."}
-              </pre>
+          {/* CSV Preview Table */}
+          {csvText && previewData && !result && (
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowPreview(!showPreview)}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {showPreview ? "Hide" : "Show"} Preview ({csvText.split("\n").length - 1} rows)
+              </button>
+              {showPreview && (
+                <div className="bg-muted p-3 rounded-lg max-h-48 overflow-x-auto">
+                  <table className="text-xs border-collapse">
+                    <thead>
+                      <tr>
+                        {previewData.headers.map((header, i) => (
+                          <th key={i} className="border border-gray-300 px-2 py-1 text-left bg-gray-100 font-semibold">
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.rows.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j} className="border border-gray-300 px-2 py-1 max-w-48 truncate">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

@@ -139,7 +139,7 @@ export async function importCustomersFromCSV(
       state: row.state || null,
       zip_code: row.zip_code || null,
       location_id: row.location_id || null,
-      install_status: "not_started" as const,
+      install_status: null,
       marketing_opt_in: false,
       marketing_unsubscribed: false,
       tags: [],
