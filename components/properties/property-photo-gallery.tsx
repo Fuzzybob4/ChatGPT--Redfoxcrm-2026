@@ -64,7 +64,7 @@ export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGa
           {photos.map((photo) => (
             <div key={photo.id} className="relative group rounded-lg overflow-hidden bg-muted h-48">
               <img
-                src={`/api/file/property-photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
+                src={`/api/file/photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
                 alt={photo.description || "Property photo"}
                 className="w-full h-full object-cover"
                 onError={(e) => {

@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing pathname' }, { status: 400 });
     }
 
-    // Verify the pathname is for customer photos (security check)
-    if (!pathname.startsWith('customers/')) {
+    // Verify the pathname is for customer or property photos (security check)
+    if (!pathname.startsWith('customers/') && !pathname.startsWith('properties/')) {
       return NextResponse.json({ error: 'Invalid pathname' }, { status: 403 });
     }
 
