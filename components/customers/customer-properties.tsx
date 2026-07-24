@@ -172,12 +172,11 @@ export function CustomerProperties({ customerId, properties }: Props) {
         {properties.length > 0 ? (
           <div className="flex flex-col divide-y divide-border">
             {properties.map((p) => (
-              <Link
-                key={p.id}
-                href={`/properties/${p.id}`}
-                className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
-              >
-                <div className="flex items-start gap-3 min-w-0">
+              <div key={p.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <Link
+                  href={`/properties/${p.id}`}
+                  className="flex items-start gap-3 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+                >
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted mt-0.5">
                     <MapPin className="size-4 text-primary" />
                   </span>
@@ -217,10 +216,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
                       )}
                     </div>
                   </div>
-                </div>
-              </Link>
-              <div className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
-                <div className="flex-1" />
+                </Link>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button
                     variant="ghost"
