@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { geocodePropertyAddress } from "@/lib/geocoding";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import Link from "next/link";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -171,9 +172,10 @@ export function CustomerProperties({ customerId, properties }: Props) {
         {properties.length > 0 ? (
           <div className="flex flex-col divide-y divide-border">
             {properties.map((p) => (
-              <div
+              <Link
                 key={p.id}
-                className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                href={`/properties/${p.id}`}
+                className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted mt-0.5">
@@ -181,7 +183,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-medium hover:text-primary">
                         {p.propertyName || p.address}
                       </p>
                       {p.propertyType && (
@@ -216,6 +218,9 @@ export function CustomerProperties({ customerId, properties }: Props) {
                     </div>
                   </div>
                 </div>
+              </Link>
+              <div className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
+                <div className="flex-1" />
                 <div className="flex items-center gap-1 shrink-0">
                   <Button
                     variant="ghost"
