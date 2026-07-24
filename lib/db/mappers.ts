@@ -94,7 +94,7 @@ export function mapLocation(row: Record<string, any>): Location {
   };
 }
 
-export function mapInvoice(row: Record<string, any>): Invoice & {
+export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string, any>[] = []): Invoice & {
   total: number;
   amountPaid: number;
   customerId: string;
@@ -103,6 +103,27 @@ export function mapInvoice(row: Record<string, any>): Invoice & {
 } {
   const total = money(row.total_amount, row.total_cents);
   const status = (titleCase(row.status) as InvoiceStatus) || 'Draft';
+
+  // Fetch line items for this invoice from the provided rows
+  const invoiceLineItems = lineItemRows
+    .filter((li) => li.invoice_id === row.id)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((li) => ({
+      description: li.description ?? 'Services',
+      quantity: li.quantity ?? 1,
+      unitPrice: money(li.unit_price, li.unit_price_cents),
+    }));
+
+  // If no line items found, create a default one with the total
+  const lineItems = invoiceLineItems.length > 0 
+    ? invoiceLineItems 
+    : [
+        {
+          description: row.title || row.description || 'Services',
+          quantity: 1,
+          unitPrice: total,
+        },
+      ];
 
   return {
     id: row.id,
@@ -113,13 +134,7 @@ export function mapInvoice(row: Record<string, any>): Invoice & {
     status,
     issuedDate: (row.created_at ?? '').slice(0, 10),
     dueDate: row.due_date ?? '',
-    lineItems: [
-      {
-        description: row.title || row.description || 'Services',
-        quantity: 1,
-        unitPrice: total,
-      },
-    ],
+    lineItems,
     notes: row.notes ?? undefined,
     // extra normalized fields
     total,

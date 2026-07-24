@@ -133,6 +133,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: custRows },
       { data: locRows },
       { data: invRows },
+      { data: invLineItemRows },
       { data: estRows },
       { data: jobRows },
       { data: empRows },
@@ -144,6 +145,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('locations').select('*').order('created_at', { ascending: true }),
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+      supabase.from('invoice_line_items').select('*').order('order', { ascending: true }),
       supabase.from('estimates').select('*').order('created_at', { ascending: false }),
       supabase.from('scheduled_jobs').select('*').order('scheduled_date', { ascending: true }),
       supabase.from('employees').select('*').order('created_at', { ascending: true }),
@@ -155,7 +157,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     setCustomers((custRows ?? []).map(mapCustomer));
     setLocations((locRows ?? []).map(mapLocation));
-    setInvoices((invRows ?? []).map(mapInvoice));
+    setInvoices((invRows ?? []).map((inv) => mapInvoice(inv, invLineItemRows ?? [])));
     setEstimates((estRows ?? []).map(mapEstimate));
     setJobs((jobRows ?? []).map(mapJob));
     setEmployees(

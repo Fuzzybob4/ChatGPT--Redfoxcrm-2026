@@ -133,16 +133,99 @@ export async function importInvoicesFromCSV(
       };
     }
 
-    // Process invoices - for now, just store the parsed data
-    // In a full implementation, you would create or update invoices in the database
+    // Process invoices - create or update in database
     let successCount = 0;
-    for (const row of rows) {
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx];
       try {
-        // TODO: Create invoice in database with all fields
-        // For MVP, we're just validating the data can be parsed
+        // Find or create customer by name
+        const { data: existingCustomers, error: customerFetchError } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('name', row.customerName)
+          .eq('org_id', org.id)
+          .single();
+
+        let customerId: string;
+        if (existingCustomers) {
+          customerId = existingCustomers.id;
+        } else {
+          // Create new customer
+          const { data: newCustomer, error: customerCreateError } = await supabase
+            .from('customers')
+            .insert({
+              org_id: org.id,
+              name: row.customerName,
+              email: row.email || '',
+              phone: row.phone || '',
+              billing_address: row.billingAddress || '',
+            })
+            .select('id')
+            .single();
+
+          if (customerCreateError || !newCustomer) {
+            errors.push({ row: idx + 2, error: `Failed to create customer: ${customerCreateError?.message || 'Unknown error'}` });
+            continue;
+          }
+          customerId = newCustomer.id;
+        }
+
+        // Map status string to valid status
+        const statusMap: Record<string, string> = {
+          'draft': 'Draft',
+          'sent': 'Sent',
+          'paid': 'Paid',
+          'overdue': 'Overdue',
+        };
+        const status = statusMap[row.invoiceStatus?.toLowerCase() || ''] || 'Draft';
+
+        // Create invoice
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert({
+            org_id: org.id,
+            customer_id: customerId,
+            invoice_number: row.squareInvoiceNumber || `INV-${Date.now()}`,
+            issued_date: row.invoiceDate ? new Date(row.invoiceDate).toISOString() : new Date().toISOString(),
+            due_date: row.dueDate ? new Date(row.dueDate).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: status,
+            subtotal_cents: Math.round((row.subtotal || 0) * 100),
+            discount_cents: Math.round((row.discount || 0) * 100),
+            tax_cents: Math.round((row.tax || 0) * 100),
+            notes: row.notes || '',
+            payment_date: row.paymentDate ? new Date(row.paymentDate).toISOString() : null,
+            transaction_id: row.transactionId || '',
+          })
+          .select('id')
+          .single();
+
+        if (invoiceError || !invoice) {
+          errors.push({ row: idx + 2, error: `Failed to create invoice: ${invoiceError?.message || 'Unknown error'}` });
+          continue;
+        }
+
+        // Create line item if description exists
+        if (row.lineItemDescription) {
+          const { error: lineItemError } = await supabase
+            .from('invoice_line_items')
+            .insert({
+              org_id: org.id,
+              invoice_id: invoice.id,
+              description: row.lineItemDescription,
+              quantity: 1,
+              unit_price_cents: Math.round((row.total || 0) * 100),
+              order: 0,
+            });
+
+          if (lineItemError) {
+            console.error('Warning: Failed to create line item:', lineItemError);
+            // Don't count this as a failure - invoice was created successfully
+          }
+        }
+
         successCount++;
       } catch (err) {
-        errors.push({ row: rows.indexOf(row) + 2, error: (err instanceof Error ? err.message : "Unknown error") });
+        errors.push({ row: idx + 2, error: (err instanceof Error ? err.message : "Unknown error") });
       }
     }
 
