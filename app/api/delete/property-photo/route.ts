@@ -4,10 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { pathname } = await request.json();
+    const { photoId, pathname } = await request.json();
 
-    if (!pathname) {
-      return NextResponse.json({ error: 'No pathname provided' }, { status: 400 });
+    if (!photoId || !pathname) {
+      return NextResponse.json({ error: 'Missing photoId or pathname' }, { status: 400 });
     }
 
     // Verify authentication
@@ -20,9 +20,9 @@ export async function DELETE(request: NextRequest) {
 
     // Delete from database first
     const { error: dbError } = await supabase
-      .from('customer_photos')
+      .from('property_photos')
       .delete()
-      .eq('photo_url', pathname);
+      .eq('id', photoId);
 
     if (dbError) {
       console.error('Failed to delete photo from database:', dbError);

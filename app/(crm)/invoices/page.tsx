@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Send, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { Plus, Search, Send, CheckCircle, AlertCircle, FileText, Trash2, Download, Merge2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { StatCard } from "@/components/stat-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -34,6 +35,7 @@ const ALL_STATUSES: InvoiceStatus[] = ["Draft", "Sent", "Paid", "Overdue"];
 export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | InvoiceStatus>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { loading, invoices: allInvoices, getCustomerById } = useData();
   const { selectedLocationId } = useLocation();
   const invoices = selectedLocationId
@@ -67,6 +69,71 @@ export default function InvoicesPage() {
     Sent: invoices.filter((i) => i.status === "Sent").length,
     Paid: invoices.filter((i) => i.status === "Paid").length,
     Overdue: invoices.filter((i) => i.status === "Overdue").length,
+  };
+
+  const handleSelectInvoice = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(filtered.map((inv) => inv.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Delete ${selectedIds.size} invoice(s)? This action cannot be undone.`)) {
+      // TODO: Implement delete action
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleExport = () => {
+    const selectedInvoices = filtered.filter((inv) => selectedIds.has(inv.id));
+    const csv = [
+      ["Invoice#", "Customer", "Issued", "Due", "Amount", "Status"],
+      ...selectedInvoices.map((inv) => {
+        const customer = getCustomerById(inv.customerId);
+        const total = getInvoiceTotal(inv);
+        return [
+          inv.invoiceNumber,
+          customer?.name || "",
+          new Date(inv.issuedDate).toLocaleDateString(),
+          new Date(inv.dueDate).toLocaleDateString(),
+          total.toString(),
+          inv.status,
+        ];
+      }),
+    ]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `invoices-export-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleMerge = () => {
+    if (selectedIds.size < 2) {
+      alert("Please select at least 2 invoices to merge");
+      return;
+    }
+    // TODO: Implement merge action
+    alert("Merge functionality coming soon");
   };
 
   if (loading) {
@@ -123,17 +190,58 @@ export default function InvoicesPage() {
           />
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search invoices..."
-              className="pl-9"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+        {/* Filters and Selection Actions */}
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search invoices..."
+                className="pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
           </div>
+          
+          {/* Selection Actions Bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+              <span className="text-sm font-medium text-foreground">
+                {selectedIds.size} selected
+              </span>
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleExport}
+                  className="gap-2"
+                >
+                  <Download className="size-3.5" />
+                  Export
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleMerge}
+                  className="gap-2"
+                  disabled={selectedIds.size < 2}
+                >
+                  <Merge2 className="size-3.5" />
+                  Merge
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleDelete}
+                  className="gap-2 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <Tabs
@@ -161,6 +269,13 @@ export default function InvoicesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="text-xs uppercase tracking-wide text-muted-foreground">
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                              indeterminate={selectedIds.size > 0 && selectedIds.size < filtered.length}
+                              onChange={(e) => handleSelectAll(e.currentTarget.checked)}
+                            />
+                          </TableHead>
                           <TableHead>Invoice</TableHead>
                           <TableHead>Customer</TableHead>
                           <TableHead>Issued</TableHead>
@@ -176,6 +291,12 @@ export default function InvoicesPage() {
                           const total = getInvoiceTotal(inv);
                           return (
                             <TableRow key={inv.id}>
+                              <TableCell className="w-12">
+                                <Checkbox
+                                  checked={selectedIds.has(inv.id)}
+                                  onChange={(e) => handleSelectInvoice(inv.id, e.currentTarget.checked)}
+                                />
+                              </TableCell>
                               <TableCell className="font-medium text-sm">
                                 {inv.invoiceNumber}
                               </TableCell>
@@ -231,7 +352,7 @@ export default function InvoicesPage() {
                         {filtered.length === 0 && (
                           <TableRow>
                             <TableCell
-                              colSpan={7}
+                              colSpan={8}
                               className="py-12 text-center text-sm text-muted-foreground"
                             >
                               No invoices found

@@ -27,7 +27,7 @@ import { useData } from "@/lib/data-context";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
 import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
-import { CustomerPortalAccess } from "@/components/customers/customer-portal-access";
+import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-link-card";
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
 
@@ -37,7 +37,7 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
+  const { loading, refresh, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
@@ -102,17 +102,10 @@ export default function CustomerDetailPage({ params }: Props) {
               <ArrowLeft className="size-3.5" data-icon="inline-start" />
               Back
             </Button>
-  <div className="flex gap-2">
-    <CustomerPortalAccess 
-      customerId={customer.id} 
-      customerName={customer.name}
-      customerEmail={customer.email}
-    />
-    <Button size="sm" onClick={() => setEditOpen(true)}>
-      <Pencil className="size-3.5" data-icon="inline-start" />
-      Edit Customer
-    </Button>
-  </div>
+            <Button size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="size-3.5" data-icon="inline-start" />
+              Edit Customer
+            </Button>
           </div>
         }
       />
@@ -221,6 +214,13 @@ export default function CustomerDetailPage({ params }: Props) {
                 </button>
               </CardContent>
             </Card>
+
+            {/* Portal Access Card */}
+            <CustomerPortalLinkCard 
+              customerId={customer.id} 
+              customerName={customer.name}
+              customerEmail={customer.email}
+            />
 
             {/* Quick stats */}
             <Card>
@@ -432,7 +432,10 @@ export default function CustomerDetailPage({ params }: Props) {
 
   {/* Photo Gallery */}
   <div className="space-y-4">
-    <CustomerPhotoUploader customerId={customer.id} />
+    <CustomerPhotoUploader 
+      customerId={customer.id}
+      onPhotoAdded={() => refresh()}
+    />
     <CustomerPhotoGallery photos={photos} />
   </div>
           </div>

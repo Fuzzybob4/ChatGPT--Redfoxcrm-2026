@@ -54,6 +54,17 @@ export interface CustomerPhoto {
   createdAt?: string;
 }
 
+export interface PropertyPhoto {
+  id: string;
+  propertyId: string;
+  customerId: string;
+  photoUrl: string;
+  photoType?: string;
+  description?: string;
+  fileSize?: number;
+  createdAt?: string;
+}
+
 export interface CustomerProperty {
   id: string;
   customerId: string;

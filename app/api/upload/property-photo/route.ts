@@ -6,16 +6,15 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const propertyId = formData.get('propertyId') as string;
     const customerId = formData.get('customerId') as string;
-    const photoType = formData.get('photoType') as string || 'Other';
-    const description = formData.get('description') as string || '';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    if (!customerId) {
-      return NextResponse.json({ error: 'No customer ID provided' }, { status: 400 });
+    if (!propertyId || !customerId) {
+      return NextResponse.json({ error: 'Missing property or customer ID' }, { status: 400 });
     }
 
     // Get authenticated user
@@ -26,9 +25,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Generate a unique filename with customer ID and timestamp
+    // Generate a unique filename with property ID and timestamp
     const timestamp = Date.now();
-    const filename = `customers/${customerId}/photos/${timestamp}-${file.name}`;
+    const filename = `properties/${propertyId}/photos/${timestamp}-${file.name}`;
 
     // Upload to Blob with private access
     const blob = await put(filename, file, {
@@ -37,13 +36,14 @@ export async function POST(request: NextRequest) {
 
     // Save photo metadata to database
     const { data: photoData, error: insertError } = await supabase
-      .from('customer_photos')
+      .from('property_photos')
       .insert({
+        property_id: propertyId,
         customer_id: customerId,
         photo_url: blob.pathname,
         file_size: file.size,
-        photo_type: photoType,
-        description: description,
+        photo_type: file.type,
+        description: '',
         uploaded_by: user.id,
       })
       .select()
@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Return the pathname (not the URL since it's private)
     return NextResponse.json({
       pathname: blob.pathname,
       filename: file.name,

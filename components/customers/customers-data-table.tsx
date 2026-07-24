@@ -14,6 +14,8 @@ import {
   MapPin,
   Phone,
   Mail,
+  Merge,
+  Trash2,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -39,10 +41,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { mergeCustomers } from "@/app/(crm)/customers/merge-actions";
 import type { Customer } from "@/lib/data";
 
 interface CustomersDataTableProps {
   customers: Customer[];
+  onRefresh?: () => void;
 }
 
 type SortField = "name" | "email" | "status" | "createdAt";
@@ -66,15 +70,16 @@ const ALL_COLUMNS = [
   { id: "since", label: "Since" },
 ];
 
-export function CustomersDataTable({ customers }: CustomersDataTableProps) {
+export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableProps) {
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(
-    VISIBLE_COLUMNS_DEFAULT
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [visibleColumns, setVisibleColumns] = useState<(typeof ALL_COLUMNS)[number]["id"][]>(
+    VISIBLE_COLUMNS_DEFAULT as (typeof ALL_COLUMNS)[number]["id"][]
   );
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [isMerging, setIsMerging] = useState(false);
   const [pageSize, setPageSize] = useState(25);
 
   // Filter customers
@@ -154,51 +159,125 @@ export function CustomersDataTable({ customers }: CustomersDataTableProps) {
     }
   };
 
+  const handleMergeCustomers = async () => {
+    if (selectedRows.size < 2) {
+      alert("Please select at least 2 customers to merge");
+      return;
+    }
+
+    const selectedCustomers = sorted.filter((c) => selectedRows.has(c.id));
+    const confirmMessage = `Merge ${selectedRows.size} customers?\n\nCustomers to merge:\n${selectedCustomers
+      .map((c) => `- ${c.name} (${c.email})`)
+      .join("\n")}\n\nThe first customer will be kept as the primary record.\nAll data from other customers will be moved to the primary.`;
+
+    if (confirm(confirmMessage)) {
+      setIsMerging(true);
+      try {
+        const result = await mergeCustomers(Array.from(selectedRows));
+        alert(result.message);
+        setSelectedRows(new Set());
+        if (onRefresh) {
+          onRefresh();
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        alert(`Failed to merge customers: ${errorMessage}`);
+      } finally {
+        setIsMerging(false);
+      }
+    }
+  };
+
+  const handleDeleteCustomers = () => {
+    if (selectedRows.size === 0) return;
+
+    const confirmMessage = `Delete ${selectedRows.size} customer(s)? This action cannot be undone.`;
+    if (confirm(confirmMessage)) {
+      // TODO: Implement delete logic via API
+      console.log("[v0] Delete customers:", Array.from(selectedRows));
+      alert("Delete functionality coming soon. Selected IDs: " + Array.from(selectedRows).join(", "));
+      setSelectedRows(new Set());
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Controls Row */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search customers..."
-            className="pl-9 h-9"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search customers..."
+              className="pl-9 h-9"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Download className="size-4" />
+              Export
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger render={
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Settings2 className="size-4" />
+                  Columns
+                </Button>
+              } />
+              <DropdownMenuContent align="end" className="w-48">
+                {ALL_COLUMNS.map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={visibleColumns.includes(col.id)}
+                    onCheckedChange={() => toggleColumnVisibility(col.id)}
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Download className="size-4" />
-            Export
-          </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger render={
-              <Button variant="outline" size="sm" className="gap-2">
-                <Settings2 className="size-4" />
-                Columns
+        {/* Selection Action Bar */}
+        {selectedRows.size > 0 && (
+          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <span className="text-sm font-medium text-foreground">
+              {selectedRows.size} customer{selectedRows.size !== 1 ? "s" : ""} selected
+            </span>
+            <div className="flex gap-2 ml-auto">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleMergeCustomers}
+                disabled={selectedRows.size < 2 || isMerging}
+                className="gap-2"
+              >
+                {isMerging && <div className="size-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />}
+                {!isMerging && <Merge className="size-3.5" />}
+                {isMerging ? "Merging..." : "Merge"}
               </Button>
-            } />
-            <DropdownMenuContent align="end" className="w-48">
-              {ALL_COLUMNS.map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={visibleColumns.includes(col.id)}
-                  onCheckedChange={() => toggleColumnVisibility(col.id)}
-                >
-                  {col.label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDeleteCustomers}
+                className="gap-2 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
