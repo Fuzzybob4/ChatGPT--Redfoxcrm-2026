@@ -96,3 +96,31 @@ export async function createNotification(data: {
     throw error;
   }
 }
+
+export async function deleteNotification(notificationId: string) {
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from('notifications')
+    .delete()
+    .eq('id', notificationId);
+
+  if (error) {
+    console.error('Error deleting notification:', error);
+    throw error;
+  }
+}
+
+export async function deleteAllNotifications(orgId: string) {
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from('notifications')
+    .delete()
+    .eq('org_id', orgId);
+
+  if (error) {
+    console.error('Error deleting all notifications:', error);
+    throw error;
+  }
+}
