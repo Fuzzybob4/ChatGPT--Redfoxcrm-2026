@@ -7,6 +7,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const customerId = formData.get('customerId') as string;
+    const photoType = formData.get('photoType') as string || 'Other';
+    const description = formData.get('description') as string || '';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -40,8 +42,8 @@ export async function POST(request: NextRequest) {
         customer_id: customerId,
         photo_url: blob.pathname,
         file_size: file.size,
-        photo_type: file.type,
-        description: '',
+        photo_type: photoType,
+        description: description,
         uploaded_by: user.id,
       })
       .select()
