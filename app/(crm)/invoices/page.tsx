@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Send, CheckCircle, AlertCircle, FileText, Trash2, Download, Merge2 } from "lucide-react";
+import { Plus, Search, Send, CheckCircle, AlertCircle, FileText, Trash2, Download, GitMerge } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -227,7 +227,7 @@ export default function InvoicesPage() {
                   className="gap-2"
                   disabled={selectedIds.size < 2}
                 >
-                  <Merge2 className="size-3.5" />
+                  <GitMerge className="size-3.5" />
                   Merge
                 </Button>
                 <Button
