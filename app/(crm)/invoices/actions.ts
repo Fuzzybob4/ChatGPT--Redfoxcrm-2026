@@ -172,6 +172,101 @@ export async function createInvoice(input: CreateInvoiceInput) {
 /**
  * Update invoice status — always verifies org ownership before mutating.
  */
+export async function createPaymentAndWorkOrder(data: {
+  invoiceId: string;
+  customerId: string;
+  paymentType: "full" | "deposit";
+  amountReceived: number;
+  createWorkOrder: boolean;
+  notes?: string;
+}) {
+  const supabase = await createClient();
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  if (!Number.isFinite(data.amountReceived) || data.amountReceived <= 0) {
+    throw new Error("Payment amount must be greater than zero");
+  }
+
+  const { data: invoice, error: invoiceError } = await supabase
+    .from("invoices")
+    .select("id, total_amount, amount_paid, customer_id")
+    .eq("id", data.invoiceId)
+    .eq("org_id", org.orgId)
+    .single();
+  if (invoiceError || !invoice) throw new Error("Invoice not found");
+  if (invoice.customer_id !== data.customerId) throw new Error("Customer does not match invoice");
+
+  const total = Number(invoice.total_amount ?? 0);
+  const previousPaid = Number(invoice.amount_paid ?? 0);
+  if (data.amountReceived > Math.max(total - previousPaid, 0)) {
+    throw new Error("Payment cannot exceed the remaining balance");
+  }
+
+  const newAmountPaid = previousPaid + data.amountReceived;
+  const isFullyPaid = newAmountPaid >= total;
+  const { error: updateError } = await supabase
+    .from("invoices")
+    .update({
+      amount_paid: newAmountPaid,
+      status: isFullyPaid ? "paid" : "sent",
+      paid_at: isFullyPaid ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", data.invoiceId)
+    .eq("org_id", org.orgId);
+  if (updateError) throw new Error(updateError.message);
+
+  const { error: termsError } = await supabase.from("payment_terms").upsert({
+    invoice_id: data.invoiceId,
+    org_id: org.orgId,
+    payment_type: data.paymentType,
+    deposit_amount: data.paymentType === "deposit" ? data.amountReceived : null,
+    full_payment_amount: total,
+    deposit_paid_date: data.paymentType === "deposit" ? new Date().toISOString() : null,
+    full_payment_paid_date: isFullyPaid ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "invoice_id" });
+  if (termsError) throw new Error(termsError.message);
+
+  if (data.createWorkOrder && isFullyPaid) {
+    const { data: existingJob } = await supabase
+      .from("scheduled_jobs")
+      .select("id")
+      .eq("invoice_id", data.invoiceId)
+      .eq("org_id", org.orgId)
+      .limit(1)
+      .maybeSingle();
+    if (!existingJob) {
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name, address, city, state, zip_code")
+        .eq("id", data.customerId)
+        .eq("org_id", org.orgId)
+        .single();
+      await supabase.from("scheduled_jobs").insert({
+        org_id: org.orgId,
+        customer_id: data.customerId,
+        invoice_id: data.invoiceId,
+        title: `Pending Installation – ${customer?.name ?? "Customer"}`,
+        job_type: "install",
+        address: customer?.address ?? null,
+        city: customer?.city ?? null,
+        state: customer?.state ?? null,
+        zip_code: customer?.zip_code ?? null,
+        notes: data.notes || "Created after full invoice payment",
+        status: "pending",
+        status_key: "pending",
+        season_year: new Date().getFullYear(),
+      });
+    }
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${data.invoiceId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/mapping");
+}
+
 export async function updateInvoiceStatus(
   invoiceId: string,
   status: "draft" | "sent" | "paid" | "overdue",

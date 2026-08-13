@@ -19,6 +19,20 @@ export function getResendClient(): Resend {
   return new Resend(key);
 }
 
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  from = "RedFox CRM <onboarding@resend.dev>",
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+}) {
+  return getResendClient().emails.send({ from, to, subject, html });
+}
+
 // ── Plan quota limits ─────────────────────────────────────────────────────────
 
 const PLAN_LIMITS: Record<string, number> = {

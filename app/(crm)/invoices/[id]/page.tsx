@@ -3,7 +3,8 @@
 import { use, useTransition } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Send, CheckCircle, Printer, Download } from "lucide-react";
+import { ArrowLeft, Send, Printer, Download } from "lucide-react";
+import { MarkAsPaidDialog } from "@/components/invoices/mark-as-paid-dialog";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -71,11 +72,13 @@ export default function InvoiceDetailPage({ params }: Props) {
                 {pending ? "Sending..." : "Send Invoice"}
               </Button>
             )}
-            {invoice.status === "Sent" && (
-              <Button size="sm" disabled={pending} onClick={() => handleStatusUpdate("paid")}>
-                <CheckCircle className="size-3.5" data-icon="inline-start" />
-                {pending ? "Updating..." : "Mark Paid"}
-              </Button>
+            {(invoice.status === "Sent" || invoice.status === "Overdue") && (
+              <MarkAsPaidDialog
+                invoiceId={invoice.id}
+                customerId={invoice.customerId}
+                total={total}
+                onComplete={() => startTransition(async () => { await refresh(); })}
+              />
             )}
           </div>
         }
