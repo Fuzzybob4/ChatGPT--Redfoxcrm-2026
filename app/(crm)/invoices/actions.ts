@@ -24,6 +24,12 @@ const workOrderSchema = z.object({
   seasonYear: z.number().int().min(2000).max(2100).optional(),
 });
 
+const lineItemSchema = z.object({
+  description: z.string().min(1, "Description is required").max(500),
+  quantity: z.number().positive("Quantity must be greater than zero"),
+  unitPrice: z.number().min(0, "Unit price cannot be negative"),
+});
+
 const createInvoiceSchema = z.object({
   customerId: uuidSchema,
   locationId: uuidSchema.optional(),
@@ -31,10 +37,15 @@ const createInvoiceSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().max(2000).optional(),
   totalAmount: z.number().positive("Total amount must be greater than zero").max(1_000_000),
+  subtotal: z.number().min(0).optional(),
+  taxRate: z.number().min(0).max(100).optional(),
+  taxAmount: z.number().min(0).optional(),
+  depositAmount: z.number().min(0).optional(),
   dueDate: z.string()
     .min(1, "Due date is required")
     .refine((dateStr) => !isNaN(Date.parse(dateStr)), "Due date must be a valid date"),
   notes: z.string().max(2000).optional(),
+  lineItems: z.array(lineItemSchema).min(1, "At least one line item is required").optional(),
   workOrder: workOrderSchema.optional(),
 });
 
@@ -111,7 +122,12 @@ export async function createInvoice(input: CreateInvoiceInput) {
       invoice_number: invoiceNumber,
       title: data.title,
       description: data.description ?? null,
+      subtotal: data.subtotal ?? data.totalAmount,
+      tax_rate: data.taxRate ?? 0,
+      tax_amount: data.taxAmount ?? 0,
       total_amount: data.totalAmount,
+      deposit_amount: data.depositAmount ?? 0,
+      balance_due: data.totalAmount,
       due_date: data.dueDate,
       notes: data.notes ?? null,
       status: "draft",
@@ -120,6 +136,21 @@ export async function createInvoice(input: CreateInvoiceInput) {
     .single();
 
   if (invErr || !invoice) throw new Error(invErr?.message ?? "Failed to create invoice");
+
+  // Persist line items alongside the invoice so they render on the detail page
+  if (data.lineItems && data.lineItems.length > 0) {
+    const lineItemRows = data.lineItems.map((item, index) => ({
+      org_id: org.orgId,
+      invoice_id: invoice.id,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      line_total: Math.round(item.quantity * item.unitPrice * 100) / 100,
+      sort_order: index,
+    }));
+    const { error: lineItemErr } = await supabase.from("invoice_line_items").insert(lineItemRows);
+    if (lineItemErr) throw new Error(lineItemErr.message);
+  }
 
   // Mark estimate as converted
   if (data.estimateId) {

@@ -2,17 +2,35 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
+import { createInvoice } from '../actions';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  User,
+  Percent,
+  CalendarClock,
+  Bell,
+} from 'lucide-react';
 
 interface LineItem {
   id: string;
@@ -21,412 +39,500 @@ interface LineItem {
   unitPrice: number;
 }
 
+const REMINDER_OPTIONS = [2, 7, 14];
+
+function formatCurrency(value: number) {
+  return value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  });
+}
+
 export default function NewInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedLocationId } = useLocation();
   const { getLocationCustomers } = useData();
+
   const [customerId, setCustomerId] = useState('');
+  const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', description: '', quantity: 1, unitPrice: 0 },
   ]);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  // Tax and Payment Options
   const [includeTax, setIncludeTax] = useState(true);
-  const [taxRate, setTaxRate] = useState(8.5); // default tax rate
+  const [taxRate, setTaxRate] = useState(8.5);
   const [paymentType, setPaymentType] = useState<'full' | 'deposit'>('full');
   const [depositPercentage, setDepositPercentage] = useState(50);
-  const [depositDueDate, setDepositDueDate] = useState('');
-  
-  // Email Reminder Options
+
   const [enableEmailReminders, setEnableEmailReminders] = useState(true);
-  const [reminderDays, setReminderDays] = useState<number[]>([2, 7]); // default: 2 and 7 days
+  const [reminderDays, setReminderDays] = useState<number[]>([2, 7]);
 
-  // Pre-fill customer if provided in query params
-  useEffect(() => {
-    const customerParam = searchParams.get('customer');
-    if (customerParam) {
-      setCustomerId(customerParam);
-    }
-  }, [searchParams]);
-
-  // Filter customers by location
   const locationCustomers = getLocationCustomers(selectedLocationId);
 
+  useEffect(() => {
+    const customerParam = searchParams.get('customer');
+    if (customerParam) setCustomerId(customerParam);
+  }, [searchParams]);
+
+  const selectedCustomer = useMemo(
+    () => locationCustomers.find((c) => c.id === customerId),
+    [locationCustomers, customerId],
+  );
+
   const addLineItem = () => {
-    setLineItems([
-      ...lineItems,
-      { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0 },
+    setLineItems((items) => [
+      ...items,
+      { id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0 },
     ]);
   };
 
   const removeLineItem = (id: string) => {
-    setLineItems(lineItems.filter((item) => item.id !== id));
+    setLineItems((items) => (items.length > 1 ? items.filter((item) => item.id !== id) : items));
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: string | number) => {
-    setLineItems(
-      lineItems.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
+    setLineItems((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
-  };
-
-  const handleSave = async () => {
-    if (!customerId) {
-      alert('Please select a customer');
-      return;
-    }
-
-    setIsSaving(true);
-    // In production, this would call an API
-    setTimeout(() => {
-      router.push('/invoices');
-    }, 500);
   };
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const taxAmount = includeTax ? (subtotal * taxRate) / 100 : 0;
   const total = subtotal + taxAmount;
-  const depositAmount = paymentType === 'deposit' ? (total * depositPercentage) / 100 : total;
+  const depositAmount = paymentType === 'deposit' ? (total * depositPercentage) / 100 : 0;
+  const balanceDue = paymentType === 'deposit' ? total - depositAmount : total;
+
+  const toggleReminderDay = (day: number, checked: boolean) => {
+    setReminderDays((days) =>
+      checked ? [...days, day].sort((a, b) => a - b) : days.filter((d) => d !== day),
+    );
+  };
+
+  const isValid =
+    customerId &&
+    title.trim() &&
+    dueDate &&
+    lineItems.every((item) => item.description.trim() && item.quantity > 0) &&
+    total > 0;
+
+  const handleSave = async () => {
+    setError('');
+    if (!customerId) {
+      setError('Select a customer to continue.');
+      return;
+    }
+    if (!title.trim()) {
+      setError('Add a title for this invoice.');
+      return;
+    }
+    if (!dueDate) {
+      setError('Set a due date for this invoice.');
+      return;
+    }
+    if (!isValid) {
+      setError('Every line item needs a description, quantity, and total greater than zero.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const invoiceId = await createInvoice({
+        customerId,
+        locationId: selectedLocationId || undefined,
+        title: title.trim(),
+        notes: notes.trim() || undefined,
+        subtotal,
+        taxRate: includeTax ? taxRate : 0,
+        taxAmount,
+        totalAmount: total,
+        depositAmount: paymentType === 'deposit' ? depositAmount : 0,
+        dueDate,
+        lineItems: lineItems.map((item) => ({
+          description: item.description.trim(),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      });
+      router.push(`/invoices/${invoiceId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create invoice.');
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <PageHeader
         title="New Invoice"
+        description="Build a professional invoice for your customer"
         actions={
           <Link href="/invoices">
             <Button variant="outline" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Invoices
             </Button>
           </Link>
         }
       />
 
-      {/* Content */}
-      <div className="flex-1 p-6 overflow-auto max-w-4xl">
-        <div className="space-y-6">
-          {/* Customer & Details Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Invoice Details</CardTitle>
-              <CardDescription>Select customer and set due date</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Customer *</label>
-                  <Select value={customerId} onValueChange={(v) => setCustomerId(v || '')}>
-                    <SelectGroup>
-                      <SelectItem value="">Select a customer...</SelectItem>
-                      {locationCustomers.map((cust) => (
-                        <SelectItem key={cust.id} value={cust.id}>
-                          {cust.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </Select>
+      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Left column: main invoice builder */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Customer + basics */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  Customer &amp; Invoice Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer">Customer</Label>
+                    <Select value={customerId} onValueChange={(value) => setCustomerId(value ?? '')}>
+                      <SelectTrigger id="customer" className="w-full">
+                        <SelectValue placeholder="Select a customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locationCustomers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="due-date">Due Date</Label>
+                    <Input
+                      id="due-date"
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                    />
+                  </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Due Date</label>
+                  <Label htmlFor="title">Invoice Title</Label>
                   <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
+                    id="title"
+                    placeholder="e.g. Holiday Lighting Installation – Front & Back Yard"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Line Items */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Line Items</CardTitle>
-                  <CardDescription>Add invoice line items</CardDescription>
-                </div>
+                {selectedCustomer && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                    <p className="font-medium text-foreground">{selectedCustomer.name}</p>
+                    <p className="text-muted-foreground">
+                      {[selectedCustomer.email, selectedCustomer.phone].filter(Boolean).join(' · ')}
+                    </p>
+                    {selectedCustomer.address && (
+                      <p className="text-muted-foreground">
+                        {[selectedCustomer.address, selectedCustomer.city, selectedCustomer.state]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Line items */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Line Items</CardTitle>
                 <Button onClick={addLineItem} size="sm" variant="outline">
-                  <Plus className="w-4 h-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {lineItems.map((item) => (
-                  <div key={item.id} className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">Description</label>
+              </CardHeader>
+              <CardContent>
+                <div className="hidden grid-cols-[1fr_80px_120px_120px_36px] gap-3 px-1 pb-2 text-xs font-medium text-muted-foreground sm:grid">
+                  <span>Description</span>
+                  <span className="text-right">Qty</span>
+                  <span className="text-right">Unit Price</span>
+                  <span className="text-right">Line Total</span>
+                  <span />
+                </div>
+                <div className="space-y-2">
+                  {lineItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_80px_120px_120px_36px] sm:border-0 sm:p-0"
+                    >
                       <Input
-                        placeholder="Item description"
+                        placeholder="Service or product description"
                         value={item.description}
-                        onChange={(e) =>
-                          updateLineItem(item.id, 'description', e.target.value)
-                        }
+                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                       />
-                    </div>
-                    <div className="w-20">
-                      <label className="text-xs text-muted-foreground">Qty</label>
                       <Input
                         type="number"
-                        placeholder="1"
+                        min="0"
+                        step="1"
+                        className="text-right"
                         value={item.quantity}
                         onChange={(e) =>
-                          updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 0)
+                          updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)
                         }
                       />
-                    </div>
-                    <div className="w-24">
-                      <label className="text-xs text-muted-foreground">Unit Price</label>
                       <Input
                         type="number"
-                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        className="text-right"
                         value={item.unitPrice}
                         onChange={(e) =>
                           updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)
                         }
                       />
-                    </div>
-                    <div className="w-24">
-                      <label className="text-xs text-muted-foreground">Total</label>
-                      <div className="text-sm font-medium py-2">
-                        ${(item.quantity * item.unitPrice).toFixed(2)}
+                      <div className="text-right text-sm font-medium text-foreground">
+                        {formatCurrency(item.quantity * item.unitPrice)}
                       </div>
+                      <Button
+                        onClick={() => removeLineItem(item.id)}
+                        size="icon"
+                        variant="ghost"
+                        disabled={lineItems.length === 1}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Remove line item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      onClick={() => removeLineItem(item.id)}
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="Add any additional notes for this invoice..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={4}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Tax Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Tax Settings</CardTitle>
-              <CardDescription>Configure tax for this invoice</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Checkbox 
-                  checked={includeTax}
-                  onChange={(e) => setIncludeTax(e.currentTarget.checked)}
+            {/* Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Notes for Customer</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  placeholder="Add payment instructions, warranty details, or a thank-you note..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={4}
                 />
-                <label className="text-sm font-medium text-foreground">Include Tax</label>
-              </div>
-              
-              {includeTax && (
-                <div className="space-y-1.5 pl-7">
-                  <label className="text-sm font-medium text-foreground">Tax Rate (%)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={taxRate}
-                    onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                    placeholder="8.5"
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Payment Terms */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Terms</CardTitle>
-              <CardDescription>Set payment structure and due dates</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    id="full-payment"
-                    name="payment-type"
-                    value="full"
-                    checked={paymentType === 'full'}
-                    onChange={(e) => setPaymentType(e.target.value as 'full' | 'deposit')}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="full-payment" className="text-sm font-medium text-foreground">
-                    Full Payment
-                  </label>
+            {/* Payment terms */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  Payment Terms
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType('full')}
+                    className={`rounded-lg border p-3 text-left transition-colors ${
+                      paymentType === 'full'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/40'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-foreground">Full Payment</p>
+                    <p className="text-xs text-muted-foreground">Due in full by the due date</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType('deposit')}
+                    className={`rounded-lg border p-3 text-left transition-colors ${
+                      paymentType === 'deposit'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/40'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-foreground">Deposit + Balance</p>
+                    <p className="text-xs text-muted-foreground">Collect a deposit up front</p>
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    id="deposit-payment"
-                    name="payment-type"
-                    value="deposit"
-                    checked={paymentType === 'deposit'}
-                    onChange={(e) => setPaymentType(e.target.value as 'full' | 'deposit')}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="deposit-payment" className="text-sm font-medium text-foreground">
-                    50% Deposit + Balance
-                  </label>
-                </div>
-              </div>
-
-              {paymentType === 'deposit' && (
-                <div className="space-y-3 pl-7">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Deposit Percentage</label>
-                    <Input
-                      type="number"
-                      step="1"
-                      min="0"
-                      max="100"
-                      value={depositPercentage}
-                      onChange={(e) => setDepositPercentage(parseFloat(e.target.value) || 0)}
-                      placeholder="50"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Deposit Due Date</label>
-                    <Input
-                      type="date"
-                      value={depositDueDate}
-                      onChange={(e) => setDepositDueDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                    Deposit: ${depositAmount.toFixed(2)} | Balance: ${(total - depositAmount).toFixed(2)}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Full Payment Due Date</label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Email Reminders */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Reminders</CardTitle>
-              <CardDescription>Configure automatic payment reminders for customer</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Checkbox 
-                  checked={enableEmailReminders}
-                  onChange={(e) => setEnableEmailReminders(e.currentTarget.checked)}
-                />
-                <label className="text-sm font-medium text-foreground">Enable Email Reminders</label>
-              </div>
-
-              {enableEmailReminders && (
-                <div className="space-y-3 pl-7">
-                  <label className="text-sm font-medium text-foreground">Reminder Schedule (days after invoice)</label>
-                  <div className="space-y-2">
-                    {[2, 7, 14].map((days) => (
-                      <div key={days} className="flex items-center gap-3">
-                        <Checkbox
-                          checked={reminderDays.includes(days)}
-                          onChange={(e) => {
-                            if (e.currentTarget.checked) {
-                              setReminderDays([...reminderDays, days].sort((a, b) => a - b));
-                            } else {
-                              setReminderDays(reminderDays.filter((d) => d !== days));
-                            }
-                          }}
-                        />
-                        <label className="text-sm text-foreground">{days} days</label>
-                      </div>
-                    ))}
-                  </div>
-                  {reminderDays.length === 0 && (
-                    <p className="text-xs text-muted-foreground">At least one reminder should be selected</p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Totals */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-2 text-right">
-                <div className="flex justify-end gap-4">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">${subtotal.toFixed(2)}</span>
-                </div>
-                {includeTax && (
-                  <div className="flex justify-end gap-4">
-                    <span className="text-muted-foreground">Tax ({taxRate}%):</span>
-                    <span className="font-medium">${taxAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-end gap-4 text-lg font-semibold pt-2 border-t">
-                  <span>Total:</span>
-                  <span>${total.toFixed(2)}</span>
-                </div>
                 {paymentType === 'deposit' && (
-                  <>
-                    <div className="flex justify-end gap-4 text-sm pt-2 border-t text-muted-foreground">
-                      <span>Deposit ({depositPercentage}%):</span>
-                      <span>${depositAmount.toFixed(2)}</span>
+                  <div className="space-y-1.5 rounded-lg bg-muted/40 p-3">
+                    <Label htmlFor="deposit-pct">Deposit Percentage</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="deposit-pct"
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={depositPercentage}
+                        onChange={(e) => setDepositPercentage(parseFloat(e.target.value) || 0)}
+                        className="w-24"
+                      />
+                      <Percent className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {formatCurrency(depositAmount)} due now, {formatCurrency(balanceDue)} due later
+                      </span>
                     </div>
-                    <div className="flex justify-end gap-4 text-sm text-muted-foreground">
-                      <span>Balance:</span>
-                      <span>${(total - depositAmount).toFixed(2)}</span>
-                    </div>
-                  </>
+                  </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Actions */}
-          <div className="flex gap-2 justify-end pb-6">
-            <Link href="/invoices">
-              <Button variant="outline">Cancel</Button>
-            </Link>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving || !customerId}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isSaving ? 'Saving...' : 'Create Invoice'}
-            </Button>
+            {/* Email reminders */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  Email Reminders
+                </CardTitle>
+                <Switch
+                  checked={enableEmailReminders}
+                  onCheckedChange={setEnableEmailReminders}
+                  aria-label="Enable email reminders"
+                />
+              </CardHeader>
+              {enableEmailReminders && (
+                <CardContent>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Send automatic payment reminders after the invoice is sent
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {REMINDER_OPTIONS.map((day) => {
+                      const active = reminderDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleReminderDay(day, !active)}
+                          className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                            active
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border text-muted-foreground hover:bg-muted/40'
+                          }`}
+                        >
+                          {day} days
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </div>
+
+          {/* Right column: sticky summary */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-6 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="font-medium text-foreground">{formatCurrency(subtotal)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Tax</span>
+                      <Switch
+                        checked={includeTax}
+                        onCheckedChange={setIncludeTax}
+                        size="sm"
+                        aria-label="Include tax"
+                      />
+                    </div>
+                    {includeTax ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={taxRate}
+                          onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                          className="h-7 w-16 text-right"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+                  {includeTax && (
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Tax amount</span>
+                      <span>{formatCurrency(taxAmount)}</span>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between text-base font-semibold text-foreground">
+                    <span>Total</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+
+                  {paymentType === 'deposit' && (
+                    <>
+                      <Separator />
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Deposit due now
+                          <Badge variant="secondary" className="ml-2">
+                            {depositPercentage}%
+                          </Badge>
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {formatCurrency(depositAmount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Balance due later</span>
+                        <span className="font-medium text-foreground">
+                          {formatCurrency(balanceDue)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {error && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving || !isValid}
+                  className="w-full"
+                  size="lg"
+                >
+                  {isSaving ? 'Creating Invoice...' : 'Create Invoice'}
+                </Button>
+                <Link href="/invoices" className="w-full">
+                  <Button variant="outline" className="w-full">
+                    Cancel
+                  </Button>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
