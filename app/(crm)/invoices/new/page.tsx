@@ -30,6 +30,7 @@ import {
   Percent,
   CalendarClock,
   Bell,
+  Sparkles,
 } from 'lucide-react';
 
 interface LineItem {
@@ -37,6 +38,14 @@ interface LineItem {
   description: string;
   quantity: number;
   unitPrice: number;
+}
+
+interface AddonItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  maxQuantity: number;
 }
 
 const REMINDER_OPTIONS = [2, 7, 14];
@@ -72,6 +81,9 @@ export default function NewInvoicePage() {
 
   const [enableEmailReminders, setEnableEmailReminders] = useState(true);
   const [reminderDays, setReminderDays] = useState<number[]>([2, 7]);
+
+  const [allowAddons, setAllowAddons] = useState(false);
+  const [addonItems, setAddonItems] = useState<AddonItem[]>([]);
 
   const locationCustomers = getLocationCustomers(selectedLocationId);
 
@@ -114,12 +126,32 @@ export default function NewInvoicePage() {
     );
   };
 
+  const addAddonItem = () => {
+    setAddonItems((items) => [
+      ...items,
+      { id: crypto.randomUUID(), name: '', description: '', price: 0, maxQuantity: 1 },
+    ]);
+  };
+
+  const removeAddonItem = (id: string) => {
+    setAddonItems((items) => items.filter((item) => item.id !== id));
+  };
+
+  const updateAddonItem = (id: string, field: keyof AddonItem, value: string | number) => {
+    setAddonItems((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  };
+
+  const validAddonItems = addonItems.filter((item) => item.name.trim() && item.price >= 0);
+
   const isValid =
     customerId &&
     title.trim() &&
     dueDate &&
     lineItems.every((item) => item.description.trim() && item.quantity > 0) &&
-    total > 0;
+    total > 0 &&
+    (!allowAddons || validAddonItems.length > 0);
 
   const handleSave = async () => {
     setError('');
@@ -133,6 +165,10 @@ export default function NewInvoicePage() {
     }
     if (!dueDate) {
       setError('Set a due date for this invoice.');
+      return;
+    }
+    if (allowAddons && validAddonItems.length === 0) {
+      setError('Add at least one optional item, or turn off optional add-ons.');
       return;
     }
     if (!isValid) {
@@ -158,6 +194,15 @@ export default function NewInvoicePage() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
+        allowAddons,
+        addonItems: allowAddons
+          ? validAddonItems.map((item) => ({
+              name: item.name.trim(),
+              description: item.description.trim() || undefined,
+              price: item.price,
+              maxQuantity: item.maxQuantity,
+            }))
+          : undefined,
       });
       router.push(`/invoices/${invoiceId}`);
     } catch (err) {
@@ -427,6 +472,91 @@ export default function NewInvoicePage() {
                       );
                     })}
                   </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* Optional add-ons for the customer */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    Optional Add-Ons
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Let the customer add these extras themselves when they view the emailed
+                    invoice
+                  </p>
+                </div>
+                <Switch
+                  checked={allowAddons}
+                  onCheckedChange={(checked) => {
+                    setAllowAddons(checked);
+                    if (checked && addonItems.length === 0) addAddonItem();
+                  }}
+                  aria-label="Allow customer add-ons"
+                />
+              </CardHeader>
+              {allowAddons && (
+                <CardContent className="space-y-3">
+                  {addonItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1.4fr_1.6fr_100px_90px_36px] sm:items-start"
+                    >
+                      <Input
+                        placeholder="Add-on name (e.g. Extended Warranty)"
+                        value={item.name}
+                        onChange={(e) => updateAddonItem(item.id, 'name', e.target.value)}
+                      />
+                      <Input
+                        placeholder="Short description shown to customer"
+                        value={item.description}
+                        onChange={(e) => updateAddonItem(item.id, 'description', e.target.value)}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Price"
+                        className="text-right"
+                        value={item.price}
+                        onChange={(e) =>
+                          updateAddonItem(item.id, 'price', parseFloat(e.target.value) || 0)
+                        }
+                      />
+                      <Input
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="1"
+                        title="Max quantity a customer can add"
+                        className="text-right"
+                        value={item.maxQuantity}
+                        onChange={(e) =>
+                          updateAddonItem(
+                            item.id,
+                            'maxQuantity',
+                            parseInt(e.target.value, 10) || 1,
+                          )
+                        }
+                      />
+                      <Button
+                        onClick={() => removeAddonItem(item.id)}
+                        size="icon"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Remove optional add-on"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button onClick={addAddonItem} size="sm" variant="outline">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Optional Item
+                  </Button>
                 </CardContent>
               )}
             </Card>

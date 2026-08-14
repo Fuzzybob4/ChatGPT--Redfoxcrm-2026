@@ -30,6 +30,13 @@ const lineItemSchema = z.object({
   unitPrice: z.number().min(0, "Unit price cannot be negative"),
 });
 
+const addonItemSchema = z.object({
+  name: z.string().min(1, "Add-on name is required").max(200),
+  description: z.string().max(500).optional(),
+  price: z.number().min(0, "Price cannot be negative"),
+  maxQuantity: z.number().int().positive().max(99).optional(),
+});
+
 const createInvoiceSchema = z.object({
   customerId: uuidSchema,
   locationId: uuidSchema.optional(),
@@ -46,6 +53,8 @@ const createInvoiceSchema = z.object({
     .refine((dateStr) => !isNaN(Date.parse(dateStr)), "Due date must be a valid date"),
   notes: z.string().max(2000).optional(),
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required").optional(),
+  allowAddons: z.boolean().optional(),
+  addonItems: z.array(addonItemSchema).max(20).optional(),
   workOrder: workOrderSchema.optional(),
 });
 
@@ -131,6 +140,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       due_date: data.dueDate,
       notes: data.notes ?? null,
       status: "draft",
+      allow_addons: Boolean(data.allowAddons && data.addonItems && data.addonItems.length > 0),
     })
     .select("id")
     .single();
@@ -150,6 +160,21 @@ export async function createInvoice(input: CreateInvoiceInput) {
     }));
     const { error: lineItemErr } = await supabase.from("invoice_line_items").insert(lineItemRows);
     if (lineItemErr) throw new Error(lineItemErr.message);
+  }
+
+  // Persist optional add-on items the customer can choose to add when viewing the invoice
+  if (data.allowAddons && data.addonItems && data.addonItems.length > 0) {
+    const addonRows = data.addonItems.map((addon, index) => ({
+      org_id: org.orgId,
+      invoice_id: invoice.id,
+      name: addon.name,
+      description: addon.description ?? null,
+      price: addon.price,
+      max_quantity: addon.maxQuantity ?? 1,
+      sort_order: index,
+    }));
+    const { error: addonErr } = await supabase.from("invoice_addon_products").insert(addonRows);
+    if (addonErr) throw new Error(addonErr.message);
   }
 
   // Mark estimate as converted
