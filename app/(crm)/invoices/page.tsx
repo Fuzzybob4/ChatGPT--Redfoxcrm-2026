@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Send, CheckCircle, AlertCircle, FileText, Trash2, Download, Merge2 } from "lucide-react";
+import { Plus, Search, Send, CheckCircle, AlertCircle, Trash2, Download, GitMerge } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -36,11 +36,14 @@ export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | InvoiceStatus>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const { loading, invoices: allInvoices, getCustomerById } = useData();
+  const { loading, invoices: allInvoices, estimates: allEstimates, getCustomerById } = useData();
   const { selectedLocationId } = useLocation();
   const invoices = selectedLocationId
     ? allInvoices.filter((i) => i.locationId === selectedLocationId)
     : allInvoices;
+  const estimates = selectedLocationId
+    ? allEstimates.filter((estimate) => estimate.locationId === selectedLocationId)
+    : allEstimates;
 
   const filtered = invoices.filter((inv) => {
     const customer = getCustomerById(inv.customerId);
@@ -51,17 +54,20 @@ export default function InvoicesPage() {
     return matchesQuery && matchesTab;
   });
 
-  const totalPaid = invoices
-    .filter((i) => i.status === "Paid")
-    .reduce((s, i) => s + getInvoiceTotal(i), 0);
-
-  const totalSent = invoices
-    .filter((i) => i.status === "Sent")
-    .reduce((s, i) => s + getInvoiceTotal(i), 0);
-
-  const totalOverdue = invoices
-    .filter((i) => i.status === "Overdue")
-    .reduce((s, i) => s + getInvoiceTotal(i), 0);
+  const today = new Date();
+  const totalPaid = invoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const totalSent = invoices.reduce(
+    (sum, invoice) => sum + Math.max(getInvoiceTotal(invoice) - invoice.amountPaid, 0),
+    0,
+  );
+  const totalOverdue = invoices.reduce((sum, invoice) => {
+    const isPastDue = invoice.dueDate && new Date(invoice.dueDate) < today;
+    const isUnpaid = invoice.amountPaid < getInvoiceTotal(invoice);
+    return sum + (isPastDue && isUnpaid ? Math.max(getInvoiceTotal(invoice) - invoice.amountPaid, 0) : 0);
+  }, 0);
+  const pendingEstimates = estimates.filter((estimate) =>
+    estimate.status === "Draft" || estimate.status === "Sent",
+  ).length;
 
   const counts: Record<string, number> = {
     all: invoices.length,
@@ -183,10 +189,10 @@ export default function InvoicesPage() {
             trendLabel={`${counts.Overdue} overdue`}
           />
           <StatCard
-            title="Drafts"
-            value={counts.Draft}
-            icon={FileText}
-            trendLabel="Not yet sent"
+            title="Pending Estimates"
+            value={pendingEstimates}
+            icon={Send}
+            trendLabel="Draft or sent"
           />
         </div>
 
@@ -227,7 +233,7 @@ export default function InvoicesPage() {
                   className="gap-2"
                   disabled={selectedIds.size < 2}
                 >
-                  <Merge2 className="size-3.5" />
+                  <GitMerge className="size-3.5" />
                   Merge
                 </Button>
                 <Button
@@ -272,7 +278,7 @@ export default function InvoicesPage() {
                           <TableHead className="w-12">
                             <Checkbox
                               checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                              indeterminate={selectedIds.size > 0 && selectedIds.size < filtered.length}
+                              aria-label="Select all visible invoices"
                               onChange={(e) => handleSelectAll(e.currentTarget.checked)}
                             />
                           </TableHead>

@@ -1,15 +1,26 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import type { Database } from '@/types/database';
 
-type TaxSettings = Database['public']['Tables']['tax_settings']['Row'];
-type PaymentTerms = Database['public']['Tables']['payment_terms']['Row'];
-type EmailReminder = Database['public']['Tables']['invoice_email_reminders']['Row'];
+type TaxSettings = {
+  id: string;
+  created_at: string;
+  [key: string]: unknown;
+};
+
+type EmailReminder = {
+  org_id: string;
+  invoice_id: string;
+  customer_id: string;
+  reminder_type: 'invoice_sent' | 'payment_reminder' | 'overdue_notice';
+  reminder_day_offset: number;
+  scheduled_for: Date;
+  email_address: string;
+};
 
 // Tax Settings Actions
 export async function getTaxSettings(orgId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('tax_settings')
@@ -29,7 +40,7 @@ export async function createTaxSetting(
   description?: string,
   isDefault: boolean = false
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // If setting as default, unset other defaults
   if (isDefault) {
@@ -59,7 +70,7 @@ export async function updateTaxSetting(
   taxSettingId: string,
   updates: Partial<Omit<TaxSettings, 'id' | 'created_at'>>
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('tax_settings')
@@ -73,7 +84,7 @@ export async function updateTaxSetting(
 }
 
 export async function deleteTaxSetting(taxSettingId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { error } = await supabase
     .from('tax_settings')
@@ -93,7 +104,7 @@ export async function setInvoicePaymentTerms(
   depositPercentage?: number,
   depositDueDate?: string
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const depositAmount = depositPercentage 
     ? (fullPaymentAmount * depositPercentage) / 100 
@@ -122,7 +133,7 @@ export async function setInvoicePaymentTerms(
 }
 
 export async function getInvoicePaymentTerms(invoiceId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('payment_terms')
@@ -138,7 +149,7 @@ export async function getInvoicePaymentTerms(invoiceId: string) {
 
 // Email Reminder Settings Actions
 export async function getEmailReminderSettings(orgId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('email_reminder_settings')
@@ -155,7 +166,7 @@ export async function updateEmailReminderSettings(
   enabled: boolean,
   reminderIntervals: number[] // [2, 7, 14]
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('email_reminder_settings')
@@ -183,7 +194,7 @@ export async function scheduleInvoiceEmailReminders(
   customerEmail: string,
   invoiceCreatedDate: Date
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Get email reminder settings
   const settings = await getEmailReminderSettings(orgId);
@@ -230,7 +241,7 @@ export async function scheduleInvoiceEmailReminders(
 
 // Get pending email reminders to send
 export async function getPendingEmailReminders() {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const now = new Date().toISOString();
 
@@ -255,7 +266,7 @@ export async function getPendingEmailReminders() {
 
 // Mark reminder as sent
 export async function markReminderAsSent(reminderId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { error } = await supabase
     .from('invoice_email_reminders')
@@ -267,7 +278,7 @@ export async function markReminderAsSent(reminderId: string) {
 
 // Mark reminder as failed
 export async function markReminderAsFailed(reminderId: string, reason: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { error } = await supabase
     .from('invoice_email_reminders')

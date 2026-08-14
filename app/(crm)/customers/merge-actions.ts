@@ -7,7 +7,7 @@ export async function mergeCustomers(customerIds: string[]) {
     throw new Error("At least 2 customers are required to merge");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Verify user is authenticated
   const {

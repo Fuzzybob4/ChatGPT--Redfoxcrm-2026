@@ -20,7 +20,7 @@ interface Props {
 
 export default function PropertyDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, refresh, getCustomerProperties } = useData();
+  const { loading, refresh, getCustomerProperties, getPropertyPhotos } = useData();
   const [allProperties] = useState(() => getCustomerProperties(""));
   
   const property = allProperties.find((p) => p.id === id);
@@ -39,8 +39,8 @@ export default function PropertyDetailPage({ params }: Props) {
     .filter(Boolean)
     .join(", ");
 
-  // Mock data for now - in a real app, fetch property photos from useData
-  const propertyPhotos: any[] = [];
+  // Fetch property photos from the data context
+  const propertyPhotos = getPropertyPhotos(id);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
