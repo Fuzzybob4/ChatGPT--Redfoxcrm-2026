@@ -33,7 +33,7 @@ export const InvoiceSentEmail: React.FC<InvoiceEmailProps> = ({
         backgroundColor: '#f5f5f5', 
         padding: '20px', 
         borderRadius: '8px', 
-        marginY: '20px' 
+        margin: '20px 0'
       }}>
         <p><strong>Invoice Number:</strong> {invoiceNumber}</p>
         <p><strong>Amount Due:</strong> {invoiceAmount}</p>
@@ -88,7 +88,7 @@ export const PaymentReminderEmail: React.FC<InvoiceEmailProps> = ({
         backgroundColor: '#fff3cd', 
         padding: '20px', 
         borderRadius: '8px', 
-        marginY: '20px',
+        margin: '20px 0',
         borderLeft: '4px solid #ffc107'
       }}>
         <p><strong>Invoice Number:</strong> {invoiceNumber}</p>
@@ -147,7 +147,7 @@ export const OverdueNoticeEmail: React.FC<InvoiceEmailProps & { daysPastDue: num
         backgroundColor: '#fadbd8', 
         padding: '20px', 
         borderRadius: '8px', 
-        marginY: '20px',
+        margin: '20px 0',
         borderLeft: '4px solid #e74c3c'
       }}>
         <p><strong>Invoice Number:</strong> {invoiceNumber}</p>

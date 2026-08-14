@@ -143,7 +143,7 @@ export async function importInvoicesFromCSV(
           .from('customers')
           .select('id')
           .eq('name', row.customerName)
-          .eq('org_id', org.id)
+          .eq('org_id', org.orgId)
           .single();
 
         let customerId: string;
@@ -154,7 +154,7 @@ export async function importInvoicesFromCSV(
           const { data: newCustomer, error: customerCreateError } = await supabase
             .from('customers')
             .insert({
-              org_id: org.id,
+              org_id: org.orgId,
               name: row.customerName,
               email: row.email || '',
               phone: row.phone || '',
@@ -183,7 +183,7 @@ export async function importInvoicesFromCSV(
         const { data: invoice, error: invoiceError } = await supabase
           .from('invoices')
           .insert({
-            org_id: org.id,
+            org_id: org.orgId,
             customer_id: customerId,
             invoice_number: row.squareInvoiceNumber || `INV-${Date.now()}`,
             issued_date: row.invoiceDate ? new Date(row.invoiceDate).toISOString() : new Date().toISOString(),
@@ -209,7 +209,7 @@ export async function importInvoicesFromCSV(
           const { error: lineItemError } = await supabase
             .from('invoice_line_items')
             .insert({
-              org_id: org.id,
+              org_id: org.orgId,
               invoice_id: invoice.id,
               description: row.lineItemDescription,
               quantity: 1,

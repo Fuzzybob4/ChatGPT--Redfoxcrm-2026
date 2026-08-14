@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectItem } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PhotoUploaderProps {
   customerId: string;
@@ -156,12 +156,17 @@ export function CustomerPhotoUploader({
           <div className="space-y-3 p-3 bg-muted rounded-lg">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Photo Type</label>
-              <Select value={photoType} onChange={(e) => setPhotoType(e.currentTarget.value)}>
-                <SelectItem value="Before">Before</SelectItem>
-                <SelectItem value="After">After</SelectItem>
-                <SelectItem value="Install">Install</SelectItem>
-                <SelectItem value="Maintenance">Maintenance</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
+              <Select value={photoType} onValueChange={(value) => value && setPhotoType(value)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select photo type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Before">Before</SelectItem>
+                  <SelectItem value="After">After</SelectItem>
+                  <SelectItem value="Install">Install</SelectItem>
+                  <SelectItem value="Maintenance">Maintenance</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
               </Select>
             </div>
 

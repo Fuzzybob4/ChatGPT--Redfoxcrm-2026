@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPendingEmailReminders, markReminderAsSent, markReminderAsFailed } from '@/app/(crm)/invoices/billing-actions';
 import { sendEmail } from '@/lib/email/resend';
-import { InvoiceSentEmail, PaymentReminderEmail, OverdueNoticeEmail } from '@/lib/email-templates/invoice-reminders';
-import { renderEmailTemplate } from '@/lib/email/render';
+import { renderInvoiceReminderEmail } from '@/lib/email-templates/invoice-reminders-html';
 
 export async function GET(request: Request) {
   // Verify this is a valid cron request
@@ -19,7 +18,7 @@ export async function GET(request: Request) {
       try {
         // Get email template based on reminder type
         let emailSubject = '';
-        let emailTemplate = null;
+        let daysPastDue = 0;
 
         const invoiceData = {
           customerName: reminder.customers?.name || 'Valued Customer',
@@ -35,28 +34,29 @@ export async function GET(request: Request) {
         switch (reminder.reminder_type) {
           case 'invoice_sent':
             emailSubject = `Invoice ${invoiceData.invoiceNumber} - Payment Due`;
-            emailTemplate = <InvoiceSentEmail {...invoiceData} />;
             break;
           case 'payment_reminder':
             emailSubject = `Reminder: Invoice ${invoiceData.invoiceNumber} Payment Due Soon`;
-            emailTemplate = <PaymentReminderEmail {...invoiceData} />;
             break;
           case 'overdue_notice':
-            const daysPastDue = Math.floor(
+            daysPastDue = Math.floor(
               (new Date().getTime() - new Date(reminder.invoices?.due_date || new Date()).getTime()) / 
               (1000 * 60 * 60 * 24)
             );
             emailSubject = `URGENT: Invoice ${invoiceData.invoiceNumber} is Overdue`;
-            emailTemplate = <OverdueNoticeEmail {...invoiceData} daysPastDue={Math.max(daysPastDue, 0)} />;
             break;
         }
 
-        if (!emailTemplate || !emailSubject) {
+        if (!emailSubject) {
           throw new Error(`Unknown reminder type: ${reminder.reminder_type}`);
         }
 
         // Render and send email
-        const html = await renderEmailTemplate(emailTemplate);
+        const html = renderInvoiceReminderEmail({
+          type: reminder.reminder_type,
+          data: invoiceData,
+          daysPastDue,
+        });
         
         await sendEmail({
           to: reminder.email_address,
