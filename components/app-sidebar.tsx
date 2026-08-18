@@ -109,7 +109,7 @@ const navItems = [
     title: "Inventory",
     href: "/inventory",
     icon: Package,
-    comingSoon: true,
+    badge: true,
   },
   {
     title: "Reports",
@@ -134,7 +134,7 @@ export async function AppSidebar() {
   } = await supabase.auth.getUser();
 
   // Fetch live counts from Supabase
-  const [customersRes, estimatesRes, jobsRes, troubleRes, ticketRes] = await Promise.all([
+  const [customersRes, estimatesRes, jobsRes, troubleRes, ticketRes, alertRes] = await Promise.all([
     supabase
       .from("customers")
       .select("id", { count: "exact", head: true })
@@ -157,6 +157,11 @@ export async function AppSidebar() {
       .select("id", { count: "exact", head: true })
       .eq("org_id", org.orgId)
       .in("status", ["open", "in_progress"]),
+    supabase
+      .from("inventory_alerts")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId)
+      .eq("is_resolved", false),
   ]);
 
   const openRequests = (troubleRes.count ?? 0) + (ticketRes.count ?? 0);
@@ -167,6 +172,7 @@ export async function AppSidebar() {
     "/estimates": (estimatesRes.count ?? 0).toString(),
     "/jobs": (jobsRes.count ?? 0).toString(),
     "/tickets": openRequests.toString(),
+    "/inventory": (alertRes.count ?? 0).toString(),
   };
 
   const userEmail = user?.email ?? "";
