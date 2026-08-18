@@ -12,9 +12,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const customerName =
+      [customer.first_name, customer.last_name].filter(Boolean).join(' ') || 'A customer';
+
     const admin = createAdminClient();
 
-    // Create work order request
+    // Create work order request (customer "trouble call")
     const { data: workOrder, error: createError } = await admin
       .from('work_order_requests')
       .insert({
@@ -22,7 +25,7 @@ export async function POST(request: NextRequest) {
         org_id: customer.org_id,
         title,
         description,
-        status: 'pending',
+        status: 'new',
         created_from_portal: true,
       })
       .select()
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
           workOrderId: workOrder.id,
           customerId,
           orgId: customer.org_id,
-          customerName: customer.name,
+          customerName,
           title,
         }),
       }).catch((err) => console.error('Notification failed:', err));

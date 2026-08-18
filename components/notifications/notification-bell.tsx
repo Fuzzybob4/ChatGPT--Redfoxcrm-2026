@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, X } from 'lucide-react';
+import Link from 'next/link';
+import { Bell, X, Wrench, LifeBuoy, CheckCircle2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -55,30 +56,15 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'work_order_created':
-        return '🔨';
+        return Wrench;
       case 'ticket_created':
-        return '🎫';
+        return LifeBuoy;
       case 'job_completed':
-        return '✓';
+        return CheckCircle2;
       case 'invoice_paid':
-        return '💰';
+        return Receipt;
       default:
-        return '📢';
-    }
-  };
-
-  const getNotificationColor = (type: string) => {
-    switch (type) {
-      case 'work_order_created':
-        return 'bg-blue-50';
-      case 'ticket_created':
-        return 'bg-amber-50';
-      case 'job_completed':
-        return 'bg-green-50';
-      case 'invoice_paid':
-        return 'bg-emerald-50';
-      default:
-        return 'bg-gray-50';
+        return Bell;
     }
   };
 
@@ -108,17 +94,21 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {notifications.map((notif) => (
+              {notifications.map((notif) => {
+                const NotifIcon = getNotificationIcon(notif.type);
+                return (
                 <div
                   key={notif.id}
-                  className={`p-3 rounded-lg text-sm ${getNotificationColor(notif.type)} ${
-                    notif.is_read ? 'opacity-60' : 'font-medium'
+                  className={`p-3 rounded-lg text-sm border ${
+                    notif.is_read ? 'border-transparent opacity-60' : 'border-primary/20 bg-primary/5 font-medium'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">{getNotificationIcon(notif.type)}</span>
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+                          <NotifIcon className="size-3.5 text-foreground" />
+                        </span>
                         <div className="flex-1">
                           <p className="font-medium text-xs leading-tight">{notif.title}</p>
                           {notif.message && (
@@ -140,14 +130,16 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
                     {!notif.is_read && (
                       <button
                         onClick={() => handleMarkAsRead(notif.id)}
-                        className="shrink-0 hover:bg-white/50 rounded p-1"
+                        className="shrink-0 hover:bg-muted rounded p-1"
+                        aria-label="Mark as read"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -155,7 +147,7 @@ export function NotificationBell({ orgId }: NotificationBellProps) {
           <>
             <DropdownMenuSeparator />
             <div className="p-2">
-              <Button variant="ghost" size="sm" className="w-full text-xs">
+              <Button variant="ghost" size="sm" className="w-full text-xs" render={<Link href="/notifications" />}>
                 View All Notifications
               </Button>
             </div>
