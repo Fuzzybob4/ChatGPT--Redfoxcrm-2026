@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentOrg } from '@/lib/org';
-import { createNotification } from '@/app/(crm)/notifications/actions';
 
 // ---------- Types ----------
 export interface Product {
@@ -122,57 +121,9 @@ async function applyStockChange(params: {
     created_by: params.userId,
   });
 
-  // Low-stock alerting
-  const min = product.min_quantity ?? 0;
-  if (product.low_stock_alert_enabled) {
-    if (after <= min) {
-      // At/below threshold: try to open an alert. A partial unique index
-      // (one open alert per product) makes this race-safe — a concurrent
-      // adjustment that already opened the alert will conflict here, and we
-      // only notify when THIS call actually inserted the row.
-      const { data: inserted, error: insertErr } = await admin
-        .from('inventory_alerts')
-        .insert({
-          org_id: params.orgId,
-          product_id: params.productId,
-          alert_type: after === 0 ? 'out_of_stock' : 'low_stock',
-          current_quantity: after,
-          min_quantity: min,
-          notified_at: new Date().toISOString(),
-        })
-        .select('id')
-        .maybeSingle();
-
-      if (inserted && !insertErr) {
-        // Newly opened alert — notify the business (best-effort).
-        try {
-          await createNotification({
-            orgId: params.orgId,
-            type: 'low_stock',
-            title: `Low stock: ${product.name}`,
-            message: `${product.name} is down to ${after} (reorder at ${min}). Consider creating a purchase order.`,
-            relatedId: params.productId,
-          });
-        } catch (e) {
-          console.error('Low-stock notification failed:', e);
-        }
-      } else {
-        // Alert already open — just keep its current_quantity fresh.
-        await admin
-          .from('inventory_alerts')
-          .update({ current_quantity: after, alert_type: after === 0 ? 'out_of_stock' : 'low_stock' })
-          .eq('product_id', params.productId)
-          .eq('is_resolved', false);
-      }
-    } else {
-      // Restocked above threshold: resolve any open alerts
-      await admin
-        .from('inventory_alerts')
-        .update({ is_resolved: true, resolved_at: new Date().toISOString() })
-        .eq('product_id', params.productId)
-        .eq('is_resolved', false);
-    }
-  }
+  // Low-stock alerts AND the in-app notification are created atomically by the
+  // `trigger_check_low_stock` DB trigger on products (see check_low_stock_alert).
+  // Keeping that logic in the trigger avoids an app/trigger race on the alert row.
 
   return { before, after };
 }
