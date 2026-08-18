@@ -1,6 +1,6 @@
 import { requireAdmin } from '@/lib/admin-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { format, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
   DollarSign,
   TrendingUp,
@@ -8,12 +8,25 @@ import {
   Infinity,
   CreditCard,
 } from 'lucide-react';
+import { getPlanChargeCents } from '@/lib/pricing';
 
-const PLAN_PRICES: Record<string, number> = {
-  starter: 49,
-  professional: 99,
-  enterprise: 199,
+type RevenueOrg = {
+  id: string;
+  name: string | null;
+  plan: string | null;
+  subscription_status: string | null;
+  subscription_interval: string | null;
+  lifetime_access: boolean | null;
+  trial_ends_at: string | null;
+  created_at: string;
 };
+
+/** Monthly-normalized recurring revenue in dollars for one org (yearly ÷ 12). */
+function orgMrr(o: RevenueOrg): number {
+  const interval = o.subscription_interval === 'yearly' ? 'yearly' : 'monthly';
+  const dollars = getPlanChargeCents(o.plan ?? 'starter', interval) / 100;
+  return interval === 'yearly' ? dollars / 12 : dollars;
+}
 
 export default async function AdminRevenuePage() {
   await requireAdmin('revenue');
@@ -21,18 +34,21 @@ export default async function AdminRevenuePage() {
 
   const { data: orgs } = await db
     .from('organizations')
-    .select('id, name, plan, subscription_status, lifetime_access, trial_ends_at, created_at')
+    .select('id, name, plan, subscription_status, subscription_interval, lifetime_access, trial_ends_at, created_at')
     .order('created_at', { ascending: false });
 
-  const all = orgs ?? [];
+  const all = (orgs ?? []) as RevenueOrg[];
 
   const activeOrgs = all.filter((o) => o.subscription_status === 'active' && !o.lifetime_access);
   const trialingOrgs = all.filter((o) => o.subscription_status === 'trialing');
   const pastDue = all.filter((o) => o.subscription_status === 'past_due');
   const lifetimeOrgs = all.filter((o) => o.lifetime_access);
-  const canceledOrgs = all.filter((o) => o.subscription_status === 'canceled');
+  // Accept both spellings so historical + webhook-written rows are counted.
+  const canceledOrgs = all.filter(
+    (o) => o.subscription_status === 'cancelled' || o.subscription_status === 'canceled',
+  );
 
-  const mrr = activeOrgs.reduce((sum, o) => sum + (PLAN_PRICES[o.plan ?? ''] ?? 0), 0);
+  const mrr = Math.round(activeOrgs.reduce((sum, o) => sum + orgMrr(o), 0));
   const arr = mrr * 12;
 
   // Expiring in next 30 days
@@ -51,7 +67,7 @@ export default async function AdminRevenuePage() {
     const plan = org.plan ?? 'unknown';
     if (!planGroups[plan]) planGroups[plan] = { count: 0, mrr: 0 };
     planGroups[plan].count++;
-    planGroups[plan].mrr += PLAN_PRICES[plan] ?? 0;
+    planGroups[plan].mrr += orgMrr(org);
   }
 
   const kpis = [
@@ -129,7 +145,7 @@ export default async function AdminRevenuePage() {
               <div key={org.id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm text-white">{org.name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{org.plan} plan · ${PLAN_PRICES[org.plan ?? ''] ?? 0}/mo</p>
+                  <p className="text-xs text-gray-500 capitalize">{org.plan} plan · ${Math.round(orgMrr(org))}/mo</p>
                 </div>
                 <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded">Past Due</span>
               </div>
