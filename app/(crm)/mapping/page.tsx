@@ -30,7 +30,32 @@ export default async function MappingPage() {
     .from("estimates")
     .select("customer_id, status");
 
+  // Open customer-submitted trouble calls drive the pulsing map indicator.
+  const { data: troubleCalls } = await supabase
+    .from("work_order_requests")
+    .select("customer_id, title, urgency, status, created_at")
+    .in("status", ["new", "scheduled"])
+    .order("created_at", { ascending: false });
+
   type MapStatus = "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+
+  // Map each customer to their most-urgent open trouble call (if any).
+  const urgencyRank: Record<string, number> = { emergency: 3, high: 2, normal: 1, low: 0 };
+  const troubleByCustomer = new Map<string, { count: number; urgency: string; title: string }>();
+  for (const tc of troubleCalls ?? []) {
+    if (!tc.customer_id) continue;
+    const existing = troubleByCustomer.get(tc.customer_id);
+    const urgency = (tc.urgency ?? "normal").toLowerCase();
+    if (!existing) {
+      troubleByCustomer.set(tc.customer_id, { count: 1, urgency, title: tc.title });
+    } else {
+      existing.count += 1;
+      if ((urgencyRank[urgency] ?? 1) > (urgencyRank[existing.urgency] ?? 1)) {
+        existing.urgency = urgency;
+        existing.title = tc.title;
+      }
+    }
+  }
 
   // Build customer lookup
   const customerMap = new Map<string, any>();
@@ -121,6 +146,9 @@ export default async function MappingPage() {
       lng: p.lng as number,
       isPrimary: !!p.is_primary,
       mapStatus: getCustomerStatus(p.customer_id),
+      troubleCallCount: troubleByCustomer.get(p.customer_id)?.count ?? 0,
+      troubleCallUrgency: troubleByCustomer.get(p.customer_id)?.urgency ?? null,
+      troubleCallTitle: troubleByCustomer.get(p.customer_id)?.title ?? null,
     });
   }
 
@@ -143,6 +171,9 @@ export default async function MappingPage() {
       lng: c.lng as number,
       isPrimary: true,
       mapStatus: getCustomerStatus(c.id),
+      troubleCallCount: troubleByCustomer.get(c.id)?.count ?? 0,
+      troubleCallUrgency: troubleByCustomer.get(c.id)?.urgency ?? null,
+      troubleCallTitle: troubleByCustomer.get(c.id)?.title ?? null,
     });
   }
 

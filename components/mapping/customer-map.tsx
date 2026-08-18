@@ -30,11 +30,20 @@ export interface MapPin {
   lng: number;
   isPrimary: boolean;
   mapStatus: "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+  troubleCallCount?: number;
+  troubleCallUrgency?: string | null;
+  troubleCallTitle?: string | null;
 }
 
-type MapView = "all" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+type MapView = "all" | "trouble_calls" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 
-const STATUS_CONFIG: Record<Exclude<MapView, "all">, { label: string; description: string; color: string }> = {
+const TROUBLE_COLOR = "#ff2d55";
+
+function hasTrouble(p: MapPin): boolean {
+  return (p.troubleCallCount ?? 0) > 0;
+}
+
+const STATUS_CONFIG: Record<Exclude<MapView, "all" | "trouble_calls">, { label: string; description: string; color: string }> = {
   pending_installs: { label: "Pending Install",  description: "Job scheduled, not yet started",       color: "#dc2626" },
   estimates_sent:   { label: "Estimate Sent",    description: "Estimate sent, no job scheduled yet",  color: "#f59e0b" },
   installed:        { label: "Installed",         description: "Install job completed",                color: "#16a34a" },
@@ -48,6 +57,7 @@ function pinColor(p: MapPin): string {
 
 function matchesView(p: MapPin, view: MapView): boolean {
   if (view === "all") return true;
+  if (view === "trouble_calls") return hasTrouble(p);
   return p.mapStatus === view;
 }
 
@@ -65,8 +75,12 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
   // Build filter tabs with all status options
   const views = useMemo(() => {
     const present = new Set(pins.map((p) => p.mapStatus).filter((s) => s !== "all_customers"));
+    const anyTrouble = pins.some(hasTrouble);
     return [
       { id: "all" as MapView, label: "All Customers", color: "#111827" },
+      ...(anyTrouble
+        ? [{ id: "trouble_calls" as MapView, label: "Trouble Calls", color: TROUBLE_COLOR }]
+        : []),
       ...(present.has("pending_installs")
         ? [{ id: "pending_installs" as MapView, label: STATUS_CONFIG.pending_installs.label, color: STATUS_CONFIG.pending_installs.color }]
         : []),
@@ -206,10 +220,31 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                 setSelected(p);
               }}
             >
-              <MapPin
-                className="w-7 h-7 cursor-pointer drop-shadow-md"
-                style={{ color: pinColor(p), fill: pinColor(p), fillOpacity: 0.25 }}
-              />
+              <div className="relative flex flex-col items-center">
+                {hasTrouble(p) && (
+                  <>
+                    {/* Pulsing alert ring for customers with an open trouble call */}
+                    <span
+                      className="pointer-events-none absolute -top-1 left-1/2 size-8 -translate-x-1/2 rounded-full"
+                      style={{ backgroundColor: TROUBLE_COLOR, animation: "rf-ping 1.4s cubic-bezier(0,0,0.2,1) infinite" }}
+                    />
+                    <span
+                      className="pointer-events-none absolute -top-2 left-1/2 flex size-4 -translate-x-1/2 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-md"
+                      style={{ backgroundColor: TROUBLE_COLOR }}
+                    >
+                      {p.troubleCallCount}
+                    </span>
+                  </>
+                )}
+                <MapPin
+                  className="relative w-7 h-7 cursor-pointer drop-shadow-md"
+                  style={
+                    hasTrouble(p)
+                      ? { color: TROUBLE_COLOR, fill: TROUBLE_COLOR, fillOpacity: 0.35 }
+                      : { color: pinColor(p), fill: pinColor(p), fillOpacity: 0.25 }
+                  }
+                />
+              </div>
             </Marker>
           ))}
 
@@ -238,6 +273,26 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                 </div>
                 <p className="text-xs text-gray-600">{selected.address}</p>
                 <p className="text-xs text-gray-600">{selected.phone}</p>
+                {hasTrouble(selected) && (
+                  <div className="mt-1 rounded-md border border-red-200 bg-red-50 p-2">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block size-2 rounded-full"
+                        style={{ backgroundColor: TROUBLE_COLOR, animation: "rf-pulse 1.4s ease-in-out infinite" }}
+                      />
+                      <span className="text-[11px] font-semibold text-red-700">
+                        {selected.troubleCallCount} open trouble call{(selected.troubleCallCount ?? 0) > 1 ? "s" : ""}
+                        {selected.troubleCallUrgency ? ` · ${selected.troubleCallUrgency}` : ""}
+                      </span>
+                    </div>
+                    {selected.troubleCallTitle && (
+                      <p className="mt-0.5 text-[11px] text-red-600">{selected.troubleCallTitle}</p>
+                    )}
+                    <a href="/tickets" className="mt-0.5 block text-[11px] font-medium text-red-700 hover:underline">
+                      View in trouble calls
+                    </a>
+                  </div>
+                )}
                 {selected.mapStatus !== "all_customers" && (
                   <div className="pt-1 space-y-0.5">
                     <span
