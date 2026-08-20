@@ -47,6 +47,8 @@ export async function updateSession(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith('/(auth)') ||
     request.nextUrl.pathname === '/login' ||
     request.nextUrl.pathname === '/signup' ||
+    request.nextUrl.pathname === '/forgot-password' ||
+    request.nextUrl.pathname === '/update-password' ||
     request.nextUrl.pathname.startsWith('/auth')
 
   const isAdminSetupPage = 

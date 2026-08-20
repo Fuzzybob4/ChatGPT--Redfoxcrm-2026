@@ -20,9 +20,30 @@ export async function POST(request: NextRequest) {
     // Get authenticated user
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Resolve the property's org/location and confirm it belongs to the given customer.
+    // RLS still enforces org membership, but this gives us the org_id/location_id to
+    // stamp on the new row (org_id is required and not derivable from the client input).
+    const { data: property, error: propertyError } = await supabase
+      .from('customer_properties')
+      .select('id, customer_id, location_id, customers!inner(id, org_id)')
+      .eq('id', propertyId)
+      .eq('customer_id', customerId)
+      .single();
+
+    if (propertyError || !property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
+    }
+
+    const customerRel = property.customers as unknown as { id: string; org_id: string } | { id: string; org_id: string }[];
+    const orgId = Array.isArray(customerRel) ? customerRel[0]?.org_id : customerRel?.org_id;
+
+    if (!orgId) {
+      return NextResponse.json({ error: 'Unable to resolve organization for property' }, { status: 400 });
     }
 
     // Generate a unique filename with property ID and timestamp
@@ -40,6 +61,8 @@ export async function POST(request: NextRequest) {
       .insert({
         property_id: propertyId,
         customer_id: customerId,
+        org_id: orgId,
+        location_id: property.location_id,
         photo_url: blob.pathname,
         file_size: file.size,
         photo_type: file.type,
