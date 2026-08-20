@@ -265,9 +265,10 @@ export default function DashboardPage() {
                   const customer = getCustomerById(invoice.customerId);
                   const total = getInvoiceTotal(invoice);
                   return (
-                    <div
+                    <Link
                       key={invoice.id}
-                      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                      href={`/invoices/${invoice.id}`}
+                      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 -mx-2 px-2 rounded-md transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Avatar className="size-8 shrink-0">
                         <AvatarFallback className="bg-accent text-accent-foreground text-xs font-semibold">
@@ -288,7 +289,7 @@ export default function DashboardPage() {
                         </p>
                         <StatusBadge status={invoice.status} />
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
