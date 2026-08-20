@@ -12,6 +12,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const customerName =
+      [customer.first_name, customer.last_name].filter(Boolean).join(' ') || 'A customer';
+
     const admin = createAdminClient();
 
     // Create support ticket
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
           ticketId: ticket.id,
           customerId,
           orgId: customer.org_id,
-          customerName: customer.name,
+          customerName,
           subject,
         }),
       }).catch((err) => console.error('Notification failed:', err));

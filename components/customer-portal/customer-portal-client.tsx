@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { CustomerPortalInvoices } from './customer-portal-invoices';
 import { CustomerPortalWorkOrders } from './customer-portal-work-orders';
 import { CustomerPortalTickets } from './customer-portal-tickets';
+import type { PortalInvoice } from '@/app/(crm)/customers/portal-invoice-actions';
 
 interface Customer {
   id: string;
@@ -19,12 +20,14 @@ interface Customer {
 interface CustomerPortalClientProps {
   customer: Customer;
   token: string;
+  initialInvoices: PortalInvoice[];
 }
 
 type Tab = 'dashboard' | 'invoices' | 'work-orders' | 'tickets';
 
-export function CustomerPortalClient({ customer, token }: CustomerPortalClientProps) {
+export function CustomerPortalClient({ customer, token, initialInvoices }: CustomerPortalClientProps) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const openInvoicesCount = initialInvoices.filter((inv) => inv.status !== 'paid').length;
 
   const handleLogout = () => {
     // Clear any session data and redirect
@@ -108,7 +111,7 @@ export function CustomerPortalClient({ customer, token }: CustomerPortalClientPr
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-6">
                   <div className="text-sm text-muted-foreground mb-2">Open Invoices</div>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">{openInvoicesCount}</div>
                 </Card>
                 <Card className="p-6">
                   <div className="text-sm text-muted-foreground mb-2">Pending Work Orders</div>
@@ -153,7 +156,9 @@ export function CustomerPortalClient({ customer, token }: CustomerPortalClientPr
           </div>
         )}
 
-        {activeTab === 'invoices' && <CustomerPortalInvoices customerId={customer.id} />}
+        {activeTab === 'invoices' && (
+          <CustomerPortalInvoices token={token} initialInvoices={initialInvoices} />
+        )}
 
         {activeTab === 'work-orders' && (
           <CustomerPortalWorkOrders customerId={customer.id} token={token} />

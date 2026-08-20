@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { verifyPortalToken } from '@/app/(crm)/customers/portal-actions';
+import { getPortalInvoices } from '@/app/(crm)/customers/portal-invoice-actions';
 import { CustomerPortalClient } from '@/components/customer-portal/customer-portal-client';
 
 interface Props {
@@ -16,9 +17,11 @@ export default async function CustomerPortalPage({ params }: Props) {
     notFound();
   }
 
+  const invoices = await getPortalInvoices(token);
+
   return (
     <div className="min-h-screen bg-background">
-      <CustomerPortalClient customer={customer} token={token} />
+      <CustomerPortalClient customer={customer} token={token} initialInvoices={invoices} />
     </div>
   );
 }

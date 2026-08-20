@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,12 +27,14 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Property Photos</CardTitle>
+          <CardTitle>Customer Photos</CardTitle>
           <CardDescription>No photos uploaded yet</CardDescription>
         </CardHeader>
       </Card>
     );
   }
+
+  const photoSrc = (photoUrl: string) => photoUrl;
 
   const selected = selectedIndex !== null ? photos[selectedIndex] : null;
 
@@ -82,7 +83,7 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Property Photos</CardTitle>
+          <CardTitle>Customer Photos</CardTitle>
           <CardDescription>
             {photos.length} {photos.length === 1 ? "photo" : "photos"}
           </CardDescription>
@@ -95,12 +96,11 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
                 onClick={() => setSelectedIndex(idx)}
                 className="relative group overflow-hidden rounded-lg aspect-square bg-muted hover:opacity-75 transition-opacity"
               >
-                <Image
-                  src={`/api/file/photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
-                  alt={photo.description || `Property photo ${idx + 1}`}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                <img
+                  src={photoSrc(photo.photoUrl)}
+                  alt={photo.description || `Customer photo ${idx + 1}`}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading="lazy"
                 />
               </button>
             ))}
@@ -140,13 +140,10 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
 
             {/* Image */}
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-              <Image
-                src={`/api/file/photo?pathname=${encodeURIComponent(selected.photoUrl)}`}
+              <img
+                src={photoSrc(selected.photoUrl)}
                 alt={selected.description || "Property photo"}
-                fill
-                className="object-contain"
-                sizes="(max-width: 1024px) 90vw, 80vw"
-                priority
+                className="absolute inset-0 h-full w-full object-contain"
               />
             </div>
 

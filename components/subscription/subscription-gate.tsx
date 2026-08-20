@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, CreditCard, Clock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { chargeSubscription } from '@/app/(crm)/billing/subscription-actions';
+import { startSubscription } from '@/app/(crm)/billing/subscription-actions';
 import {
   getPlan,
   getPlanChargeCents,
@@ -52,7 +52,7 @@ export function SubscriptionGate({
     setError('');
     setProcessing(true);
     try {
-      const result = await chargeSubscription(interval);
+      const result = await startSubscription(interval);
       if (!result.ok) {
         setError(result.error);
         setProcessing(false);

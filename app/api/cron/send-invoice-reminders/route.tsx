@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getPendingEmailReminders, markReminderAsSent, markReminderAsFailed } from '@/app/(crm)/invoices/billing-actions';
+import { getOrCreatePortalToken } from '@/app/(crm)/customers/portal-actions';
 import { sendEmail } from '@/lib/email/resend';
 import { renderInvoiceReminderEmail } from '@/lib/email-templates/invoice-reminders-html';
+
+function getPortalBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  );
+}
 
 export async function GET(request: Request) {
   // Verify this is a valid cron request
@@ -20,6 +28,17 @@ export async function GET(request: Request) {
         let emailSubject = '';
         let daysPastDue = 0;
 
+        // Generate (or reuse) this customer's portal link so the reminder
+        // email can send them straight to their invoice, where they can also
+        // add any optional extras the business has enabled.
+        let paymentLink: string | undefined;
+        try {
+          const portalToken = await getOrCreatePortalToken(reminder.customer_id);
+          paymentLink = `${getPortalBaseUrl()}/customer-portal/${portalToken}`;
+        } catch (linkError) {
+          console.error('[v0] Failed to generate portal link for reminder:', linkError);
+        }
+
         const invoiceData = {
           customerName: reminder.customers?.name || 'Valued Customer',
           invoiceNumber: reminder.invoices?.invoice_number || 'Unknown',
@@ -29,6 +48,7 @@ export async function GET(request: Request) {
             : 'TBD',
           companyName: reminder.organizations?.name || 'Our Company',
           companyEmail: reminder.organizations?.email || 'billing@company.com',
+          paymentLink,
         };
 
         switch (reminder.reminder_type) {

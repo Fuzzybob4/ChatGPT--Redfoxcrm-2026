@@ -17,6 +17,7 @@ import {
   Building,
   Truck,
   Package,
+  LifeBuoy,
 } from "lucide-react";
 
 import {
@@ -83,6 +84,12 @@ const navItems = [
     badge: true,
   },
   {
+    title: "Trouble Calls",
+    href: "/tickets",
+    icon: LifeBuoy,
+    badge: true,
+  },
+  {
     title: "Mapping",
     href: "/mapping",
     icon: Map,
@@ -102,7 +109,7 @@ const navItems = [
     title: "Inventory",
     href: "/inventory",
     icon: Package,
-    comingSoon: true,
+    badge: true,
   },
   {
     title: "Reports",
@@ -127,7 +134,7 @@ export async function AppSidebar() {
   } = await supabase.auth.getUser();
 
   // Fetch live counts from Supabase
-  const [customersRes, estimatesRes, jobsRes] = await Promise.all([
+  const [customersRes, estimatesRes, jobsRes, troubleRes, ticketRes, alertRes] = await Promise.all([
     supabase
       .from("customers")
       .select("id", { count: "exact", head: true })
@@ -140,13 +147,32 @@ export async function AppSidebar() {
       .from("work_orders")
       .select("id", { count: "exact", head: true })
       .eq("org_id", org.orgId),
+    supabase
+      .from("work_order_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId)
+      .in("status", ["new", "scheduled"]),
+    supabase
+      .from("support_tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId)
+      .in("status", ["open", "in_progress"]),
+    supabase
+      .from("inventory_alerts")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId)
+      .eq("is_resolved", false),
   ]);
+
+  const openRequests = (troubleRes.count ?? 0) + (ticketRes.count ?? 0);
 
   // Build badges map with live counts
   const badgeCounts: Record<string, string> = {
     "/customers": (customersRes.count ?? 0).toString(),
     "/estimates": (estimatesRes.count ?? 0).toString(),
     "/jobs": (jobsRes.count ?? 0).toString(),
+    "/tickets": openRequests.toString(),
+    "/inventory": (alertRes.count ?? 0).toString(),
   };
 
   const userEmail = user?.email ?? "";

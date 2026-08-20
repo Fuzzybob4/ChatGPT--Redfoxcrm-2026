@@ -13,6 +13,10 @@ interface PropertyPhotoGalleryProps {
 
 export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGalleryProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const photoSrc = (photoUrl: string) =>
+    /^https?:\/\//i.test(photoUrl)
+      ? photoUrl
+      : `/api/file/photo?pathname=${encodeURIComponent(photoUrl)}`;
 
   const handleDelete = async (photoId: string, photoUrl: string) => {
     if (!confirm("Delete this photo?")) return;
@@ -64,7 +68,7 @@ export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGa
           {photos.map((photo) => (
             <div key={photo.id} className="relative group rounded-lg overflow-hidden bg-muted h-48">
               <img
-                src={`/api/file/photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
+                src={photoSrc(photo.photoUrl)}
                 alt={photo.description || "Property photo"}
                 className="w-full h-full object-cover"
                 onError={(e) => {

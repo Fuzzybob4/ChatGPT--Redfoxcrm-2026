@@ -16,38 +16,72 @@ import {
   CreditCard,
   BarChart3,
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth } from 'date-fns';
+import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { getPlanChargeCents } from '@/lib/pricing';
 
-// Helper: build mock trend data from real org counts
-function buildMockMrrData() {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+type OrgRow = {
+  id: string;
+  plan: string | null;
+  subscription_status: string | null;
+  subscription_interval: string | null;
+  lifetime_access: boolean | null;
+  created_at: string;
+};
+
+/** Monthly-normalized recurring revenue for one org (yearly plans ÷ 12). */
+function orgMonthlyRevenue(org: OrgRow): number {
+  const interval = org.subscription_interval === 'yearly' ? 'yearly' : 'monthly';
+  const cents = getPlanChargeCents(org.plan ?? 'starter', interval);
+  const dollars = cents / 100;
+  return interval === 'yearly' ? dollars / 12 : dollars;
+}
+
+/** Real MRR trend over the last 8 months, based on active orgs' creation dates. */
+function buildMrrData(orgs: OrgRow[]) {
   const now = new Date();
   return Array.from({ length: 8 }).map((_, i) => {
-    const m = subMonths(now, 7 - i);
-    const base = 1200 + i * 400 + Math.floor(Math.random() * 300);
+    const monthEnd = endOfMonth(subMonths(now, 7 - i));
+    const monthStart = startOfMonth(subMonths(now, 7 - i));
+    // Orgs that existed and were paying by the end of this month.
+    const paidByThen = orgs.filter(
+      (o) => o.subscription_status === 'active' && new Date(o.created_at) <= monthEnd,
+    );
+    const mrr = Math.round(paidByThen.reduce((s, o) => s + orgMonthlyRevenue(o), 0));
+    const newThisMonth = orgs.filter((o) => {
+      const c = new Date(o.created_at);
+      return o.subscription_status === 'active' && c >= monthStart && c <= monthEnd;
+    });
+    const newRevenue = Math.round(newThisMonth.reduce((s, o) => s + orgMonthlyRevenue(o), 0));
     return {
-      month: months[m.getMonth()],
-      mrr: base,
-      new: Math.floor(base * 0.18),
-      churned: Math.floor(base * 0.04),
+      month: format(monthEnd, 'MMM'),
+      mrr,
+      new: newRevenue,
+      churned: 0,
     };
   });
 }
 
-function buildSignupData() {
+/** Real signups per day over the last 14 days. */
+function buildSignupData(orgs: OrgRow[]) {
   const now = new Date();
-  return Array.from({ length: 14 }).map((_, i) => ({
-    day: format(subDays(now, 13 - i), 'MMM d'),
-    signups: Math.floor(Math.random() * 8) + 1,
-  }));
+  return Array.from({ length: 14 }).map((_, i) => {
+    const day = subDays(now, 13 - i);
+    const label = format(day, 'MMM d');
+    const count = orgs.filter((o) => format(new Date(o.created_at), 'MMM d yyyy') === format(day, 'MMM d yyyy')).length;
+    return { day: label, signups: count };
+  });
 }
 
-function buildChurnData() {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  return months.map((m) => ({
-    month: m,
-    rate: parseFloat((Math.random() * 3 + 1).toFixed(1)),
-  }));
+/** Real churn rate: cancelled ÷ total orgs created up to each month. */
+function buildChurnData(orgs: OrgRow[]) {
+  const now = new Date();
+  return Array.from({ length: 6 }).map((_, i) => {
+    const monthEnd = endOfMonth(subMonths(now, 5 - i));
+    const created = orgs.filter((o) => new Date(o.created_at) <= monthEnd);
+    const cancelled = created.filter((o) => o.subscription_status === 'cancelled');
+    const rate = created.length > 0 ? (cancelled.length / created.length) * 100 : 0;
+    return { month: format(monthEnd, 'MMM'), rate: parseFloat(rate.toFixed(1)) };
+  });
 }
 
 export default async function AdminDashboardPage() {
@@ -56,7 +90,7 @@ export default async function AdminDashboardPage() {
 
   // Fetch real data
   const [orgsResult, expiringResult, lifetimeResult] = await Promise.all([
-    db.from('organizations').select('id, plan, subscription_status, lifetime_access, created_at'),
+    db.from('organizations').select('id, plan, subscription_status, subscription_interval, lifetime_access, created_at'),
     db
       .from('organizations')
       .select('id, name, plan, trial_ends_at')
@@ -86,15 +120,17 @@ export default async function AdminDashboardPage() {
     value,
   }));
 
-  // Estimate MRR from plan counts
-  const planPrices: Record<string, number> = { starter: 49, professional: 99, enterprise: 199 };
-  const estimatedMrr = orgs
-    .filter((o) => o.subscription_status === 'active')
-    .reduce((sum, o) => sum + (planPrices[o.plan ?? ''] ?? 0), 0);
+  // MRR from real active subscriptions, using the pricing source of truth
+  // (yearly plans normalized to a monthly figure).
+  const estimatedMrr = Math.round(
+    orgs
+      .filter((o) => o.subscription_status === 'active')
+      .reduce((sum, o) => sum + orgMonthlyRevenue(o as OrgRow), 0),
+  );
 
-  const mrrData = buildMockMrrData();
-  const signupData = buildSignupData();
-  const churnData = buildChurnData();
+  const mrrData = buildMrrData(orgs as OrgRow[]);
+  const signupData = buildSignupData(orgs as OrgRow[]);
+  const churnData = buildChurnData(orgs as OrgRow[]);
 
   const kpis = [
     {
