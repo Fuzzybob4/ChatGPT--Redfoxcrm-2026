@@ -1,14 +1,14 @@
 'use server';
 
+import { randomBytes } from 'crypto';
 import { stripe } from '@/lib/stripe';
 
 /**
- * Creates (or reuses) a Stripe customer for a signing-up user and returns a
- * SetupIntent client secret so the browser can securely collect and save a
- * card BEFORE the account is created. The card is stored for off-session use
- * so we can charge it automatically when the 30-day trial ends.
+ * Creates a Checkout Sessions-backed Elements flow so the browser can securely
+ * collect and save a card before the account is created. The card is stored
+ * for off-session use when the 30-day trial ends.
  */
-export async function createSignupSetupIntent(
+export async function createSignupCheckoutSession(
   email: string,
 ): Promise<{ ok: true; clientSecret: string; customerId: string } | { ok: false; error: string }> {
   const normalizedEmail = email.trim().toLowerCase();
@@ -18,19 +18,26 @@ export async function createSignupSetupIntent(
     // A new signup gets its own billing customer. Reusing by email can attach a
     // new signup's card to another business that happens to use the same email.
     const customer = await stripe.customers.create({ email: normalizedEmail });
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://www.redfoxcrm.com');
 
-    const setupIntent = await stripe.setupIntents.create({
+    const session = await stripe.checkout.sessions.create({
+      mode: 'setup',
+      ui_mode: 'elements',
       customer: customer.id,
-      usage: 'off_session',
+      currency: 'usd',
+      return_url: `${appUrl}/signup`,
+      integration_identifier: `redfox_signup_${randomLetters(8)}`,
+      excluded_payment_method_types: ['us_bank_account'],
     });
 
-    if (!setupIntent.client_secret) {
-      return { ok: false, error: 'Could not initialize card setup' };
+    if (!session.client_secret) {
+      return { ok: false, error: 'Could not initialize secure checkout' };
     }
 
-    return { ok: true, clientSecret: setupIntent.client_secret, customerId: customer.id };
+    return { ok: true, clientSecret: session.client_secret, customerId: customer.id };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Failed to initialize card setup';
+    const msg = e instanceof Error ? e.message : 'Failed to initialize secure checkout';
     return { ok: false, error: msg };
   }
 }
@@ -42,12 +49,23 @@ export async function createSignupSetupIntent(
  */
 export async function finalizeSignupCard(
   customerId: string,
-  setupIntentId: string,
+  checkoutSessionId: string,
 ): Promise<
   | { ok: true; paymentMethodId: string; brand: string; last4: string }
   | { ok: false; error: string }
 > {
   try {
+    const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+    const sessionCustomerId =
+      typeof session.customer === 'string' ? session.customer : session.customer?.id;
+    if (sessionCustomerId !== customerId || session.status !== 'complete') {
+      return { ok: false, error: 'Secure checkout could not be verified' };
+    }
+
+    const setupIntentId =
+      typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id;
+    if (!setupIntentId) return { ok: false, error: 'No payment setup was created' };
+
     const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
     const setupCustomerId =
       typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
@@ -80,4 +98,8 @@ export async function finalizeSignupCard(
     const msg = e instanceof Error ? e.message : 'Failed to finalize card';
     return { ok: false, error: msg };
   }
+}
+
+function randomLetters(length: number) {
+  return Array.from(randomBytes(length), (byte) => String.fromCharCode(97 + (byte % 26))).join('');
 }

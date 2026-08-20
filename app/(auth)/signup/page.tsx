@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
-import { createSignupSetupIntent } from '@/app/(auth)/signup/actions';
+import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
 import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
 
 type Step = 'details' | 'card' | 'success';
@@ -33,7 +33,7 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const result = await createSignupSetupIntent(email);
+      const result = await createSignupCheckoutSession(email);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -69,8 +69,6 @@ export default function SignupPage() {
       setIsLoading(false);
     }
   };
-
-  const signupSuccess = step === 'success';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">

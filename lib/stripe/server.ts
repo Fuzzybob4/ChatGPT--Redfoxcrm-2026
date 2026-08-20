@@ -7,7 +7,10 @@ function getStripeClient() {
     throw new Error("STRIPE_SECRET_KEY environment variable is not set");
   }
 
-  stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY);
+  stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2026-06-24.dahlia",
+    appInfo: { name: "RedFox CRM" },
+  });
   return stripeClient;
 }
 

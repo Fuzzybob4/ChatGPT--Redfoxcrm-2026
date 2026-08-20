@@ -9,6 +9,7 @@ function getStripeClient() {
   }
 
   stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2026-06-24.dahlia',
     appInfo: { name: 'RedFox CRM' },
   });
 
