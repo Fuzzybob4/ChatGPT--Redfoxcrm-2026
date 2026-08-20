@@ -51,13 +51,21 @@ export async function createOrganization(
     const meta = (user.user_metadata ?? {}) as Record<string, string>;
     const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
+    const plan = meta.plan === 'enterprise' || meta.plan === 'professional' ? meta.plan : 'starter';
+    const requestedLocations = Math.min(100, Math.max(1, Number.parseInt(meta.location_count ?? '1', 10) || 1));
+    const maxLocations = plan === 'starter' ? 1 : plan === 'professional' ? requestedLocations : requestedLocations;
+    const subscriptionInterval = meta.billing_interval === 'yearly' ? 'yearly' : 'monthly';
+
     const { data: org, error: orgErr } = await supabase
       .from('organizations')
       .insert({
         name: input.businessName,
         owner_user_id: user.id,
         vertical: input.vertical ?? null,
-        plan: meta.plan ?? 'starter',
+        plan,
+        location_count: 0,
+        max_locations: maxLocations,
+        subscription_interval: subscriptionInterval,
         trial_ends_at: trialEndsAt,
         subscription_status: 'trialing',
         stripe_customer_id: meta.stripe_customer_id ?? null,

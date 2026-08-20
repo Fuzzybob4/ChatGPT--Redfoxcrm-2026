@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
@@ -10,25 +11,32 @@ export const dynamic = "force-dynamic";
 
 export default async function MappingPage() {
   const supabase = await createClient();
+  const locationId = (await cookies()).get("redfox_selected_location")?.value;
 
-  const { data: customers } = await supabase
+  let customerQuery = supabase
     .from("customers")
     .select("id, full_name, first_name, last_name, email, phone, status, address, city, state, zip_code, lat, lng");
+  if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
+  const { data: customers } = await customerQuery;
 
-  const { data: properties } = await supabase
+  let propertyQuery = supabase
     .from("customer_properties")
     .select("id, customer_id, property_name, address, city, state, zip_code, lat, lng, is_primary")
     .not("lat", "is", null)
     .not("lng", "is", null);
+  if (locationId) propertyQuery = propertyQuery.eq("location_id", locationId);
+  const { data: properties } = await propertyQuery;
 
-  const { data: jobs } = await supabase
+  let jobQuery = supabase
     .from("scheduled_jobs")
     .select("customer_id, job_type, status, completed_at, scheduled_date")
     .order("scheduled_date", { ascending: false });
+  if (locationId) jobQuery = jobQuery.eq("location_id", locationId);
+  const { data: jobs } = await jobQuery;
 
-  const { data: estimates } = await supabase
-    .from("estimates")
-    .select("customer_id, status");
+  let estimateQuery = supabase.from("estimates").select("customer_id, status");
+  if (locationId) estimateQuery = estimateQuery.eq("location_id", locationId);
+  const { data: estimates } = await estimateQuery;
 
   // Open customer-submitted trouble calls drive the pulsing map indicator.
   const { data: troubleCalls } = await supabase

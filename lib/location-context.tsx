@@ -34,10 +34,26 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, [selectedLocationId]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('redfox-location-change', { detail: { locationId: selectedLocationId } }));
+    }
+  }, [selectedLocationId]);
+
+  useEffect(() => {
+    if (!selectedLocationId || locations.length === 0) return;
+    if (!locations.some((location) => location.id === selectedLocationId)) {
+      setSelectedLocationId('');
+      localStorage.removeItem('redfox_selected_location');
+    }
+  }, [locations, selectedLocationId]);
+
   const handleSetLocation = (id: string) => {
     setSelectedLocationId(id);
     if (typeof window !== 'undefined') {
       localStorage.setItem('redfox_selected_location', id);
+      document.cookie = `redfox_selected_location=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+      window.dispatchEvent(new CustomEvent('redfox-location-change', { detail: { locationId: id } }));
     }
   };
 

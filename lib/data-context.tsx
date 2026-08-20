@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   mapCustomer,
@@ -97,6 +97,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [photos, setPhotos] = useState<CustomerPhoto[]>([]);
   const [propertyPhotos, setPropertyPhotos] = useState<PropertyPhoto[]>([]);
   const [properties, setProperties] = useState<CustomerProperty[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem('redfox_selected_location');
+    if (saved) setSelectedLocationId(saved);
+
+    const handleLocationChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ locationId?: string }>).detail;
+      setSelectedLocationId(detail?.locationId ?? '');
+    };
+    window.addEventListener('redfox-location-change', handleLocationChange);
+    return () => window.removeEventListener('redfox-location-change', handleLocationChange);
+  }, []);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -240,17 +253,54 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const getCustomerById = (id: string) => customers.find((c) => c.id === id);
+  const visibleCustomerIds = useMemo(
+    () => new Set((selectedLocationId ? customers.filter((c) => c.locationId === selectedLocationId) : customers).map((c) => c.id)),
+    [customers, selectedLocationId],
+  );
+  const visibleCustomers = useMemo(
+    () => selectedLocationId ? customers.filter((c) => c.locationId === selectedLocationId) : customers,
+    [customers, selectedLocationId],
+  );
+  const visibleInvoices = useMemo(
+    () => selectedLocationId ? invoices.filter((i) => i.locationId === selectedLocationId) : invoices,
+    [invoices, selectedLocationId],
+  );
+  const visibleEstimates = useMemo(
+    () => selectedLocationId ? estimates.filter((e) => e.locationId === selectedLocationId) : estimates,
+    [estimates, selectedLocationId],
+  );
+  const visibleJobs = useMemo(
+    () => selectedLocationId ? jobs.filter((j) => j.locationId === selectedLocationId) : jobs,
+    [jobs, selectedLocationId],
+  );
+  const visibleEmployees = useMemo(
+    () => selectedLocationId ? employees.filter((e) => e.locationId === selectedLocationId) : employees,
+    [employees, selectedLocationId],
+  );
+  const visibleProperties = useMemo(
+    () => selectedLocationId ? properties.filter((p) => visibleCustomerIds.has(p.customerId)) : properties,
+    [properties, selectedLocationId, visibleCustomerIds],
+  );
+  const visiblePhotos = useMemo(
+    () => selectedLocationId ? photos.filter((p) => visibleCustomerIds.has(p.customerId)) : photos,
+    [photos, selectedLocationId, visibleCustomerIds],
+  );
+  const visiblePropertyPhotos = useMemo(
+    () => selectedLocationId ? propertyPhotos.filter((p) => visibleCustomerIds.has(p.customerId)) : propertyPhotos,
+    [propertyPhotos, selectedLocationId, visibleCustomerIds],
+  );
+
+  const getCustomerById = (id: string) => visibleCustomers.find((c) => c.id === id);
   const getLocationById = (id: string) => locations.find((l) => l.id === id);
-  const getEstimateById = (id: string) => estimates.find((e) => e.id === id);
+  const getEstimateById = (id: string) => visibleEstimates.find((e) => e.id === id);
   const getCustomerInvoices = (customerId: string) =>
-    invoices.filter((i) => i.customerId === customerId);
-  const getCustomerJobs = (customerId: string) => jobs.filter((j) => j.customerId === customerId);
-  const getCustomerPhotos = (customerId: string) => photos.filter((p) => p.customerId === customerId);
+    visibleInvoices.filter((i) => i.customerId === customerId);
+  const getCustomerJobs = (customerId: string) => visibleJobs.filter((j) => j.customerId === customerId);
+  const getCustomerPhotos = (customerId: string) => visiblePhotos.filter((p) => p.customerId === customerId);
   const getPropertyPhotos = (propertyId: string) =>
-    propertyPhotos.filter((p) => p.propertyId === propertyId);
+    visiblePropertyPhotos.filter((p) => p.propertyId === propertyId);
   const getCustomerProperties = (customerId: string) =>
-    properties.filter((p) => p.customerId === customerId);
+    visibleProperties.filter((p) => p.customerId === customerId);
   const getLocationCustomers = (locationId: string) =>
     locationId ? customers.filter((c) => c.locationId === locationId) : customers;
   const getLocationJobs = (locationId: string) =>
@@ -283,16 +333,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       value={{
         loading,
         org,
-        customers,
+        customers: visibleCustomers,
         locations,
-        invoices,
-        estimates,
-        jobs,
-        employees,
+        invoices: visibleInvoices,
+        estimates: visibleEstimates,
+        jobs: visibleJobs,
+        employees: visibleEmployees,
         addons,
-        photos,
-        propertyPhotos,
-        properties,
+        photos: visiblePhotos,
+        propertyPhotos: visiblePropertyPhotos,
+        properties: visibleProperties,
         refresh,
         getCustomerById,
         getLocationById,

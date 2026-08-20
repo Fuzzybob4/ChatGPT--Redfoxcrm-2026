@@ -47,6 +47,13 @@ export function LocationSelector() {
           Locations
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => setSelectedLocationId('')}
+          className={cn('flex items-center justify-between gap-2', !selectedLocationId && 'font-medium')}
+        >
+          <span>All locations</span>
+          {!selectedLocationId && <Check className="w-4 h-4 text-primary" />}
+        </DropdownMenuItem>
         {locations.map((loc) => (
           <DropdownMenuItem
             key={loc.id}
