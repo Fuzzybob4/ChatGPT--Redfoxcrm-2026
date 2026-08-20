@@ -19,7 +19,7 @@ import {
   getPlan,
 } from '@/lib/pricing';
 import { getTrialState } from '@/lib/trial';
-import { createSignupSetupIntent } from '@/app/(auth)/signup/actions';
+import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -350,7 +350,7 @@ function PaymentMethodSection({ org, isTrialing, daysLeft }: {
     
     try {
       // Use orgId as a safe email-like identifier (Stripe accepts UUIDs in email field)
-      const result = await createSignupSetupIntent(`${org.orgId}@redfoxcrm.app`);
+      const result = await createSignupCheckoutSession(`${org.orgId}@redfoxcrm.app`);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -429,4 +429,3 @@ function PaymentMethodSection({ org, isTrialing, daysLeft }: {
     </Card>
   );
 }
-

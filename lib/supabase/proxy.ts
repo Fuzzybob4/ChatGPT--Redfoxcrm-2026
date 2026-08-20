@@ -30,9 +30,19 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  // Expired or revoked refresh tokens should send the visitor back through a
+  // clean login instead of causing repeated middleware failures.
+  if (authError) {
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/login'
+    const response = NextResponse.redirect(loginUrl)
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith('sb-')) response.cookies.delete(name)
+    })
+    return response
+  }
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/(auth)') ||
     request.nextUrl.pathname === '/login' ||

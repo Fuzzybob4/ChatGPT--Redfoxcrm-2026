@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Elements,
+  CheckoutElementsProvider,
   PaymentElement,
-  useElements,
-  useStripe,
-} from '@stripe/react-stripe-js';
+  useCheckoutElements,
+} from '@stripe/react-stripe-js/checkout';
 import { getStripe } from '@/lib/stripe/client';
 import { finalizeSignupCard } from '@/app/(auth)/signup/actions';
 import { Button } from '@/components/ui/button';
@@ -32,38 +31,29 @@ function CardForm({
   onBack,
   submitting,
 }: Omit<SignupCardStepProps, 'clientSecret'>) {
-  const stripe = useStripe();
-  const elements = useElements();
+  const checkoutState = useCheckoutElements();
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
 
   const handleConfirm = async () => {
-    if (!stripe || !elements) return;
+    if (checkoutState.type !== 'success') return;
     setError('');
     setProcessing(true);
 
     try {
-      const { error: submitError } = await elements.submit();
-      if (submitError) {
-        setError(submitError.message ?? 'Please check your card details');
-        setProcessing(false);
-        return;
-      }
-
-      const { error: confirmError, setupIntent } = await stripe.confirmSetup({
-        elements,
-        confirmParams: { return_url: window.location.href },
+      const confirmation = await checkoutState.checkout.confirm({
+        returnUrl: window.location.href,
         redirect: 'if_required',
       });
 
-      if (confirmError) {
-        setError(confirmError.message ?? 'Could not save your card');
+      if (confirmation.type === 'error') {
+        setError(confirmation.error.message ?? 'Could not save your payment method');
         setProcessing(false);
         return;
       }
 
-      if (setupIntent && setupIntent.status === 'succeeded') {
-        const result = await finalizeSignupCard(customerId, setupIntent.id);
+      if (confirmation.session.status.type === 'complete') {
+        const result = await finalizeSignupCard(customerId, confirmation.session.id);
         if (!result.ok) {
           setError(result.error);
           setProcessing(false);
@@ -77,7 +67,7 @@ function CardForm({
         return;
       }
 
-      setError('Card could not be verified. Please try another card.');
+      setError('Payment method could not be verified. Please try another card.');
       setProcessing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -119,7 +109,7 @@ function CardForm({
         <Button
           type="button"
           onClick={handleConfirm}
-          disabled={busy || !stripe}
+          disabled={busy || checkoutState.type !== 'success'}
           className="w-full bg-primary hover:bg-primary/90"
         >
           {busy ? 'Saving card...' : 'Start Free Trial'}
@@ -142,14 +132,14 @@ export function SignupCardStep({ clientSecret, ...rest }: SignupCardStepProps) {
   const stripePromise = useMemo(() => getStripe(), []);
 
   return (
-    <Elements
+    <CheckoutElementsProvider
       stripe={stripePromise}
       options={{
         clientSecret,
-        appearance: { theme: 'stripe' },
+        elementsOptions: { appearance: { theme: 'stripe' } },
       }}
     >
       <CardForm {...rest} />
-    </Elements>
+    </CheckoutElementsProvider>
   );
 }

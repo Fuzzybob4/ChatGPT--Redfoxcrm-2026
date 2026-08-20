@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, Minus, Plus, Sparkles } from 'lucide-react';
+import { CreditCard, FileText, Minus, Plus, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/status-badge';
-import { setPortalInvoiceAddonSelection } from '@/app/(crm)/customers/portal-invoice-actions';
+import {
+  createPortalInvoiceCheckout,
+  setPortalInvoiceAddonSelection,
+} from '@/app/(crm)/customers/portal-invoice-actions';
 import type { PortalInvoice } from '@/app/(crm)/customers/portal-invoice-actions';
 
 interface CustomerPortalInvoicesProps {
@@ -33,6 +36,7 @@ function statusLabel(status: string): 'Draft' | 'Sent' | 'Paid' | 'Overdue' {
 export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPortalInvoicesProps) {
   const [invoices, setInvoices] = useState(initialInvoices);
   const [pendingAddonId, setPendingAddonId] = useState<string | null>(null);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
   const [errorByInvoice, setErrorByInvoice] = useState<Record<string, string>>({});
 
   async function updateAddonQuantity(invoiceId: string, addonProductId: string, quantity: number) {
@@ -66,6 +70,21 @@ export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPorta
       }));
     } finally {
       setPendingAddonId(null);
+    }
+  }
+
+  async function payInvoice(invoiceId: string) {
+    setPendingPaymentId(invoiceId);
+    setErrorByInvoice((prev) => ({ ...prev, [invoiceId]: '' }));
+    try {
+      const { url } = await createPortalInvoiceCheckout(token, invoiceId);
+      window.location.assign(url);
+    } catch (err) {
+      setErrorByInvoice((prev) => ({
+        ...prev,
+        [invoiceId]: err instanceof Error ? err.message : 'Unable to start payment.',
+      }));
+      setPendingPaymentId(null);
     }
   }
 
@@ -230,6 +249,18 @@ export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPorta
                   <span>Total</span>
                   <span>{formatCurrency(invoice.grandTotal)}</span>
                 </div>
+                {invoice.status !== 'paid' && (
+                  <Button
+                    className="mt-4 w-full"
+                    disabled={pendingPaymentId === invoice.id}
+                    onClick={() => payInvoice(invoice.id)}
+                  >
+                    <CreditCard className="mr-2 size-4" />
+                    {pendingPaymentId === invoice.id
+                      ? 'Opening secure checkout…'
+                      : `Pay ${formatCurrency(Math.max(invoice.grandTotal - invoice.amountPaid, 0))}`}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

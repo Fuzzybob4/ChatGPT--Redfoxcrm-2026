@@ -1,6 +1,8 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { stripe } from '@/lib/stripe/server';
 import { verifyPortalToken } from './portal-actions';
 
 export interface PortalInvoiceLineItem {
@@ -49,7 +51,7 @@ export interface PortalInvoice {
 async function requireCustomerFromToken(token: string) {
   const customer = await verifyPortalToken(token);
   if (!customer) throw new Error('Invalid or expired portal link');
-  return customer as { id: string; org_id: string; email: string };
+  return customer as { id: string; org_id: string; email: string | null };
 }
 
 /**
@@ -68,6 +70,7 @@ export async function getPortalInvoices(token: string): Promise<PortalInvoice[]>
     .eq('customer_id', customer.id)
     .eq('org_id', customer.org_id)
     .eq('archived', false)
+    .neq('status', 'draft')
     .order('created_at', { ascending: false });
 
   if (invErr) throw new Error(invErr.message);
@@ -144,6 +147,101 @@ export async function getPortalInvoices(token: string): Promise<PortalInvoice[]>
       grandTotal: totalAmount + addonsTotal,
     };
   });
+}
+
+export async function createPortalInvoiceCheckout(
+  token: string,
+  invoiceId: string,
+): Promise<{ url: string }> {
+  const customer = await requireCustomerFromToken(token);
+  const admin = createAdminClient();
+
+  const { data: invoice, error: invoiceError } = await admin
+    .from('invoices')
+    .select('id, org_id, customer_id, invoice_number, title, status, total_amount, amount_paid')
+    .eq('id', invoiceId)
+    .eq('org_id', customer.org_id)
+    .eq('customer_id', customer.id)
+    .single();
+
+  if (invoiceError || !invoice) throw new Error('Invoice not found');
+  if (invoice.status === 'draft') throw new Error('This invoice has not been issued yet');
+  if (invoice.status === 'paid') throw new Error('This invoice is already paid');
+
+  const [{ data: products, error: productError }, { data: selections, error: selectionError }] =
+    await Promise.all([
+      admin.from('invoice_addon_products').select('id, price').eq('invoice_id', invoice.id),
+      admin.from('invoice_addon_selections').select('addon_product_id, quantity').eq('invoice_id', invoice.id),
+    ]);
+  if (productError || selectionError) throw new Error('Could not calculate the invoice total');
+
+  const addonsTotal = (products ?? []).reduce((sum, product) => {
+    const selection = (selections ?? []).find((item) => item.addon_product_id === product.id);
+    return sum + Number(product.price) * Number(selection?.quantity ?? 0);
+  }, 0);
+  const orderTotalCents = Math.round((Number(invoice.total_amount) + addonsTotal) * 100);
+  const amountPaidCents = Math.round(Number(invoice.amount_paid ?? 0) * 100);
+  const amountDueCents = orderTotalCents - amountPaidCents;
+  if (amountDueCents <= 0) throw new Error('This invoice has no remaining balance');
+
+  const { data: org, error: orgError } = await admin
+    .from('organizations')
+    .select('name, stripe_account_id, stripe_charges_enabled')
+    .eq('id', customer.org_id)
+    .single();
+  if (orgError || !org?.stripe_account_id || !org.stripe_charges_enabled) {
+    throw new Error('Online payments are not available for this business yet');
+  }
+
+  const headerList = await headers();
+  const host = headerList.get('x-forwarded-host') ?? headerList.get('host') ?? 'www.redfoxcrm.com';
+  const protocol = headerList.get('x-forwarded-proto') ?? 'https';
+  const origin = `${protocol}://${host}`;
+  const suffix = Array.from({ length: 8 }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('');
+
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: 'payment',
+      client_reference_id: invoice.id,
+      customer_email: customer.email || undefined,
+      integration_identifier: `redfox_invoice_${suffix}`,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `${org.name} — ${invoice.title}`,
+              description: `Invoice ${invoice.invoice_number}`,
+            },
+            unit_amount: amountDueCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        payment_flow: 'redfox_customer_invoice',
+        invoice_id: invoice.id,
+        org_id: customer.org_id,
+        customer_id: customer.id,
+        order_total_cents: String(orderTotalCents),
+        amount_due_cents: String(amountDueCents),
+      },
+      payment_intent_data: {
+        metadata: {
+          payment_flow: 'redfox_customer_invoice',
+          invoice_id: invoice.id,
+          org_id: customer.org_id,
+          customer_id: customer.id,
+        },
+      },
+      success_url: `${origin}/customer-portal/${encodeURIComponent(token)}?payment=success`,
+      cancel_url: `${origin}/customer-portal/${encodeURIComponent(token)}?payment=cancelled`,
+    },
+    { stripeAccount: org.stripe_account_id },
+  );
+
+  if (!session.url) throw new Error('Stripe did not return a checkout URL');
+  return { url: session.url };
 }
 
 /**
