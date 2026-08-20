@@ -7,6 +7,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
+  // The recovery callback must receive the untouched PKCE verifier cookie.
+  // Calling getUser() here can refresh or clear auth cookies before the route
+  // handler exchanges the one-time recovery code for a session.
+  if (request.nextUrl.pathname === '/auth/callback') {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
