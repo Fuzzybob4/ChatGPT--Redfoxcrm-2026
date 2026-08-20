@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import Link from "next/link";
+import { useState } from "react";
 import { AddonPaymentModal } from "@/components/settings/addon-payment-modal";
 import {
   Building,
@@ -12,12 +11,9 @@ import {
   BookOpen,
   Upload,
   Globe,
-  Trash2,
   Check,
   Lock,
   Package,
-  ChevronRight,
-  Image as ImageIcon,
 } from "lucide-react";
 
 import {
@@ -35,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
+import { saveBusinessProfile } from "@/app/(crm)/settings/actions";
 
 // Display shape derived from the shared pricing source of truth.
 const ADD_ONS = ADDONS.map((a) => ({
@@ -58,6 +55,31 @@ const INTEGRATIONS = [
     description: "Sync invoices and expenses with QuickBooks Online",
     icon: BookOpen,
     badge: "Accounting",
+    availability: "Coming soon",
+  },
+  {
+    id: "hubspot",
+    name: "HubSpot",
+    description: "Import contacts, companies, and deal history",
+    icon: Upload,
+    badge: "CRM Import",
+    availability: "Coming soon",
+  },
+  {
+    id: "jobber",
+    name: "Jobber",
+    description: "Import clients, properties, quotes, jobs, and invoices",
+    icon: Upload,
+    badge: "CRM Import",
+    availability: "Coming soon",
+  },
+  {
+    id: "square",
+    name: "Square",
+    description: "Import customers, invoices, and payment history",
+    icon: Upload,
+    badge: "Data Import",
+    availability: "Coming soon",
   },
   {
     id: "resend",
@@ -65,6 +87,7 @@ const INTEGRATIONS = [
     description: "Transactional email for invoices and job updates",
     icon: Mail,
     badge: "Email",
+    availability: "Managed by RedFox",
   },
   {
     id: "twilio",
@@ -73,22 +96,38 @@ const INTEGRATIONS = [
     icon: Bell,
     badge: "SMS",
     note: "Billed per message",
+    availability: "Coming soon",
   },
 ];
 
+interface BusinessProfile {
+  business_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+}
+
+interface OrganizationSettings {
+  active_addons?: string[] | null;
+  stripe_account_id?: string | null;
+  stripe_charges_enabled?: boolean | null;
+  card_brand?: string | null;
+  card_last4?: string | null;
+}
+
 export interface SettingsContentProps {
-  businessProfile: any;
-  orgData: any;
-  orgId: string;
+  businessProfile: BusinessProfile | null;
+  orgData: OrganizationSettings | null;
 }
 
 export function SettingsContent({
   businessProfile,
   orgData,
-  orgId,
 }: SettingsContentProps) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   // Add-ons already paid for and active on the account.
   const [persistedAddons, setPersistedAddons] = useState<Set<string>>(
     new Set<string>(orgData?.active_addons ?? []),
@@ -98,6 +137,18 @@ export function SettingsContent({
     new Set<string>(orgData?.active_addons ?? []),
   );
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingBusiness, setSavingBusiness] = useState(false);
+  const [businessForm, setBusinessForm] = useState({
+    businessName: businessProfile?.business_name || "",
+    phone: businessProfile?.phone || "",
+    email: businessProfile?.email || "",
+    website: businessProfile?.website || "",
+    address: businessProfile?.address || "",
+    city: businessProfile?.city || "",
+    state: businessProfile?.state || "",
+    zipCode: businessProfile?.zip_code || "",
+  });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingAddons, setPendingAddons] = useState<string[]>([]);
 
@@ -116,27 +167,36 @@ export function SettingsContent({
     // Prevent un-toggling something already paid for from this quick view.
     setActiveAddons((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
-  const handleSaveAddons = useCallback(() => {
+  function handleSaveAddons() {
     if (newlySelected.length > 0) {
       setPendingAddons(newlySelected);
       setShowPaymentModal(true);
     }
-  }, [newlySelected]);
+  }
 
-  const handlePaymentSuccess = useCallback((addons: string[]) => {
+  function handlePaymentSuccess(addons: string[]) {
     // Mark the returned active add-ons as persisted so the paywall clears.
     setPersistedAddons(new Set<string>(addons));
     setActiveAddons(new Set<string>(addons));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  }, []);
+  }
 
-  function handleSave() {
+  async function handleSaveBusiness() {
+    setSavingBusiness(true);
+    setSaveError(null);
+    const result = await saveBusinessProfile(businessForm);
+    setSavingBusiness(false);
+    if (!result.success) {
+      setSaveError(result.error || "Could not save business information");
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -168,7 +228,8 @@ export function SettingsContent({
                     <Label htmlFor="biz-name" className="text-xs font-medium">Business Name</Label>
                     <Input
                       id="biz-name"
-                      defaultValue={businessProfile?.business_name || ""}
+                      value={businessForm.businessName}
+                      onChange={(event) => setBusinessForm((current) => ({ ...current, businessName: event.target.value }))}
                       placeholder="Your business name"
                     />
                   </div>
@@ -176,7 +237,8 @@ export function SettingsContent({
                     <Label htmlFor="biz-phone" className="text-xs font-medium">Phone</Label>
                     <Input
                       id="biz-phone"
-                      defaultValue={businessProfile?.phone || ""}
+                      value={businessForm.phone}
+                      onChange={(event) => setBusinessForm((current) => ({ ...current, phone: event.target.value }))}
                       placeholder="(555) 123-4567"
                     />
                   </div>
@@ -185,7 +247,8 @@ export function SettingsContent({
                   <Label htmlFor="biz-email" className="text-xs font-medium">Business Email</Label>
                   <Input
                     id="biz-email"
-                    defaultValue={businessProfile?.email || ""}
+                    value={businessForm.email}
+                    onChange={(event) => setBusinessForm((current) => ({ ...current, email: event.target.value }))}
                     placeholder="hello@company.com"
                   />
                 </div>
@@ -197,19 +260,36 @@ export function SettingsContent({
                   <Input
                     id="biz-website"
                     placeholder="https://yourcompany.com"
-                    defaultValue={businessProfile?.website || ""}
+                    value={businessForm.website}
+                    onChange={(event) => setBusinessForm((current) => ({ ...current, website: event.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="biz-address" className="text-xs font-medium">Address</Label>
                   <Input
                     id="biz-address"
-                    defaultValue={businessProfile?.address ? `${businessProfile.address}${businessProfile.city ? ", " + businessProfile.city : ""}${businessProfile.state ? ", " + businessProfile.state : ""}${businessProfile.zip_code ? " " + businessProfile.zip_code : ""}` : ""}
+                    value={businessForm.address}
+                    onChange={(event) => setBusinessForm((current) => ({ ...current, address: event.target.value }))}
                     placeholder="123 Main St, City, State 12345"
                   />
                 </div>
-                <Button size="sm" onClick={handleSave} className="gap-1.5">
-                  {saved ? <><Check className="size-3.5" /> Saved</> : "Save Changes"}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="biz-city" className="text-xs font-medium">City</Label>
+                    <Input id="biz-city" value={businessForm.city} onChange={(event) => setBusinessForm((current) => ({ ...current, city: event.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="biz-state" className="text-xs font-medium">State</Label>
+                    <Input id="biz-state" value={businessForm.state} onChange={(event) => setBusinessForm((current) => ({ ...current, state: event.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="biz-zip" className="text-xs font-medium">ZIP</Label>
+                    <Input id="biz-zip" value={businessForm.zipCode} onChange={(event) => setBusinessForm((current) => ({ ...current, zipCode: event.target.value }))} />
+                  </div>
+                </div>
+                {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+                <Button size="sm" onClick={handleSaveBusiness} disabled={savingBusiness} className="gap-1.5">
+                  {saved ? <><Check className="size-3.5" /> Saved</> : savingBusiness ? "Saving..." : "Save Changes"}
                 </Button>
               </CardContent>
             </Card>
@@ -258,9 +338,7 @@ export function SettingsContent({
                     className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
-                <Button size="sm" onClick={handleSave} className="gap-1.5">
-                  {saved ? <><Check className="size-3.5" /> Saved</> : "Save Defaults"}
-                </Button>
+                <p className="text-xs text-muted-foreground">Document defaults are not enabled for the pilot. Titles, agreements, and notes can still be set on each estimate or invoice.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -304,12 +382,7 @@ export function SettingsContent({
                           <Check className="size-3" />
                           Connected
                         </Badge>
-                      ) : (
-                        <Button variant="outline" size="sm" className="text-xs">
-                          Connect
-                          <ChevronRight className="size-3 ml-1" />
-                        </Button>
-                      )}
+                      ) : <Badge variant="secondary" className="text-xs">{integration.availability || "Coming soon"}</Badge>}
                     </div>
                   </div>
                 ))}

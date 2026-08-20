@@ -2,18 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
 import { SettingsContent } from "@/components/settings/settings-content";
-import {
-  Building,
-  Zap,
-  CreditCard,
-  Mail,
-  Bell,
-  BookOpen,
-  Lock,
-  Package,
-  ChevronRight,
-} from "lucide-react";
-
 import { PageHeader } from "@/components/page-header";
 
 export default async function SettingsPage() {
@@ -55,7 +43,6 @@ export default async function SettingsPage() {
         <SettingsContent
           businessProfile={businessProfile}
           orgData={orgData}
-          orgId={org.orgId}
         />
       </div>
     </div>

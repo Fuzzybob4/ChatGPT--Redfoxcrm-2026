@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, X, AlertCircle, CheckCircle } from "lucide-react";
+import { Upload, AlertCircle, CheckCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { importCustomersFromCSV } from "@/app/(crm)/customers/import-actions";
 import { useLocation } from "@/lib/location-context";
 import { useData } from "@/lib/data-context";
+import { parseCSV } from "@/lib/csv";
 
 export function CSVImportDialog() {
   const { selectedLocationId } = useLocation();
@@ -28,6 +29,8 @@ export function CSVImportDialog() {
   } | null>(null);
   const [result, setResult] = useState<{
     imported: number;
+    created: number;
+    updated: number;
     failed: number;
     errors: Array<{ row: number; error: string }>;
   } | null>(null);
@@ -44,13 +47,11 @@ export function CSVImportDialog() {
       setShowPreview(false);
       
       // Parse CSV to show preview
-      const lines = text.trim().split("\n");
-      if (lines.length > 0) {
-        const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
-        const rows = lines.slice(1, 6).map((line) =>
-          line.split(",").map((cell) => cell.trim().replace(/"/g, ""))
-        );
-        setPreviewData({ headers, rows });
+      try {
+        const parsed = parseCSV(text);
+        if (parsed.length > 0) setPreviewData({ headers: parsed[0], rows: parsed.slice(1, 6) });
+      } catch {
+        setPreviewData(null);
       }
     };
     reader.readAsText(file);
@@ -67,6 +68,8 @@ export function CSVImportDialog() {
       const res = await importCustomersFromCSV(csvText, selectedLocationId);
       setResult({
         imported: res.imported,
+        created: res.created,
+        updated: res.updated,
         failed: res.failed,
         errors: res.errors,
       });
@@ -100,8 +103,7 @@ export function CSVImportDialog() {
         <DialogHeader className="min-w-0">
           <DialogTitle>Import Customers from CSV</DialogTitle>
           <DialogDescription className="text-pretty">
-            Upload a CSV file with: First Name (required), Last Name (required), Email, Phone Number, and Street Address.
-            Extra columns will be ignored.
+            Upload customers from Jobber, HubSpot, QuickBooks, Square, or another CRM. RedFox recognizes names, email, phone, street, city, state, ZIP, notes, tags, and status. Existing customers are updated by email or phone instead of duplicated.
           </DialogDescription>
         </DialogHeader>
 
@@ -181,7 +183,9 @@ export function CSVImportDialog() {
                   <CheckCircle className="size-5 text-green-600 mt-0.5 shrink-0" />
                   <div className="flex-1">
                     <div className="font-semibold text-green-900">Success!</div>
-                    <div className="text-sm text-green-800">{result.imported} customer{result.imported !== 1 ? 's' : ''} imported successfully</div>
+                    <div className="text-sm text-green-800">
+                      {result.created} created and {result.updated} updated
+                    </div>
                   </div>
                 </div>
               )}
