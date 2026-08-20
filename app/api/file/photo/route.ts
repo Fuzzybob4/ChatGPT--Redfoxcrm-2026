@@ -3,14 +3,32 @@ import { get } from '@vercel/blob';
 
 export async function GET(request: NextRequest) {
   try {
-    const pathname = request.nextUrl.searchParams.get('pathname');
+    const rawPath = request.nextUrl.searchParams.get('pathname');
 
-    if (!pathname) {
+    if (!rawPath) {
       return NextResponse.json({ error: 'Missing pathname' }, { status: 400 });
     }
 
-    // Verify the pathname is for customer or property photos (security check)
-    if (!pathname.startsWith('customers/') && !pathname.startsWith('properties/')) {
+    // Older rows may contain the full Blob URL while newer rows contain only
+    // blob.pathname. Normalize both formats before reading the private blob.
+    let pathname = rawPath;
+    try {
+      if (/^https?:\/\//i.test(rawPath)) {
+        pathname = new URL(rawPath).pathname.replace(/^\/+/, '');
+      }
+    } catch {
+      return NextResponse.json({ error: 'Invalid pathname' }, { status: 403 });
+    }
+
+    // Support both current and legacy upload prefixes. Existing rows use
+    // customer-photos/property-photos; newer uploads use customers/properties.
+    const allowedPrefix = [
+      'customers/',
+      'properties/',
+      'customer-photos/',
+      'property-photos/',
+    ].some((prefix) => pathname.startsWith(prefix));
+    if (!allowedPrefix) {
       return NextResponse.json({ error: 'Invalid pathname' }, { status: 403 });
     }
 

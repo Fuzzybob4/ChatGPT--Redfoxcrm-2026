@@ -130,7 +130,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     // All queries are RLS-scoped to the caller's org automatically.
     const [
-      { data: custRows },
+      { data: custRows, error: custError },
       { data: locRows },
       { data: invRows },
       { data: invLineItemRows },
@@ -138,8 +138,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: jobRows },
       { data: empRows },
       { data: addonRows },
-      { data: photoRows },
-      { data: propertyPhotoRows },
+      { data: photoRows, error: photoError },
+      { data: propertyPhotoRows, error: propertyPhotoError },
       { data: propertyRows },
     ] = await Promise.all([
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
@@ -154,6 +154,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('property_photos').select('*').order('created_at', { ascending: false }),
       supabase.from('customer_properties').select('*').order('created_at', { ascending: true }),
     ]);
+
+    if (custError) console.error('[v0] Failed to load customers:', custError);
+    if (photoError) console.error('[v0] Failed to load customer photos:', photoError);
+    if (propertyPhotoError) console.error('[v0] Failed to load property photos:', propertyPhotoError);
 
     setCustomers((custRows ?? []).map(mapCustomer));
     setLocations((locRows ?? []).map(mapLocation));

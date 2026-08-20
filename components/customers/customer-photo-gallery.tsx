@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +33,11 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
       </Card>
     );
   }
+
+  const photoSrc = (photoUrl: string) =>
+    /^https?:\/\//i.test(photoUrl)
+      ? photoUrl
+      : `/api/file/photo?pathname=${encodeURIComponent(photoUrl)}`;
 
   const selected = selectedIndex !== null ? photos[selectedIndex] : null;
 
@@ -95,12 +99,11 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
                 onClick={() => setSelectedIndex(idx)}
                 className="relative group overflow-hidden rounded-lg aspect-square bg-muted hover:opacity-75 transition-opacity"
               >
-                <Image
-                  src={`/api/file/photo?pathname=${encodeURIComponent(photo.photoUrl)}`}
+                <img
+                  src={photoSrc(photo.photoUrl)}
                   alt={photo.description || `Property photo ${idx + 1}`}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading="lazy"
                 />
               </button>
             ))}
@@ -140,13 +143,10 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
 
             {/* Image */}
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-              <Image
-                src={`/api/file/photo?pathname=${encodeURIComponent(selected.photoUrl)}`}
+              <img
+                src={photoSrc(selected.photoUrl)}
                 alt={selected.description || "Property photo"}
-                fill
-                className="object-contain"
-                sizes="(max-width: 1024px) 90vw, 80vw"
-                priority
+                className="absolute inset-0 h-full w-full object-contain"
               />
             </div>
 
