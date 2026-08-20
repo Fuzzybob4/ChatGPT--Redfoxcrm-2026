@@ -27,17 +27,14 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Property Photos</CardTitle>
+          <CardTitle>Customer Photos</CardTitle>
           <CardDescription>No photos uploaded yet</CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
-  const photoSrc = (photoUrl: string) =>
-    /^https?:\/\//i.test(photoUrl)
-      ? photoUrl
-      : `/api/file/photo?pathname=${encodeURIComponent(photoUrl)}`;
+  const photoSrc = (photoUrl: string) => photoUrl;
 
   const selected = selectedIndex !== null ? photos[selectedIndex] : null;
 
@@ -86,7 +83,7 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Property Photos</CardTitle>
+          <CardTitle>Customer Photos</CardTitle>
           <CardDescription>
             {photos.length} {photos.length === 1 ? "photo" : "photos"}
           </CardDescription>
@@ -101,7 +98,7 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
               >
                 <img
                   src={photoSrc(photo.photoUrl)}
-                  alt={photo.description || `Property photo ${idx + 1}`}
+                  alt={photo.description || `Customer photo ${idx + 1}`}
                   className="absolute inset-0 h-full w-full object-cover"
                   loading="lazy"
                 />
