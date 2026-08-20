@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
+import { getCurrentOrg } from '@/lib/org';
 
 async function getOrigin() {
   const h = await headers();
@@ -114,6 +115,8 @@ export async function setPaymentProvider(
   orgId: string,
   provider: 'stripe' | 'square' | 'quickbooks' | 'none',
 ): Promise<{ ok: boolean; error?: string }> {
+  const currentOrg = await getCurrentOrg();
+  if (!currentOrg || currentOrg.orgId !== orgId) return { ok: false, error: 'Unauthorized' };
   const supabase = await createClient();
   const { error } = await supabase
     .from('organizations')
@@ -131,6 +134,8 @@ export async function setPaymentProvider(
 export async function startStripeConnect(
   orgId: string,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const currentOrg = await getCurrentOrg();
+  if (!currentOrg || currentOrg.orgId !== orgId) return { ok: false, error: 'Unauthorized' };
   const supabase = await createClient();
   const { data: org } = await supabase
     .from('organizations')

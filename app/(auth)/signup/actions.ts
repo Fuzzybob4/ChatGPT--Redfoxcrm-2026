@@ -15,15 +15,13 @@ export async function createSignupSetupIntent(
   if (!normalizedEmail) return { ok: false, error: 'Email is required' };
 
   try {
-    // Reuse an existing customer with this email if one exists, otherwise create one.
-    const existing = await stripe.customers.list({ email: normalizedEmail, limit: 1 });
-    const customer =
-      existing.data[0] ?? (await stripe.customers.create({ email: normalizedEmail }));
+    // A new signup gets its own billing customer. Reusing by email can attach a
+    // new signup's card to another business that happens to use the same email.
+    const customer = await stripe.customers.create({ email: normalizedEmail });
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
       usage: 'off_session',
-      payment_method_types: ['card'],
     });
 
     if (!setupIntent.client_secret) {
@@ -51,6 +49,11 @@ export async function finalizeSignupCard(
 > {
   try {
     const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+    const setupCustomerId =
+      typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
+    if (setupCustomerId !== customerId || setupIntent.status !== 'succeeded') {
+      return { ok: false, error: 'Card setup could not be verified' };
+    }
     const paymentMethodId =
       typeof setupIntent.payment_method === 'string'
         ? setupIntent.payment_method

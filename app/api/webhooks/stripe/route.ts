@@ -6,9 +6,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-// In-memory deduplication cache (expires after 24 hours in production, use Redis)
-const processedEvents = new Map<string, number>();
-
 export async function POST(req: Request) {
   if (!webhookSecret) {
     console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set");
@@ -32,30 +29,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Webhook signature invalid: ${message}` }, { status: 400 });
   }
 
-  // Deduplication: check if we've processed this event ID recently
-  const now = Date.now();
-  const lastSeen = processedEvents.get(event.id);
-  if (lastSeen && now - lastSeen < 60000) {
-    // Within 60 seconds — likely a duplicate
-    console.log(`[stripe-webhook] Duplicate event detected: ${event.id}, skipping`);
-    return NextResponse.json({ received: true });
-  }
-
-  // Mark event as processed
-  processedEvents.set(event.id, now);
-
-  // Clean up old entries (> 24 hours)
-  for (const [id, timestamp] of processedEvents.entries()) {
-    if (now - timestamp > 86400000) {
-      processedEvents.delete(id);
-    }
+  const claim = await claimWebhookEvent(event);
+  if (claim === "succeeded") return NextResponse.json({ received: true, duplicate: true });
+  if (claim === "processing") {
+    return NextResponse.json({ error: "Event is already processing" }, { status: 503 });
   }
 
   // Process event and collect any errors
   let processingError: string | null = null;
 
   try {
-    if (event.type === "checkout.session.completed") {
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
       processingError = await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
     } else if (event.type === "invoice.paid") {
       processingError = await handleInvoicePaid(event.data.object as Stripe.Invoice);
@@ -78,11 +65,63 @@ export async function POST(req: Request) {
 
   // If there was a critical error, return 500 so Stripe retries
   if (processingError) {
+    await finishWebhookEvent(event.id, "failed", processingError);
     console.error(`[stripe-webhook] Event ${event.type} (${event.id}) failed:`, processingError);
     return NextResponse.json({ error: processingError }, { status: 500 });
   }
 
+  await finishWebhookEvent(event.id, "succeeded", null);
   return NextResponse.json({ received: true });
+}
+
+async function claimWebhookEvent(event: Stripe.Event): Promise<"claimed" | "processing" | "succeeded"> {
+  const admin = createAdminClient();
+  const accountId = typeof event.account === "string" ? event.account : null;
+  const { error: insertError } = await admin.from("stripe_webhook_events").insert({
+    event_id: event.id,
+    event_type: event.type,
+    stripe_account_id: accountId,
+    status: "processing",
+    attempt_count: 1,
+  });
+
+  if (!insertError) return "claimed";
+  if (insertError.code !== "23505") throw new Error(`Could not claim webhook event: ${insertError.message}`);
+
+  const { data: existing, error: existingError } = await admin
+    .from("stripe_webhook_events")
+    .select("status, attempt_count")
+    .eq("event_id", event.id)
+    .single();
+  if (existingError || !existing) throw new Error("Could not read webhook event status");
+  if (existing.status === "succeeded") return "succeeded";
+  if (existing.status === "processing") return "processing";
+
+  const { error: retryError } = await admin
+    .from("stripe_webhook_events")
+    .update({
+      status: "processing",
+      error_message: null,
+      attempt_count: Number(existing.attempt_count ?? 0) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("event_id", event.id)
+    .eq("status", "failed");
+  if (retryError) throw new Error(`Could not retry webhook event: ${retryError.message}`);
+  return "claimed";
+}
+
+async function finishWebhookEvent(eventId: string, status: "succeeded" | "failed", error: string | null) {
+  const admin = createAdminClient();
+  await admin
+    .from("stripe_webhook_events")
+    .update({
+      status,
+      error_message: error,
+      processed_at: status === "succeeded" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("event_id", eventId);
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -102,23 +141,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   }
 
   // Validate payment status
-  if (session.payment_status !== "paid") {
-    return `Payment not completed. Status: ${session.payment_status}`;
-  }
+  if (session.payment_status !== "paid") return null;
 
   // Validate amount
   if (!session.amount_total || session.amount_total <= 0) {
     return `Invalid amount: ${session.amount_total}`;
   }
 
-  const amountPaid = session.amount_total / 100; // Convert from cents to dollars
+  const amountPaidCents = session.amount_total;
+  const amountPaid = amountPaidCents / 100;
+  const expectedAmountCents = Number(session.metadata?.amount_due_cents ?? 0);
+  const orderTotalCents = Number(session.metadata?.order_total_cents ?? 0);
+  if (!Number.isInteger(expectedAmountCents) || expectedAmountCents !== amountPaidCents) {
+    return `Checkout amount mismatch for session ${session.id}`;
+  }
+  if (!Number.isInteger(orderTotalCents) || orderTotalCents <= 0) {
+    return `Invalid order total metadata for session ${session.id}`;
+  }
 
   const supabase = createAdminClient();
 
   // Fetch the current invoice to validate before updating
   const { data: invoice, error: fetchErr } = await supabase
     .from("invoices")
-    .select("id, org_id, total_amount, status, currency")
+    .select("id, org_id, customer_id, amount_paid, status")
     .eq("id", invoiceId)
     .single();
 
@@ -130,37 +176,49 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   if (invoice.org_id !== orgId) {
     return `Org mismatch: invoice org_id ${invoice.org_id} != session org_id ${orgId}`;
   }
+  if (customerId && invoice.customer_id !== customerId) return `Customer mismatch for invoice ${invoiceId}`;
 
-  // Verify amount matches (with small tolerance for rounding)
-  const amountDiff = Math.abs(invoice.total_amount - amountPaid);
-  if (amountDiff > 0.01) {
-    return `Amount mismatch: invoice ${invoice.total_amount} != paid ${amountPaid}`;
-  }
+  const paymentIntentId = typeof session.payment_intent === "string"
+    ? session.payment_intent
+    : (session.payment_intent as { id?: string } | null)?.id ?? session.id;
+  const { error: paymentError } = await supabase.from("payments").upsert(
+    {
+      org_id: orgId,
+      invoice_id: invoiceId,
+      amount_cents: amountPaidCents,
+      status: "succeeded",
+      provider: "stripe",
+      provider_payment_id: paymentIntentId,
+    },
+    { onConflict: "provider_payment_id", ignoreDuplicates: true },
+  );
+  if (paymentError) return `Failed to record payment: ${paymentError.message}`;
 
-  // Don't re-mark already-paid invoices
-  if (invoice.status === "paid") {
-    console.log(`[stripe-webhook] Invoice ${invoiceId} already marked paid, skipping`);
-    return null;
-  }
+  const previousPaidCents = Math.round(Number(invoice.amount_paid ?? 0) * 100);
+  const newAmountPaidCents = Math.min(previousPaidCents + amountPaidCents, orderTotalCents);
+  const isFullyPaid = newAmountPaidCents >= orderTotalCents;
 
   // Update the invoice with admin client (bypasses RLS)
   const { error: updateErr } = await supabase
     .from("invoices")
     .update({
-      status: "paid",
-      amount_paid: amountPaid,
-      paid_at: new Date().toISOString(),
-      stripe_payment_intent_id: typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : (session.payment_intent as { id?: string } | null)?.id ?? null,
+      status: isFullyPaid ? "paid" : "sent",
+      payment_state: isFullyPaid ? "paid" : "partial",
+      amount_paid: newAmountPaidCents / 100,
+      amount_paid_cents: newAmountPaidCents,
+      balance_due: Math.max(orderTotalCents - newAmountPaidCents, 0) / 100,
+      paid_at: isFullyPaid ? new Date().toISOString() : null,
+      stripe_payment_intent_id: paymentIntentId,
+      payment_method: "stripe",
     })
-    .eq("id", invoiceId);
+    .eq("id", invoiceId)
+    .eq("org_id", orgId);
 
   if (updateErr) {
     return `Failed to mark invoice paid: ${updateErr.message}`;
   }
 
-  console.log(`[stripe-webhook] Invoice ${invoiceId} marked as paid`);
+  console.log(`[stripe-webhook] Invoice ${invoiceId} payment recorded (${amountPaid})`);
   return null;
 }
 
@@ -174,7 +232,8 @@ async function handleInvoicePaid(stripeInvoice: Stripe.Invoice): Promise<string 
   const subscriptionId = typeof sub === "string" ? sub : (sub as { id?: string } | null)?.id;
 
   if (!subscriptionId) {
-    return `No subscription found on invoice ${stripeInvoice.id}`;
+    // Not every Stripe invoice belongs to the RedFox SaaS subscription flow.
+    return null;
   }
 
   const supabase = createAdminClient();

@@ -1,25 +1,30 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentOrg } from '@/lib/org';
+import { randomBytes } from 'node:crypto';
+
+export interface PortalCustomer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  org_id: string;
+}
 
 /**
  * Generate a unique portal access token for a customer
  */
 function generatePortalToken(): string {
-  // Generate a 32-character alphanumeric token
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let token = '';
-  for (let i = 0; i < 32; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
+  return randomBytes(32).toString('base64url');
 }
 
 /**
  * Generate or retrieve portal access token for a customer
  */
 export async function getOrCreatePortalToken(customerId: string): Promise<string> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error('Not authenticated');
   const admin = createAdminClient();
 
   // Check if customer already has a token
@@ -27,6 +32,7 @@ export async function getOrCreatePortalToken(customerId: string): Promise<string
     .from('customers')
     .select('portal_access_token')
     .eq('id', customerId)
+    .eq('org_id', org.orgId)
     .single();
 
   if (fetchError || !customer) {
@@ -47,7 +53,8 @@ export async function getOrCreatePortalToken(customerId: string): Promise<string
       portal_access_token: newToken,
       portal_token_created_at: new Date().toISOString(),
     })
-    .eq('id', customerId);
+    .eq('id', customerId)
+    .eq('org_id', org.orgId);
 
   if (updateError) {
     throw new Error('Failed to generate portal token');
@@ -59,7 +66,7 @@ export async function getOrCreatePortalToken(customerId: string): Promise<string
 /**
  * Verify a portal access token and return the customer
  */
-export async function verifyPortalToken(token: string): Promise<any> {
+export async function verifyPortalToken(token: string): Promise<PortalCustomer | null> {
   const admin = createAdminClient();
 
   const { data: customer, error } = await admin
@@ -79,6 +86,8 @@ export async function verifyPortalToken(token: string): Promise<any> {
  * Regenerate portal token (invalidate old one)
  */
 export async function regeneratePortalToken(customerId: string): Promise<string> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error('Not authenticated');
   const admin = createAdminClient();
 
   const newToken = generatePortalToken();
@@ -89,7 +98,8 @@ export async function regeneratePortalToken(customerId: string): Promise<string>
       portal_access_token: newToken,
       portal_token_created_at: new Date().toISOString(),
     })
-    .eq('id', customerId);
+    .eq('id', customerId)
+    .eq('org_id', org.orgId);
 
   if (error) {
     throw new Error('Failed to regenerate portal token');

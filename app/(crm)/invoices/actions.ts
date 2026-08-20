@@ -52,7 +52,7 @@ const createInvoiceSchema = z.object({
     .min(1, "Due date is required")
     .refine((dateStr) => !isNaN(Date.parse(dateStr)), "Due date must be a valid date"),
   notes: z.string().max(2000).optional(),
-  lineItems: z.array(lineItemSchema).min(1, "At least one line item is required").optional(),
+  lineItems: z.array(lineItemSchema).min(1, "At least one line item is required"),
   allowAddons: z.boolean().optional(),
   addonItems: z.array(addonItemSchema).max(20).optional(),
   workOrder: workOrderSchema.optional(),
@@ -75,6 +75,15 @@ export async function createInvoice(input: CreateInvoiceInput) {
     throw new Error(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
   }
   const data = parsed.data;
+
+  const calculatedSubtotal = Math.round(
+    data.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) * 100,
+  ) / 100;
+  const calculatedTax = Math.round(calculatedSubtotal * ((data.taxRate ?? 0) / 100) * 100) / 100;
+  const calculatedTotal = Math.round((calculatedSubtotal + calculatedTax) * 100) / 100;
+  if (data.depositAmount && data.depositAmount > calculatedTotal) {
+    throw new Error("Deposit cannot exceed the invoice total");
+  }
 
   const supabase = await createClient();
   const org = await getCurrentOrg();
@@ -131,12 +140,12 @@ export async function createInvoice(input: CreateInvoiceInput) {
       invoice_number: invoiceNumber,
       title: data.title,
       description: data.description ?? null,
-      subtotal: data.subtotal ?? data.totalAmount,
+      subtotal: calculatedSubtotal,
       tax_rate: data.taxRate ?? 0,
-      tax_amount: data.taxAmount ?? 0,
-      total_amount: data.totalAmount,
+      tax_amount: calculatedTax,
+      total_amount: calculatedTotal,
       deposit_amount: data.depositAmount ?? 0,
-      balance_due: data.totalAmount,
+      balance_due: calculatedTotal,
       due_date: data.dueDate,
       notes: data.notes ?? null,
       status: "draft",
@@ -148,7 +157,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
   if (invErr || !invoice) throw new Error(invErr?.message ?? "Failed to create invoice");
 
   // Persist line items alongside the invoice so they render on the detail page
-  if (data.lineItems && data.lineItems.length > 0) {
+  if (data.lineItems.length > 0) {
     const lineItemRows = data.lineItems.map((item, index) => ({
       org_id: org.orgId,
       invoice_id: invoice.id,
