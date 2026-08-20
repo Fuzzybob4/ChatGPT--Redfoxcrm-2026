@@ -78,8 +78,15 @@ export default function MultiLocationDashboard() {
     };
   });
 
-  // Calculate organization totals
-  const orgTotals = locationStats.reduce(
+  // Organization totals must come from the location-agnostic aggregate
+  // (getDashboardStats('')), not a sum of each known location's stats.
+  // Summing per-location stats silently drops any customer/invoice/estimate/
+  // job that hasn't been assigned a location_id, understating org totals.
+  const orgTotals = getDashboardStats('');
+
+  // Surface records that exist but aren't tied to any location, so data
+  // never silently disappears from this view the way it did before.
+  const assignedTotals = locationStats.reduce(
     (acc, loc) => ({
       totalRevenue: acc.totalRevenue + loc.totalRevenue,
       outstandingRevenue: acc.outstandingRevenue + loc.outstandingRevenue,
@@ -87,14 +94,24 @@ export default function MultiLocationDashboard() {
       scheduledJobs: acc.scheduledJobs + loc.scheduledJobs,
       completedJobs: acc.completedJobs + loc.completedJobs,
     }),
-    {
-      totalRevenue: 0,
-      outstandingRevenue: 0,
-      activeCustomers: 0,
-      scheduledJobs: 0,
-      completedJobs: 0,
-    }
+    { totalRevenue: 0, outstandingRevenue: 0, activeCustomers: 0, scheduledJobs: 0, completedJobs: 0 }
   );
+  const unassignedStats: LocationStats = {
+    id: 'unassigned',
+    name: 'Unassigned',
+    totalRevenue: orgTotals.totalRevenue - assignedTotals.totalRevenue,
+    outstandingRevenue: orgTotals.outstandingRevenue - assignedTotals.outstandingRevenue,
+    activeCustomers: orgTotals.activeCustomers - assignedTotals.activeCustomers,
+    scheduledJobs: orgTotals.scheduledJobs - assignedTotals.scheduledJobs,
+    completedJobs: orgTotals.completedJobs - assignedTotals.completedJobs,
+  };
+  const hasUnassignedRecords =
+    unassignedStats.totalRevenue !== 0 ||
+    unassignedStats.outstandingRevenue !== 0 ||
+    unassignedStats.activeCustomers !== 0 ||
+    unassignedStats.scheduledJobs !== 0 ||
+    unassignedStats.completedJobs !== 0;
+  const rowsForTable = hasUnassignedRecords ? [...locationStats, unassignedStats] : locationStats;
 
   const selectedStats = selectedLocationId
     ? locationStats.find((s) => s.id === selectedLocationId)
@@ -148,7 +165,7 @@ export default function MultiLocationDashboard() {
           onValueChange={(v) => setSelectedLocationId(v === 'all' ? '' : v)}
           className="mb-6"
         >
-          <TabsList className="grid grid-cols-2 md:grid-cols-auto md:inline-grid gap-2">
+          <TabsList className="h-auto flex-wrap justify-start gap-2">
             <TabsTrigger value="all">All Locations</TabsTrigger>
             {locations.map((loc) => (
               <TabsTrigger key={loc.id} value={loc.id}>
@@ -213,10 +230,15 @@ export default function MultiLocationDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {locationStats.map((stat) => (
+                  {rowsForTable.map((stat) => (
                     <TableRow key={stat.id}>
                       <TableCell className="font-medium text-sm">
                         {stat.name}
+                        {stat.id === 'unassigned' && (
+                          <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                            Records without a location. Assign them from Customers.
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         ${stat.totalRevenue.toLocaleString()}
@@ -234,13 +256,15 @@ export default function MultiLocationDashboard() {
                         {stat.completedJobs}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          render={<Link href={`/dashboard?location=${stat.id}`} />}
-                        >
-                          <ArrowRight className="size-4" />
-                        </Button>
+                        {stat.id !== 'unassigned' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            render={<Link href={`/dashboard?location=${stat.id}`} />}
+                          >
+                            <ArrowRight className="size-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
