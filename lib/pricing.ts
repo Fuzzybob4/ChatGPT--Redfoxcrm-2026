@@ -47,6 +47,16 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
 // Yearly billing gives 20% off the BASE plan only (not add-ons).
 export const YEARLY_DISCOUNT = 0.2;
 
+export const PLAN_LOCATION_LIMITS: Record<PlanId, number | null> = {
+  starter: 1,
+  professional: 10,
+  enterprise: null,
+};
+
+export function getPlanLocationLimit(planId: string | null | undefined): number | null {
+  return PLAN_LOCATION_LIMITS[getPlan(planId).id];
+}
+
 export interface AddonDefinition {
   id: string;
   name: string;

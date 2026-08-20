@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { createOrganizationLocation } from './actions';
 import {
   DollarSign,
   Users,
@@ -48,6 +49,24 @@ export default function MultiLocationDashboard() {
   const { loading, locations, getDashboardStats, getLocationById } = useData();
   const org = useOrgContext();
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const [newLocationName, setNewLocationName] = useState('');
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
+  const [creatingLocation, setCreatingLocation] = useState(false);
+
+  const handleCreateLocation = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreatingLocation(true);
+    setLocationMessage(null);
+    const result = await createOrganizationLocation({ name: newLocationName });
+    setCreatingLocation(false);
+    if (!result.ok) {
+      setLocationMessage(result.error);
+      return;
+    }
+    setNewLocationName('');
+    setLocationMessage('Location created. Refreshing your locations...');
+    window.location.reload();
+  };
 
   // Calculate stats for all locations
   const locationStats: LocationStats[] = locations.map((loc) => {
@@ -99,6 +118,30 @@ export default function MultiLocationDashboard() {
       />
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Add a location</CardTitle>
+            <CardDescription>Locations are limited by your current subscription plan.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateLocation} className="flex flex-col gap-3 sm:flex-row">
+              <input
+                value={newLocationName}
+                onChange={(event) => setNewLocationName(event.target.value)}
+                placeholder="Location name"
+                aria-label="Location name"
+                required
+                maxLength={120}
+                className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+              />
+              <Button type="submit" disabled={creatingLocation}>
+                {creatingLocation ? 'Creating...' : 'Add location'}
+              </Button>
+            </form>
+            {locationMessage && <p className="mt-3 text-sm text-muted-foreground">{locationMessage}</p>}
+          </CardContent>
+        </Card>
+
         {/* Location Filter Tabs */}
         <Tabs
           value={selectedLocationId || 'all'}

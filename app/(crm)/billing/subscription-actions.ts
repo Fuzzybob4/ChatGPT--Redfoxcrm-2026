@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentOrg } from '@/lib/org';
 import { stripe } from '@/lib/stripe';
 import { ensurePlanPrice } from '@/lib/stripe/plans';
-import { getPlanChargeCents, getPlan, type BillingInterval, type PlanId } from '@/lib/pricing';
+import { getPlanChargeCents, getPlan, getPlanLocationLimit, type BillingInterval, type PlanId } from '@/lib/pricing';
 
 /**
  * Creates a TRUE Stripe Subscription for the org using the card saved at
@@ -93,6 +93,7 @@ export async function startSubscription(
       .update({
         subscription_status: subscription.status === 'trialing' ? 'trialing' : 'active',
         subscription_interval: interval,
+        max_locations: getPlanLocationLimit(planId),
         subscription_current_period_end: periodEndIso(subscription),
       })
       .eq('id', org.orgId);
