@@ -21,9 +21,14 @@ export default function ForgotPasswordPage() {
 
     try {
       const supabase = createClient();
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL ??
+        (window.location.hostname === 'localhost'
+          ? window.location.origin
+          : 'https://www.redfoxcrm.com');
       const redirectTo =
         process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-        `${window.location.origin}/auth/callback?next=/update-password`;
+        `${appUrl.replace(/\/$/, '')}/auth/callback?next=/update-password`;
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,
