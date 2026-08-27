@@ -4,6 +4,64 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
 
+export interface CustomerCreateInput {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  status: string;
+  notes: string;
+  tags: string[];
+  marketingOptIn: boolean;
+  locationId?: string;
+}
+
+export async function createCustomer(input: CustomerCreateInput) {
+  const supabase = await createClient();
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  if (!input.name.trim()) throw new Error("Name is required.");
+
+  let locationId = input.locationId || null;
+  if (locationId) {
+    const { data: location, error: locationError } = await supabase
+      .from("locations")
+      .select("id")
+      .eq("id", locationId)
+      .eq("org_id", org.orgId)
+      .single();
+    if (locationError || !location) throw new Error("Invalid location.");
+  }
+
+  const { data, error } = await supabase
+    .from("customers")
+    .insert({
+      org_id: org.orgId,
+      location_id: locationId,
+      full_name: input.name.trim(),
+      email: input.email.trim(),
+      phone: input.phone.trim(),
+      address: input.address.trim(),
+      city: input.city.trim(),
+      state: input.state.trim(),
+      zip_code: input.zip.trim(),
+      status: input.status.toLowerCase(),
+      notes: input.notes.trim(),
+      tags: input.tags,
+      marketing_opt_in: input.marketingOptIn,
+      marketing_opt_in_at: input.marketingOptIn ? new Date().toISOString() : null,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/customers");
+  return data.id;
+}
+
 export interface CustomerUpdateInput {
   name: string;
   email: string;
