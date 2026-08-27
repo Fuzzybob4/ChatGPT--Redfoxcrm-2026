@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function NewCustomerPage() {
   const router = useRouter();
-  const { locations } = useData();
+  const { locations, refresh } = useData();
   const { selectedLocationId } = useLocation();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -28,6 +28,9 @@ export default function NewCustomerPage() {
     startTransition(async () => {
       try {
         const id = await createCustomer({ ...form, tags: [], marketingOptIn: false, locationId: form.locationId || undefined });
+        // The detail page reads from the client data provider. Refresh it before
+        // navigating so the newly-created customer is available immediately.
+        await refresh();
         router.push(`/customers/${id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to create customer.");
