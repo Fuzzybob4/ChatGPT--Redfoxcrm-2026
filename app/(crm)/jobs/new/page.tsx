@@ -19,14 +19,16 @@ export default function NewJobPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const customerId = searchParams.get("customer");
+  const scheduledDate = searchParams.get("date") ?? "";
   const { getCustomerById } = useData();
   const customer = customerId ? getCustomerById(customerId) : null;
 
   const [isPending, startTransition] = useTransition();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     jobType: "install" as "install" | "removal" | "other",
-    scheduledDate: "",
+    scheduledDate,
     startTime: "08:00",
     endTime: "12:00",
     address: customer?.address ?? "",
@@ -40,11 +42,17 @@ export default function NewJobPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId || !customer) return;
+    if (!formData.title.trim() || !formData.scheduledDate) {
+      setErrorMessage("Job title and scheduled date are required.");
+      return;
+    }
 
+    setErrorMessage(null);
     startTransition(async () => {
       try {
         const jobId = await createJob({
           customerId,
+          locationId: customer.locationId ?? undefined,
           title: formData.title,
           jobType: formData.jobType,
           scheduledDate: formData.scheduledDate,
@@ -59,8 +67,10 @@ export default function NewJobPage() {
         });
 
         router.push("/jobs");
+        router.refresh();
       } catch (error) {
-        console.error("Failed to create job:", error);
+        console.error("[v0] Failed to create job:", error);
+        setErrorMessage(error instanceof Error ? error.message : "Unable to create work order.");
       }
     });
   };
@@ -97,6 +107,11 @@ export default function NewJobPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
+                {errorMessage && (
+                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    {errorMessage}
+                  </p>
+                )}
                 {/* Title */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Job Title</label>

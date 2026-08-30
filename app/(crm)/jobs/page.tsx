@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search, CalendarDays, LayoutList, Navigation, Play,
   CheckCircle2, Plus, Users, Truck, Wrench, MapPin, Clock,
@@ -345,7 +347,8 @@ function CalendarView({
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-
+  const router = useRouter();
+  
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -457,7 +460,13 @@ function CalendarView({
             )}
           </p>
           {selectedJobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No work orders on this day.</p>
+            <div className="py-6 text-center">
+              <p className="text-sm text-muted-foreground">No work orders on this day.</p>
+              <Button className="mt-3" size="sm" onClick={() => router.push(`/jobs/new?date=${selectedDay}`)}>
+                <Plus className="mr-1.5 size-3.5" />
+                Add work order
+              </Button>
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {selectedJobs.map((j) => (
@@ -548,7 +557,7 @@ export default function JobsPage() {
         title="Work Orders"
         description={`${jobs.length} total work orders`}
         actions={
-          <Button size="sm" disabled>
+          <Button size="sm" render={<Link href="/jobs/new" />}>
             <Plus className="size-3.5 mr-1.5" />
             New
           </Button>
