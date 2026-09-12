@@ -31,6 +31,8 @@ export default function NewCustomerPage() {
         // The detail page reads from the client data provider. Refresh it before
         // navigating so the newly-created customer is available immediately.
         await refresh();
+        // Small delay to ensure the data context has updated before navigation.
+        await new Promise(r => setTimeout(r, 200));
         router.push(`/customers/${id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to create customer.");
