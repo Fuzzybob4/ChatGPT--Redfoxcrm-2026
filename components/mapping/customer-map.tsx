@@ -6,7 +6,6 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPin, Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -14,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleStatus } from "@/lib/lifecycle";
 import { cn } from "@/lib/utils";
 
 export interface MapPin {
@@ -29,91 +29,93 @@ export interface MapPin {
   lat: number;
   lng: number;
   isPrimary: boolean;
-  mapStatus: "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+  stage: LifecycleStatus;
   troubleCallCount?: number;
   troubleCallUrgency?: string | null;
   troubleCallTitle?: string | null;
 }
 
-type MapView = "all" | "trouble_calls" | "pending_installs" | "estimates_sent" | "installed" | "removed";
+type MapView = "all" | "trouble_calls" | LifecycleStatus;
 
 const TROUBLE_COLOR = "#ff2d55";
+const ALL_COLOR = "#111827";
 
 function hasTrouble(p: MapPin): boolean {
   return (p.troubleCallCount ?? 0) > 0;
 }
 
-const STATUS_CONFIG: Record<Exclude<MapView, "all" | "trouble_calls">, { label: string; description: string; color: string }> = {
-  pending_installs: { label: "Pending Install",  description: "Job scheduled, not yet started",       color: "#dc2626" },
-  estimates_sent:   { label: "Estimate Sent",    description: "Estimate sent, no job scheduled yet",  color: "#f59e0b" },
-  installed:        { label: "Installed",         description: "Install job completed",                color: "#16a34a" },
-  removed:          { label: "Removed",           description: "Removal job completed",               color: "#6b7280" },
-};
-
-function pinColor(p: MapPin): string {
-  if (p.mapStatus === "all_customers") return "#111827";
-  return STATUS_CONFIG[p.mapStatus].color;
-}
-
 function matchesView(p: MapPin, view: MapView): boolean {
   if (view === "all") return true;
   if (view === "trouble_calls") return hasTrouble(p);
-  return p.mapStatus === view;
+  return p.stage === view;
 }
 
 export function CustomerMap({ pins }: { pins: MapPin[] }) {
-  const [view, setView] = useState<MapView>("all");
+  // Open on the work that needs attention when there is any.
+  const [view, setView] = useState<MapView>(() =>
+    pins.some((p) => p.stage === "pending_install") ? "pending_install" : "all",
+  );
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [selected, setSelected] = useState<MapPin | null>(null);
 
   const cities = useMemo(
     () => Array.from(new Set(pins.map((p) => p.city).filter(Boolean))).sort(),
-    [pins]
+    [pins],
   );
 
-  // Build filter tabs with all status options
-  const views = useMemo(() => {
-    const present = new Set(pins.map((p) => p.mapStatus).filter((s) => s !== "all_customers"));
-    const anyTrouble = pins.some(hasTrouble);
-    return [
-      { id: "all" as MapView, label: "All Customers", color: "#111827" },
-      ...(anyTrouble
-        ? [{ id: "trouble_calls" as MapView, label: "Trouble Calls", color: TROUBLE_COLOR }]
-        : []),
-      ...(present.has("pending_installs")
-        ? [{ id: "pending_installs" as MapView, label: STATUS_CONFIG.pending_installs.label, color: STATUS_CONFIG.pending_installs.color }]
-        : []),
-      ...(present.has("estimates_sent")
-        ? [{ id: "estimates_sent" as MapView, label: STATUS_CONFIG.estimates_sent.label, color: STATUS_CONFIG.estimates_sent.color }]
-        : []),
-      ...(present.has("installed")
-        ? [{ id: "installed" as MapView, label: STATUS_CONFIG.installed.label, color: STATUS_CONFIG.installed.color }]
-        : []),
-      ...(present.has("removed")
-        ? [{ id: "removed" as MapView, label: STATUS_CONFIG.removed.label, color: STATUS_CONFIG.removed.color }]
-        : []),
-    ];
+  const counts = useMemo(() => {
+    const byStage: Partial<Record<LifecycleStatus, number>> = {};
+    for (const p of pins) byStage[p.stage] = (byStage[p.stage] ?? 0) + 1;
+    return byStage;
   }, [pins]);
+
+  // Always show the core install pipeline so the stages read as a sequence;
+  // other stages appear only when customers are in them.
+  const views = useMemo(() => {
+    const core: LifecycleStatus[] = ["pending_install", "scheduled", "installed"];
+    const stageViews = LIFECYCLE_ORDER.filter(
+      (stage) => core.includes(stage) || (counts[stage] ?? 0) > 0,
+    ).map((stage) => ({
+      id: stage as MapView,
+      label: LIFECYCLE_META[stage].label,
+      color: LIFECYCLE_META[stage].color,
+      count: counts[stage] ?? 0,
+    }));
+    const troubleCount = pins.filter(hasTrouble).length;
+    return [
+      { id: "all" as MapView, label: "All", color: ALL_COLOR, count: pins.length },
+      ...(troubleCount > 0
+        ? [{ id: "trouble_calls" as MapView, label: "Trouble Calls", color: TROUBLE_COLOR, count: troubleCount }]
+        : []),
+      ...stageViews,
+    ];
+  }, [pins, counts]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return pins.filter((p) => {
       if (!matchesView(p, view)) return false;
       if (cityFilter !== "all" && p.city !== cityFilter) return false;
-      if (q && !p.customerName.toLowerCase().includes(q) && !p.propertyName.toLowerCase().includes(q) && !p.address.toLowerCase().includes(q))
+      if (
+        q &&
+        !p.customerName.toLowerCase().includes(q) &&
+        !p.propertyName.toLowerCase().includes(q) &&
+        !p.address.toLowerCase().includes(q)
+      )
         return false;
       return true;
     });
   }, [pins, view, search, cityFilter]);
 
+  const activeStageMeta = view !== "all" && view !== "trouble_calls" ? LIFECYCLE_META[view] : null;
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   if (!token) {
     return (
       <div className="flex h-full min-h-96 items-center justify-center rounded-lg border border-border bg-accent">
-        <div className="text-center space-y-2 max-w-md px-6">
-          <MapPin className="w-8 h-8 text-muted-foreground mx-auto" />
+        <div className="flex max-w-md flex-col items-center gap-2 px-6 text-center">
+          <MapPin className="size-8 text-muted-foreground" />
           <p className="font-medium text-foreground">Mapbox token required</p>
           <p className="text-sm text-muted-foreground">
             Add the NEXT_PUBLIC_MAPBOX_TOKEN environment variable to enable the map.
@@ -124,84 +126,95 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 h-full">
-      {/* View tabs */}
-      <div className="flex flex-wrap gap-2">
+    <div className="flex h-full flex-col gap-3">
+      {/* Stage tabs — horizontally scrollable on phones */}
+      <div
+        role="tablist"
+        aria-label="Customer life stage"
+        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:px-0"
+      >
         {views.map((v) => {
-          const count = pins.filter((p) => matchesView(p, v.id)).length;
+          const active = view === v.id;
           return (
             <button
               key={v.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => {
                 setView(v.id);
                 setSelected(null);
               }}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-                view === v.id
+                "flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors",
+                active
                   ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground",
               )}
             >
-              <span
-                className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: v.color }}
-              />
+              <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: v.color }} />
               {v.label}
-              <Badge
-                variant="secondary"
+              <span
                 className={cn(
-                  "h-5 px-1.5 text-[10px]",
-                  view === v.id && "bg-background/20 text-background"
+                  "min-w-5 rounded-full px-1.5 text-center text-xs tabular-nums",
+                  active ? "bg-background/20 text-background" : "bg-muted text-muted-foreground",
                 )}
               >
-                {count}
-              </Badge>
+                {v.count}
+              </span>
             </button>
           );
         })}
       </div>
 
+      {activeStageMeta && (
+        <p className="text-sm text-muted-foreground">{activeStageMeta.description}</p>
+      )}
+
       {/* Search + filters */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or address..."
-            className="pl-9"
+            aria-label="Search customers"
+            className="h-11 pl-9 text-base sm:h-9 sm:text-sm"
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
               aria-label="Clear search"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           )}
         </div>
-        <Select value={cityFilter} onValueChange={(v) => setCityFilter(v ?? "all")}>
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="All cities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All cities</SelectItem>
-            {cities.map((city) => (
-              <SelectItem key={city} value={city}>
-                {city}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="flex items-center px-3 text-sm text-muted-foreground whitespace-nowrap">
-          {filtered.length} shown
+        <div className="flex items-center gap-2">
+          <Select value={cityFilter} onValueChange={(v) => setCityFilter(v ?? "all")}>
+            <SelectTrigger aria-label="Filter by city" className="h-11 flex-1 sm:h-9 sm:w-48 sm:flex-none">
+              <SelectValue>{cityFilter === "all" ? "All cities" : cityFilter}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All cities</SelectItem>
+              {cities.map((city) => (
+                <SelectItem key={city} value={city}>
+                  {city}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="whitespace-nowrap px-1 text-sm tabular-nums text-muted-foreground">
+            {filtered.length} shown
+          </span>
         </div>
       </div>
 
       {/* Map */}
-      <div className="flex-1 min-h-96 rounded-lg overflow-hidden border border-border">
+      <div className="min-h-[60vh] flex-1 overflow-hidden rounded-lg border border-border lg:min-h-96">
         <Map
           mapboxAccessToken={token}
           initialViewState={{ latitude: 30.2672, longitude: -97.7431, zoom: 9 }}
@@ -209,44 +222,44 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
           mapStyle="mapbox://styles/mapbox/streets-v12"
         >
           <NavigationControl position="top-right" />
-          {filtered.map((p) => (
-            <Marker
-              key={p.id}
-              latitude={p.lat}
-              longitude={p.lng}
-              anchor="bottom"
-              onClick={(e) => {
-                e.originalEvent.stopPropagation();
-                setSelected(p);
-              }}
-            >
-              <div className="relative flex flex-col items-center">
-                {hasTrouble(p) && (
-                  <>
-                    {/* Pulsing alert ring for customers with an open trouble call */}
-                    <span
-                      className="pointer-events-none absolute -top-1 left-1/2 size-8 -translate-x-1/2 rounded-full"
-                      style={{ backgroundColor: TROUBLE_COLOR, animation: "rf-ping 1.4s cubic-bezier(0,0,0.2,1) infinite" }}
-                    />
-                    <span
-                      className="pointer-events-none absolute -top-2 left-1/2 flex size-4 -translate-x-1/2 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-md"
-                      style={{ backgroundColor: TROUBLE_COLOR }}
-                    >
-                      {p.troubleCallCount}
-                    </span>
-                  </>
-                )}
-                <MapPin
-                  className="relative w-7 h-7 cursor-pointer drop-shadow-md"
-                  style={
-                    hasTrouble(p)
-                      ? { color: TROUBLE_COLOR, fill: TROUBLE_COLOR, fillOpacity: 0.35 }
-                      : { color: pinColor(p), fill: pinColor(p), fillOpacity: 0.25 }
-                  }
-                />
-              </div>
-            </Marker>
-          ))}
+          {filtered.map((p) => {
+            const color = hasTrouble(p) ? TROUBLE_COLOR : LIFECYCLE_META[p.stage].color;
+            return (
+              <Marker
+                key={p.id}
+                latitude={p.lat}
+                longitude={p.lng}
+                anchor="bottom"
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation();
+                  setSelected(p);
+                }}
+              >
+                <div className="relative flex flex-col items-center">
+                  {hasTrouble(p) && (
+                    <>
+                      {/* Pulsing alert ring for customers with an open trouble call */}
+                      <span
+                        className="pointer-events-none absolute -top-1 left-1/2 size-8 -translate-x-1/2 rounded-full"
+                        style={{ backgroundColor: TROUBLE_COLOR, animation: "rf-ping 1.4s cubic-bezier(0,0,0.2,1) infinite" }}
+                      />
+                      <span
+                        className="pointer-events-none absolute -top-2 left-1/2 flex size-4 -translate-x-1/2 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-md"
+                        style={{ backgroundColor: TROUBLE_COLOR }}
+                      >
+                        {p.troubleCallCount}
+                      </span>
+                    </>
+                  )}
+                  <MapPin
+                    className="relative size-8 cursor-pointer drop-shadow-md"
+                    style={{ color, fill: color, fillOpacity: hasTrouble(p) ? 0.35 : 0.3 }}
+                    aria-label={`${p.customerName} — ${LIFECYCLE_META[p.stage].label}`}
+                  />
+                </div>
+              </Marker>
+            );
+          })}
 
           {selected && (
             <Popup
@@ -257,22 +270,33 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
               closeButton={false}
               maxWidth="280px"
             >
-              <div className="space-y-1.5 p-1">
+              <div className="flex flex-col gap-1.5 p-1">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-sm text-gray-900">{selected.customerName}</p>
+                    <p className="text-sm font-semibold text-gray-900">{selected.customerName}</p>
                     {selected.propertyName && <p className="text-xs text-gray-600">{selected.propertyName}</p>}
                   </div>
                   <button
+                    type="button"
                     onClick={() => setSelected(null)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="-m-2 flex size-8 items-center justify-center text-gray-400 hover:text-gray-600"
                     aria-label="Close popup"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="size-3.5" />
                   </button>
                 </div>
+                <span
+                  className="inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                  style={{ backgroundColor: LIFECYCLE_META[selected.stage].color }}
+                >
+                  {LIFECYCLE_META[selected.stage].label}
+                </span>
                 <p className="text-xs text-gray-600">{selected.address}</p>
-                <p className="text-xs text-gray-600">{selected.phone}</p>
+                {selected.phone && (
+                  <a href={`tel:${selected.phone}`} className="text-xs text-gray-600 hover:underline">
+                    {selected.phone}
+                  </a>
+                )}
                 {hasTrouble(selected) && (
                   <div className="mt-1 rounded-md border border-red-200 bg-red-50 p-2">
                     <div className="flex items-center gap-1.5">
@@ -293,47 +317,17 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                     </a>
                   </div>
                 )}
-                {selected.mapStatus !== "all_customers" && (
-                  <div className="pt-1 space-y-0.5">
-                    <span
-                      className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
-                      style={{ backgroundColor: STATUS_CONFIG[selected.mapStatus].color }}
-                    >
-                      {STATUS_CONFIG[selected.mapStatus].label}
-                    </span>
-                    <p className="text-[10px] text-gray-500">
-                      {STATUS_CONFIG[selected.mapStatus].description}
-                    </p>
-                  </div>
-                )}
                 <a
                   href={`/customers/${selected.customerId}`}
-                  className="block text-xs font-medium text-red-600 hover:underline pt-1"
+                  className="block pt-1 text-xs font-medium text-red-600 hover:underline"
                 >
-                  View customer
+                  View customer and change stage
                 </a>
               </div>
             </Popup>
           )}
         </Map>
       </div>
-
-      {/* Legend for All view */}
-      {view === "all" && (
-        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-          {views
-            .filter((v) => v.id !== "all")
-            .map((v) => (
-              <span key={v.id} className="flex items-center gap-1.5">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: v.color }}
-                />
-                {v.label}
-              </span>
-            ))}
-        </div>
-      )}
     </div>
   );
 }

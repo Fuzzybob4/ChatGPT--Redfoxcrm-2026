@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
+import { deriveLifecycleStatus, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
 
 export const metadata = {
   title: "Mapping - RedFox CRM",
@@ -15,7 +16,7 @@ export default async function MappingPage() {
 
   let customerQuery = supabase
     .from("customers")
-    .select("id, full_name, first_name, last_name, email, phone, status, address, city, state, zip_code, lat, lng");
+    .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng");
   if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
   const { data: customers } = await customerQuery;
 
@@ -27,16 +28,19 @@ export default async function MappingPage() {
   if (locationId) propertyQuery = propertyQuery.eq("location_id", locationId);
   const { data: properties } = await propertyQuery;
 
+  // Column sets differ slightly between environments (e.g. amount_paid vs
+  // amount_paid_cents, crew_name vs assigned_employees), so read full rows and
+  // normalize them below.
   let jobQuery = supabase
     .from("scheduled_jobs")
-    .select("customer_id, job_type, status, completed_at, scheduled_date")
+    .select("*")
     .order("scheduled_date", { ascending: false });
   if (locationId) jobQuery = jobQuery.eq("location_id", locationId);
   const { data: jobs } = await jobQuery;
 
-  let estimateQuery = supabase.from("estimates").select("customer_id, status");
-  if (locationId) estimateQuery = estimateQuery.eq("location_id", locationId);
-  const { data: estimates } = await estimateQuery;
+  let invoiceQuery = supabase.from("invoices").select("*");
+  if (locationId) invoiceQuery = invoiceQuery.eq("location_id", locationId);
+  const { data: invoices } = await invoiceQuery;
 
   // Open customer-submitted trouble calls drive the pulsing map indicator.
   const { data: troubleCalls } = await supabase
@@ -44,8 +48,6 @@ export default async function MappingPage() {
     .select("customer_id, title, urgency, status, created_at")
     .in("status", ["new", "scheduled"])
     .order("created_at", { ascending: false });
-
-  type MapStatus = "all_customers" | "pending_installs" | "estimates_sent" | "installed" | "removed";
 
   // Map each customer to their most-urgent open trouble call (if any).
   const urgencyRank: Record<string, number> = { emergency: 3, high: 2, normal: 1, low: 0 };
@@ -78,50 +80,69 @@ export default async function MappingPage() {
     jobsByCustomer.set(j.customer_id, list);
   }
 
-  // Group estimates per customer
-  const estimatesByCustomer = new Map<string, any[]>();
-  for (const e of estimates ?? []) {
-    if (!e.customer_id) continue;
-    const list = estimatesByCustomer.get(e.customer_id) ?? [];
-    list.push(e);
-    estimatesByCustomer.set(e.customer_id, list);
+  // Aggregate payment signals per customer (deposit = partial payment).
+  const paymentsByCustomer = new Map<string, { paid: boolean; deposit: boolean; unpaid: boolean }>();
+  for (const inv of invoices ?? []) {
+    if (!inv.customer_id) continue;
+    const amountPaid =
+      inv.amount_paid != null
+        ? Number(inv.amount_paid)
+        : inv.amount_paid_cents != null
+          ? Number(inv.amount_paid_cents) / 100
+          : 0;
+    const signal = invoicePaymentSignal({
+      status: inv.status,
+      paymentState: inv.payment_state,
+      amountPaid,
+    });
+    const current = paymentsByCustomer.get(inv.customer_id) ?? { paid: false, deposit: false, unpaid: false };
+    paymentsByCustomer.set(inv.customer_id, {
+      paid: current.paid || signal.paid,
+      deposit: current.deposit || signal.deposit,
+      unpaid: current.unpaid || signal.unpaid,
+    });
   }
 
-  // Normalise job_type strings to "install" | "removal" | "other"
-  function normalizeJobType(raw: string | null): "install" | "removal" | "other" {
-    const t = (raw ?? "").toLowerCase();
-    if (t.includes("remov") || t.includes("takedown") || t.includes("take_down") || t.includes("take down")) return "removal";
-    if (t.includes("install") || t.includes("hang") || t.includes("setup") || t.includes("set_up")) return "install";
-    return "other";
-  }
+  // Removal jobs mark the end of the season; everything else counts as install work.
+  const isRemovalJob = (jobType: string | null) => {
+    const t = (jobType ?? "").toLowerCase();
+    return t.includes("remov") || t.includes("takedown") || t.includes("take down") || t.includes("take_down");
+  };
 
-  // Determine map status driven entirely by jobs, falling back to estimates
-  function getCustomerStatus(customerId: string): MapStatus {
+  const stageByCustomer = new Map<string, LifecycleStatus>();
+  function getCustomerStage(customerId: string): LifecycleStatus {
+    const cached = stageByCustomer.get(customerId);
+    if (cached) return cached;
+
+    const customer = customerMap.get(customerId);
     const customerJobs = jobsByCustomer.get(customerId) ?? [];
+    const payments = paymentsByCustomer.get(customerId);
 
-    // Find the most recent completed job to determine last known work state
-    const lastCompleted = customerJobs.find((j) => j.status === "completed");
-
-    if (lastCompleted) {
-      const type = normalizeJobType(lastCompleted.job_type);
-      if (type === "removal") return "removed";
-      if (type === "install") return "installed";
-    }
-
-    // Any active (scheduled or in-progress) job means pending install
-    const hasActiveJob = customerJobs.some(
-      (j) => j.status === "scheduled" || j.status === "in_progress" || j.status === "in progress"
+    // A completed removal job ends the season unless a team member set a stage.
+    const removalJobs = customerJobs.filter((j) => isRemovalJob(j.job_type));
+    const completedRemoval = removalJobs.some((j) => (j.status ?? "").toLowerCase() === "completed");
+    const openRemoval = removalJobs.some((j) =>
+      ["scheduled", "in_progress", "in progress"].includes((j.status ?? "").toLowerCase()),
     );
-    if (hasActiveJob) return "pending_installs";
+    const derivedSeasonStage = completedRemoval ? "removed" : openRemoval ? "pending_removal" : null;
 
-    // No jobs — check for a sent/approved estimate
-    const custEstimates = estimatesByCustomer.get(customerId) ?? [];
-    const hasSentEstimate = custEstimates.some(
-      (e) => e.status === "sent" || e.status === "approved"
-    );
-    if (hasSentEstimate) return "estimates_sent";
+    const stage = deriveLifecycleStatus({
+      hasUnpaidInvoice: payments?.unpaid ?? false,
+      hasPaidInvoice: payments?.paid ?? false,
+      hasDepositPaid: payments?.deposit ?? false,
+      jobs: customerJobs
+        .filter((j) => !isRemovalJob(j.job_type))
+        .map((j) => ({
+          status: j.status ?? "",
+          hasCrew:
+            Boolean(String(j.crew_name ?? "").trim()) ||
+            (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0),
+        })),
+      installStatus: customer?.install_status ?? derivedSeasonStage,
+    });
 
-    return "all_customers";
+    stageByCustomer.set(customerId, stage);
+    return stage;
   }
 
   const customerName = (c: any) =>
@@ -153,7 +174,7 @@ export default async function MappingPage() {
       lat: p.lat as number,
       lng: p.lng as number,
       isPrimary: !!p.is_primary,
-      mapStatus: getCustomerStatus(p.customer_id),
+      stage: getCustomerStage(p.customer_id),
       troubleCallCount: troubleByCustomer.get(p.customer_id)?.count ?? 0,
       troubleCallUrgency: troubleByCustomer.get(p.customer_id)?.urgency ?? null,
       troubleCallTitle: troubleByCustomer.get(p.customer_id)?.title ?? null,
@@ -178,7 +199,7 @@ export default async function MappingPage() {
       lat: c.lat as number,
       lng: c.lng as number,
       isPrimary: true,
-      mapStatus: getCustomerStatus(c.id),
+      stage: getCustomerStage(c.id),
       troubleCallCount: troubleByCustomer.get(c.id)?.count ?? 0,
       troubleCallUrgency: troubleByCustomer.get(c.id)?.urgency ?? null,
       troubleCallTitle: troubleByCustomer.get(c.id)?.title ?? null,
@@ -189,7 +210,7 @@ export default async function MappingPage() {
     <div className="flex flex-col h-full">
       <PageHeader
         title="Mapping"
-        description="Visualize customers and their properties on the map by payment and installation status."
+        description="Track every customer by life stage, from paid deposit to installed."
       />
       <div className="flex-1 min-h-0 px-4 pb-4 lg:px-6 lg:pb-6">
         <CustomerMap pins={mapPins} />

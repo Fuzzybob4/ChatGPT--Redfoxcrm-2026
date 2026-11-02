@@ -1,16 +1,21 @@
 // Shared customer "pipeline" lifecycle status.
 //
-// This is derived LIVE from a customer's real invoices + scheduled jobs so the
-// same status shows consistently on the customer profile and the mapping page.
+// Derived LIVE from a customer's real invoices + scheduled jobs so the same
+// stage shows consistently on the customer profile and the mapping page.
 //
-// Pipeline:
+// Automatic pipeline:
 //   lead            → no invoice yet
-//   pending_payment → invoice sent/overdue, not paid
-//   pending_install → invoice paid, work order created but no crew assigned yet
-//   scheduled       → crew assigned + install/service date scheduled (not done)
-//   installed       → crew marked the job completed
+//   pending_payment → invoice sent/overdue, nothing paid
+//   pending_install → deposit (or full payment) received, not installed yet
+//   scheduled       → crew assigned + install/service date scheduled
+//   installed       → crew marked the install completed
 //   pending_removal → installed, awaiting seasonal removal
 //   removed         → removed
+//
+// Manual dispositions (set by a team member, override the automatic stage):
+//   on_hold, not_interested, lost
+//
+// Manual overrides are stored in `customers.install_status`.
 
 export type LifecycleStatus =
   | "lead"
@@ -19,7 +24,10 @@ export type LifecycleStatus =
   | "scheduled"
   | "installed"
   | "pending_removal"
-  | "removed";
+  | "removed"
+  | "on_hold"
+  | "not_interested"
+  | "lost";
 
 export interface LifecycleMeta {
   label: string;
@@ -27,78 +35,107 @@ export interface LifecycleMeta {
   description: string;
 }
 
-// Colors follow the app palette: red (attention), amber (waiting on us),
-// sky (in motion), green (done), blue (seasonal), gray (inactive/none).
 export const LIFECYCLE_META: Record<LifecycleStatus, LifecycleMeta> = {
-  lead: {
-    label: "Lead",
-    color: "#6b7280",
-    description: "No invoice yet",
-  },
+  lead: { label: "Lead", color: "#6b7280", description: "No invoice yet" },
   pending_payment: {
     label: "Pending Payment",
     color: "#dc2626",
-    description: "Invoice sent — awaiting payment",
+    description: "Invoice sent — awaiting deposit",
   },
   pending_install: {
     label: "Pending Install",
     color: "#f59e0b",
-    description: "Paid — work order needs a crew assigned",
+    description: "Deposit paid — awaiting installation",
   },
   scheduled: {
     label: "Scheduled",
     color: "#0ea5e9",
-    description: "Crew assigned, install/service scheduled",
+    description: "Crew assigned, install scheduled",
   },
   installed: {
     label: "Installed",
     color: "#16a34a",
-    description: "Job completed by crew",
+    description: "Install completed by crew",
   },
   pending_removal: {
     label: "Pending Removal",
     color: "#2563eb",
-    description: "Installed — awaiting removal",
+    description: "Installed — awaiting seasonal removal",
   },
-  removed: {
-    label: "Removed",
-    color: "#6b7280",
-    description: "Removed",
+  removed: { label: "Removed", color: "#475569", description: "Display removed" },
+  on_hold: {
+    label: "On Hold",
+    color: "#a16207",
+    description: "Paused by the customer or team",
   },
+  not_interested: {
+    label: "Not Interested",
+    color: "#9ca3af",
+    description: "Customer declined",
+  },
+  lost: { label: "Lost", color: "#7f1d1d", description: "Lost to a competitor or churned" },
 };
 
-// Order used when rendering status filters/legends.
+// Order used for map filters and legends: active work first, then
+// completed stages, then inactive/manual dispositions.
 export const LIFECYCLE_ORDER: LifecycleStatus[] = [
-  "pending_payment",
   "pending_install",
   "scheduled",
   "installed",
+  "pending_payment",
   "pending_removal",
   "removed",
   "lead",
+  "on_hold",
+  "not_interested",
+  "lost",
 ];
+
+export const MANUAL_DISPOSITIONS = ["on_hold", "not_interested", "lost"] as const;
+export type ManualDisposition = (typeof MANUAL_DISPOSITIONS)[number];
+
+// Values a team member may set manually. `null` returns the customer to
+// fully automatic stage tracking.
+export const MANUAL_STAGE_OPTIONS = [
+  "installed",
+  "pending_removal",
+  "removed",
+  ...MANUAL_DISPOSITIONS,
+] as const;
+export type ManualStage = (typeof MANUAL_STAGE_OPTIONS)[number];
+
+export function isManualStage(value: unknown): value is ManualStage {
+  return typeof value === "string" && (MANUAL_STAGE_OPTIONS as readonly string[]).includes(value);
+}
 
 export interface LifecycleJobSignal {
   status: string;
   hasCrew: boolean;
 }
 
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "_");
+const norm = (s: string) => s.trim().toLowerCase().replace(/[\s-]+/g, "_");
 
 /**
- * Derive the current pipeline status from a customer's aggregated
- * invoice + job signals. Callers normalize their own data into these inputs.
+ * Derive the current pipeline stage from a customer's aggregated invoice +
+ * job signals. Callers normalize their own data into these inputs.
  */
 export function deriveLifecycleStatus(input: {
   hasUnpaidInvoice: boolean;
   hasPaidInvoice: boolean;
+  /** True when any invoice has a partial payment (deposit) recorded. */
+  hasDepositPaid?: boolean;
   jobs: LifecycleJobSignal[];
   installStatus?: string | null;
 }): LifecycleStatus {
-  const { hasUnpaidInvoice, hasPaidInvoice, jobs } = input;
+  const { hasUnpaidInvoice, hasPaidInvoice, hasDepositPaid = false, jobs } = input;
   const raw = norm(input.installStatus ?? "");
 
-  // Explicit seasonal end-states (set by crew/admin) take precedence.
+  // Manual dispositions always win — a team member set these deliberately.
+  if ((MANUAL_DISPOSITIONS as readonly string[]).includes(raw)) {
+    return raw as ManualDisposition;
+  }
+
+  // Explicit seasonal end-states (set by crew/admin).
   if (raw === "removed") return "removed";
   if (raw === "pending_removal") return "pending_removal";
 
@@ -110,9 +147,27 @@ export function deriveLifecycleStatus(input: {
   );
   if (anyScheduledWithCrew) return "scheduled";
 
-  // Paid but no crewed job yet → the work order still needs a crew.
-  if (hasPaidInvoice) return "pending_install";
+  // A deposit or full payment means the customer is committed and waiting on us.
+  if (hasPaidInvoice || hasDepositPaid) return "pending_install";
   if (hasUnpaidInvoice) return "pending_payment";
 
   return "lead";
+}
+
+/** Normalize a raw invoice row/record into the payment signals above. */
+export function invoicePaymentSignal(invoice: {
+  status?: string | null;
+  paymentState?: string | null;
+  amountPaid?: number | null;
+}): { paid: boolean; deposit: boolean; unpaid: boolean } {
+  const status = norm(invoice.status ?? "");
+  const state = norm(invoice.paymentState ?? "");
+  const amountPaid = Number(invoice.amountPaid ?? 0);
+
+  const paid = status === "paid" || state === "paid";
+  const deposit =
+    !paid && (amountPaid > 0 || ["partial", "partially_paid", "deposit_paid"].includes(state) || status === "partial");
+  const unpaid = !paid && !deposit && ["sent", "overdue", "viewed", "unpaid"].includes(status);
+
+  return { paid, deposit, unpaid };
 }

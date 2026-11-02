@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
+import { isManualStage } from "@/lib/lifecycle";
 
 export interface CustomerCreateInput {
   name: string;
@@ -104,6 +105,34 @@ export async function updateCustomer(customerId: string, input: CustomerUpdateIn
 
   revalidatePath(`/customers/${customerId}`);
   revalidatePath("/customers");
+}
+
+/**
+ * Set (or clear) a manual lifecycle stage override. Passing `null` returns the
+ * customer to automatic tracking driven by deposits and jobs.
+ */
+export async function updateCustomerStage(customerId: string, stage: string | null) {
+  if (stage !== null && !isManualStage(stage)) {
+    throw new Error("Invalid stage.");
+  }
+
+  const supabase = await createClient();
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("customers")
+    .update({ install_status: stage })
+    .eq("id", customerId)
+    .eq("org_id", org.orgId)
+    .select("id")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Customer not found.");
+
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/customers");
+  revalidatePath("/mapping");
 }
 
 export async function deleteCustomer(customerId: string) {
