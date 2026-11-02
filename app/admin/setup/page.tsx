@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { setAdminPasswordAction } from './actions';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -29,10 +29,9 @@ export default function AdminSetupPage() {
     }
 
     startTransition(async () => {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) {
-        setError(updateError.message);
+      const result = await setAdminPasswordAction(password);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
       router.push('/admin/setup/profile');

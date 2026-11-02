@@ -1,6 +1,8 @@
 import { type EmailOtpType } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { applyAuthIntent, type AuthIntentKind } from '@/lib/auth-intent'
+import { signOutExistingSession, verifierCookieOptions, type SavedCookie } from '@/lib/clear-auth-session'
 import { authErrorType, resolveSafeNext, SIGNUP_NEXT_PATH } from '@/lib/site-url'
 
 // Where each link type goes when the email does not carry a usable `next`.
@@ -19,11 +21,21 @@ function otpTypeFor(type: string): EmailOtpType {
   return type as EmailOtpType
 }
 
-function isSignupConfirmation(type: string | null) {
-  return type === 'signup' || type === 'email'
+const SUPPORTED_TYPES = new Set(Object.keys(DEFAULT_NEXT))
+
+function intentForType(type: string | null): AuthIntentKind | null {
+  if (type === 'recovery') return 'recovery'
+  if (type === 'invite') return 'invite'
+  return null
 }
 
-const SUPPORTED_TYPES = new Set(Object.keys(DEFAULT_NEXT))
+function restoreVerifiers(response: NextResponse, saved: SavedCookie[]) {
+  const options = verifierCookieOptions()
+  for (const cookie of saved) {
+    response.cookies.set(cookie.name, cookie.value, options)
+  }
+  return response
+}
 
 /**
  * Email link handler. Works in any browser because verifyOtp({ token_hash })
@@ -40,37 +52,37 @@ export async function GET(request: NextRequest) {
   const type = rawType && SUPPORTED_TYPES.has(rawType) ? (rawType as EmailOtpType) : null
   const next = resolveSafeNext(searchParams.get('next'), origin, (type && DEFAULT_NEXT[type]) || '/')
 
-  const fail = (reason: 'expired' | 'invalid') => {
+  const fail = (reason: 'expired' | 'invalid', saved: SavedCookie[] = []) => {
     const url = new URL('/auth/error', origin)
     url.searchParams.set('reason', reason)
     const errorType = authErrorType(next, type)
     if (errorType) url.searchParams.set('type', errorType)
-    return NextResponse.redirect(url)
+    return restoreVerifiers(NextResponse.redirect(url), saved)
   }
 
   // Supabase reports verify failures (e.g. otp_expired) as query params.
   const upstreamError = searchParams.get('error_code') ?? searchParams.get('error')
   if (upstreamError) return fail(upstreamError === 'otp_expired' ? 'expired' : 'invalid')
 
+  const cleared = await signOutExistingSession()
+  const savedVerifiers = cleared.verifiers
+  if (!cleared.ok) return fail('invalid', savedVerifiers)
+
   if (tokenHash) {
-    if (!type) return fail('invalid')
+    if (!type) return fail('invalid', savedVerifiers)
     const supabase = await createClient()
-    if (isSignupConfirmation(type)) {
-      // A different person already signed in on this browser would keep their
-      // session if we only verified. Clear this browser first. The same account
-      // is signed back in by verifyOtp. scope: 'local' does not revoke their other devices.
-      const { data: { user: existing } } = await supabase.auth.getUser()
-      if (existing) await supabase.auth.signOut({ scope: 'local' })
-    }
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
       type: otpTypeFor(type),
     })
-    if (error) {
-      console.error('[auth/confirm] verifyOtp failed', { type, code: error.code, status: error.status })
-      return fail(error.code === 'otp_expired' ? 'expired' : 'invalid')
+    if (error || !data.user) {
+      console.error('[auth/confirm] verifyOtp failed', { type, code: error?.code, status: error?.status })
+      return fail(error?.code === 'otp_expired' ? 'expired' : 'invalid', savedVerifiers)
     }
-    return NextResponse.redirect(new URL(next, origin))
+    const response = NextResponse.redirect(new URL(next, origin))
+    const intent = intentForType(type)
+    if (intent) applyAuthIntent(response, intent, data.user.id)
+    return response
   }
 
   const code = searchParams.get('code')
@@ -78,7 +90,7 @@ export async function GET(request: NextRequest) {
     const url = new URL('/auth/callback', origin)
     url.searchParams.set('code', code)
     url.searchParams.set('next', next)
-    return NextResponse.redirect(url)
+    return restoreVerifiers(NextResponse.redirect(url), savedVerifiers)
   }
 
   // Implicit-grant links put tokens in the URL fragment, which the server never

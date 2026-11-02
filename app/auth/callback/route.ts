@@ -1,37 +1,59 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { applyAuthIntent, type AuthIntentKind } from '@/lib/auth-intent'
+import { signOutExistingSession, verifierCookieOptions, type SavedCookie } from '@/lib/clear-auth-session'
 import { authErrorType, resolveSafeNext } from '@/lib/site-url'
+
+function intentsForNext(next: string): AuthIntentKind[] {
+  if (next === '/update-password' || next.startsWith('/update-password?')) return ['recovery']
+  if (next === '/auth/set-password' || next.startsWith('/auth/set-password?')) return ['invite']
+  if (next === '/admin/setup' || next.startsWith('/admin/setup?') || next.startsWith('/admin/setup/')) {
+    // Admin invites and admin recovery both land here.
+    return ['invite', 'recovery']
+  }
+  return []
+}
+
+function restoreVerifiers(response: NextResponse, saved: SavedCookie[]) {
+  const options = verifierCookieOptions()
+  for (const cookie of saved) response.cookies.set(cookie.name, cookie.value, options)
+  return response
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
   const safeNext = resolveSafeNext(searchParams.get('next'), origin, '/')
 
-  // For Supabase recovery/invite links, the token comes as a code parameter.
-  // Exchange and redirect on this same host. The PKCE verifier and the session
-  // cookies are host-only, so hopping to www vs apex would drop them.
-  if (code) {
-    const supabase = await createClient()
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (!exchangeError) {
-      return NextResponse.redirect(new URL(safeNext, origin))
-    }
-
-    console.error('[v0] exchangeCodeForSession error:', exchangeError)
-
-    // PKCE links only work in the browser that requested them (the code
-    // verifier cookie lives there). Email links should use /auth/confirm.
+  const errorRedirect = (reason: string, saved: SavedCookie[] = []) => {
     const errorUrl = new URL('/auth/error', origin)
-    const wrongBrowser = /code verifier|flow_state|pkce_code_verifier/i.test(
-      `${exchangeError.code ?? ''} ${exchangeError.message}`,
-    )
-    errorUrl.searchParams.set('reason', wrongBrowser ? 'other_browser' : 'expired')
+    errorUrl.searchParams.set('reason', reason)
     const type = authErrorType(safeNext)
     if (type) errorUrl.searchParams.set('type', type)
-    return NextResponse.redirect(errorUrl)
+    return restoreVerifiers(NextResponse.redirect(errorUrl), saved)
   }
 
-  // If we reach here, no code was provided
-  return NextResponse.redirect(new URL('/auth/error?reason=invalid', origin))
+  if (!code) return errorRedirect('invalid')
+
+  const cleared = await signOutExistingSession()
+  const savedVerifiers = cleared.verifiers
+  if (!cleared.ok) return errorRedirect('invalid', savedVerifiers)
+
+  // New client so the exchange reads the restored verifier, not the signed-out storage.
+  const supabase = await createClient()
+  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+  if (exchangeError || !data.user) {
+    console.error('[v0] exchangeCodeForSession error:', exchangeError)
+    const wrongBrowser = /code verifier|flow_state|pkce_code_verifier/i.test(
+      `${exchangeError?.code ?? ''} ${exchangeError?.message ?? ''}`,
+    )
+    return errorRedirect(wrongBrowser ? 'other_browser' : 'expired', savedVerifiers)
+  }
+
+  const response = NextResponse.redirect(new URL(safeNext, origin))
+  for (const kind of intentsForNext(safeNext)) {
+    applyAuthIntent(response, kind, data.user.id)
+  }
+  return response
 }

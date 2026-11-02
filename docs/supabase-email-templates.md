@@ -28,11 +28,18 @@ emails sent before or after the template change keep working.
   - `https://www.redfoxcrm.com/**`
   - `http://localhost:3000/**` (local development)
   - `https://redfoxcrm.com/**` (optional, only if the apex is still used)
-  - Add preview URLs only if you test auth on previews. Previews without
-    `NEXT_PUBLIC_SITE_URL` build links that point to production.
+  - Preview branch aliases, **not applied**. Add this before testing auth from a
+    Vercel preview, or Supabase ignores `redirect_to` and uses the Site URL
+    (`https://www.redfoxcrm.com`), which is production:
+    - `https://*-thesimpleserviceatx-gmailcoms-projects.vercel.app/**`
+  - A one-off deployment host such as `https://chatgpt-redfoxcrm-2026-<id>.vercel.app/**`
+    is a different name. Preview emails use the request host when it is
+    `*.vercel.app`, otherwise `VERCEL_BRANCH_URL` (the branch alias above).
+    If the host in the email is not on this list, the link still opens production.
 
 If `redirectTo` is not on the allowlist, Supabase silently uses the Site URL
-instead. That is how invites lost their destination before.
+instead. That is how invites lost their destination before, and how a reset
+requested on a preview changed a password on production.
 
 ## Authentication → Email Templates
 

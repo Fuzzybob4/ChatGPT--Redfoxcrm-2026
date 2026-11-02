@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { signupConfirmRedirect } from '@/lib/site-url';
+import { authConfirmRedirect } from '@/lib/auth-link-origin';
 
 export interface User {
   id: string;
@@ -77,8 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       options: {
         // /auth/confirm verifies token_hash in any browser. PKCE ?code= still works
-        // as a fallback. getSiteUrl never emits http://redfoxcrm.com.
-        emailRedirectTo: signupConfirmRedirect(window.location.origin),
+        // as a fallback. Preview emails stay on that preview; production stays on https.
+        emailRedirectTo: await authConfirmRedirect('/onboarding'),
         data: {
           full_name: name,
           location_name: locationName,

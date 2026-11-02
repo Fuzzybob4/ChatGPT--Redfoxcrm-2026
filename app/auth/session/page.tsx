@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { authErrorType, resolveSafeNext } from '@/lib/site-url'
+import { stampRecoveryIntent } from '@/app/(auth)/update-password/actions'
+import { stampInviteIntent } from '@/app/auth/set-password/actions'
 
 /**
  * Fallback for emails still using the stock Supabase templates (implicit grant:
@@ -38,10 +40,20 @@ export default function AuthSessionPage() {
       const accessToken = hash.get('access_token')
       const refreshToken = hash.get('refresh_token')
       if (accessToken && refreshToken) {
+        const { data: { session: existing } } = await supabase.auth.getSession()
+        if (existing) await supabase.auth.signOut({ scope: 'local' })
         const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
         if (error) {
           fail('invalid')
           return
+        }
+        if (next === '/update-password' || next.startsWith('/update-password?')) {
+          await stampRecoveryIntent()
+        } else if (next === '/auth/set-password' || next.startsWith('/auth/set-password?')) {
+          await stampInviteIntent()
+        } else if (next === '/admin/setup' || next.startsWith('/admin/setup')) {
+          await stampInviteIntent()
+          await stampRecoveryIntent()
         }
       }
 

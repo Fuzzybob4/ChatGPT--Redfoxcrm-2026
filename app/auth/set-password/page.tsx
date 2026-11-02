@@ -7,11 +7,12 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { completeInviteAction } from './actions';
+import { completeInviteAction, invitePasswordAllowed } from './actions';
 
 export default function SetPasswordPage() {
   const router = useRouter();
   const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [inviteAllowed, setInviteAllowed] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -19,6 +20,7 @@ export default function SetPasswordPage() {
     createClient()
       .auth.getSession()
       .then(({ data: { session } }) => setHasSession(!!session));
+    invitePasswordAllowed().then(setInviteAllowed);
   }, []);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -50,7 +52,7 @@ export default function SetPasswordPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-8 shadow-lg space-y-6">
-        {hasSession === false ? (
+        {hasSession === false || inviteAllowed === false ? (
           <div className="space-y-4 text-center">
             <h1 className="font-semibold text-lg text-foreground">Invite link expired</h1>
             <p className="text-sm text-muted-foreground">
@@ -84,7 +86,7 @@ export default function SetPasswordPage() {
                 <Label htmlFor="confirm">Confirm password</Label>
                 <Input id="confirm" name="confirm" type="password" required minLength={8} />
               </div>
-              <Button type="submit" disabled={isPending || hasSession === null} className="w-full">
+              <Button type="submit" disabled={isPending || hasSession !== true || inviteAllowed !== true} className="w-full">
                 {isPending ? 'Saving...' : 'Continue'}
               </Button>
             </form>

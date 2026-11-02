@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
-import { getSiteUrl } from "@/lib/site-url";
+import { authConfirmRedirect } from "@/lib/auth-link-origin";
 import { CREW_MEMBERSHIP_ROLE, escapeIlike, type CrewInviteClaim } from "@/lib/crew-invite";
 
 const ORG_ADMIN_ROLES = new Set(["owner", "admin"]);
@@ -107,7 +107,7 @@ export async function inviteEmployee(formData: FormData) {
   // /auth/set-password. NEXT_PUBLIC_SITE_URL was unset in production, so the
   // old link fell back to the Supabase Site URL (http://redfoxcrm.com).
   const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${getSiteUrl()}/auth/confirm?next=/auth/set-password`,
+    redirectTo: await authConfirmRedirect("/auth/set-password"),
   });
 
   if (inviteError || !invited?.user) {

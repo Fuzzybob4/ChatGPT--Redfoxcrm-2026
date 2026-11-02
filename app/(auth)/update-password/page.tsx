@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { recoveryPasswordAllowed, updatePasswordAction } from './actions';
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -15,13 +15,10 @@ export default function UpdatePasswordPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [allowed, setAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setHasSession(!!session);
-    });
+    recoveryPasswordAllowed().then(setAllowed);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,9 +36,8 @@ export default function UpdatePasswordPage() {
 
     setIsLoading(true);
     try {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) throw new Error(updateError.message);
+      const result = await updatePasswordAction(password);
+      if (!result.ok) throw new Error(result.error);
 
       setSuccess(true);
       setTimeout(() => router.push('/'), 1500);
@@ -71,7 +67,7 @@ export default function UpdatePasswordPage() {
         </div>
 
         <div className="bg-card rounded-lg shadow-lg p-8 space-y-6">
-          {hasSession === false ? (
+          {allowed === false ? (
             <div className="space-y-4 text-center">
               <h2 className="text-xl font-semibold text-foreground">Link expired</h2>
               <p className="text-sm text-muted-foreground">
@@ -134,7 +130,7 @@ export default function UpdatePasswordPage() {
 
                 <Button
                   type="submit"
-                  disabled={isLoading || hasSession === null}
+                  disabled={isLoading || allowed !== true}
                   className="w-full bg-primary hover:bg-primary/90"
                 >
                   {isLoading ? 'Updating...' : 'Update password'}

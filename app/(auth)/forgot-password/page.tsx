@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import { getSiteUrl } from '@/lib/site-url';
+import { authConfirmRedirect } from '@/lib/auth-link-origin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft } from 'lucide-react';
@@ -24,9 +24,7 @@ export default function ForgotPasswordPage() {
       const supabase = createClient();
       // /auth/confirm verifies a token_hash, so the link works in any browser.
       // It also still accepts ?code= from the stock template (same browser).
-      const redirectTo =
-        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-        `${getSiteUrl(window.location.origin)}/auth/confirm?next=/update-password`;
+      const redirectTo = await authConfirmRedirect('/update-password');
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,
