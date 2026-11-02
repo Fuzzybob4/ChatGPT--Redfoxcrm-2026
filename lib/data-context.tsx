@@ -51,6 +51,8 @@ interface DataContextType {
   loading: boolean;
   org: OrgInfo | null;
   customers: LiveCustomer[];
+  /** Every customer, ignoring the selected location. `customers` is location-scoped. */
+  allCustomers: LiveCustomer[];
   locations: Location[];
   invoices: LiveInvoice[];
   estimates: LiveEstimate[];
@@ -60,6 +62,8 @@ interface DataContextType {
   photos: CustomerPhoto[];
   propertyPhotos: PropertyPhoto[];
   properties: CustomerProperty[];
+  /** Every property, ignoring the selected location. `properties` is location-scoped. */
+  allProperties: CustomerProperty[];
   refresh: () => Promise<void>;
   // helper API (mirrors the former mock lib/data.ts)
   getCustomerById: (id: string) => LiveCustomer | undefined;
@@ -334,6 +338,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         loading,
         org,
         customers: visibleCustomers,
+        allCustomers: customers,
         locations,
         invoices: visibleInvoices,
         estimates: visibleEstimates,
@@ -343,6 +348,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         photos: visiblePhotos,
         propertyPhotos: visiblePropertyPhotos,
         properties: visibleProperties,
+        allProperties: properties,
         refresh,
         getCustomerById,
         getLocationById,

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useTransition } from "react";
+import { use, useState, useTransition } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, Printer, Download } from "lucide-react";
@@ -30,10 +30,17 @@ export default function InvoiceDetailPage({ params }: Props) {
   const { loading, invoices, getCustomerById, refresh } = useData();
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
+  const [statusError, setStatusError] = useState("");
 
+  // NOTE: "Send Invoice" only changes the status to "sent"; no email is sent.
   function handleStatusUpdate(status: "sent" | "paid") {
+    setStatusError("");
     startTransition(async () => {
-      await updateInvoiceStatus(id, status);
+      const result = await updateInvoiceStatus(id, status);
+      if (!result.ok) {
+        setStatusError(result.error);
+        return;
+      }
       await refresh();
     });
   }
@@ -86,6 +93,11 @@ export default function InvoiceDetailPage({ params }: Props) {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-2xl mx-auto">
+          {statusError && (
+            <p role="alert" className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {statusError}
+            </p>
+          )}
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between gap-4">

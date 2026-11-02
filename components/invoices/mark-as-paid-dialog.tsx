@@ -22,12 +22,14 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
   const [createWorkOrder, setCreateWorkOrder] = useState(true);
   const [notes, setNotes] = useState("");
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
 
   const submit = () => {
     const received = Number(amount);
     if (!Number.isFinite(received) || received <= 0 || received > total) return;
+    setError("");
     startTransition(async () => {
-      await createPaymentAndWorkOrder({
+      const result = await createPaymentAndWorkOrder({
         invoiceId,
         customerId,
         paymentType,
@@ -35,6 +37,10 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
         createWorkOrder: paymentType === "full" && createWorkOrder,
         notes,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setOpen(false);
       onComplete();
     });
@@ -82,6 +88,11 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
             <Label htmlFor="payment-notes">Payment notes (optional)</Label>
             <Textarea id="payment-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Check number, payment method, or installation notes" rows={3} />
           </div>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <Button className="w-full" onClick={submit} disabled={pending}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle className="size-4" />}
             {pending ? "Saving..." : paymentType === "deposit" ? "Record Deposit" : "Record Full Payment"}

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
-import { createInvoice } from '../actions';
+import { createInvoice, getInvoiceDefaults } from '../actions';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,6 +50,16 @@ interface AddonItem {
 
 const REMINDER_OPTIONS = [2, 7, 14];
 
+/** Calendar date in the viewer's timezone, plus `days`. Avoids UTC off-by-one. */
+function localDatePlusDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatCurrency(value: number) {
   return value.toLocaleString('en-US', {
     style: 'currency',
@@ -62,11 +72,14 @@ export default function NewInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedLocationId } = useLocation();
-  const { getLocationCustomers } = useData();
+  // `customers` from useData is limited to the selected location. Names and
+  // ?customer= links need the full list or the select shows a UUID.
+  const { allCustomers, getLocationCustomers, refresh } = useData();
 
   const [customerId, setCustomerId] = useState('');
   const [title, setTitle] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  // Viewer's local today+30. The server applies the same default if this is cleared.
+  const [dueDate, setDueDate] = useState(localDatePlusDays(30));
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', description: '', quantity: 1, unitPrice: 0 },
@@ -75,7 +88,8 @@ export default function NewInvoicePage() {
   const [error, setError] = useState('');
 
   const [includeTax, setIncludeTax] = useState(true);
-  const [taxRate, setTaxRate] = useState(8.5);
+  // Was hard-coded to 8.5. Now 0 until the org's default tax setting loads.
+  const [taxRate, setTaxRate] = useState(0);
   const [paymentType, setPaymentType] = useState<'full' | 'deposit'>('full');
   const [depositPercentage, setDepositPercentage] = useState(50);
 
@@ -88,13 +102,35 @@ export default function NewInvoicePage() {
   const locationCustomers = getLocationCustomers(selectedLocationId);
 
   useEffect(() => {
+    let cancelled = false;
+    getInvoiceDefaults()
+      .then((defaults) => {
+        if (cancelled) return;
+        setTaxRate(defaults.taxRate);
+        setDueDate((current) => current || defaults.dueDate);
+      })
+      .catch((err) => console.error('[NewInvoicePage] failed to load invoice defaults', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const customerParam = searchParams.get('customer');
     if (customerParam) setCustomerId(customerParam);
   }, [searchParams]);
 
   const selectedCustomer = useMemo(
-    () => locationCustomers.find((c) => c.id === customerId),
-    [locationCustomers, customerId],
+    () => allCustomers.find((c) => c.id === customerId),
+    [allCustomers, customerId],
+  );
+
+  // Base UI's Select.Value renders the raw value (the customer UUID) unless it
+  // is given the items' labels, so map every customer id to its name. Uses the
+  // unfiltered list so a ?customer= link from another location still shows a name.
+  const customerItems = useMemo(
+    () => allCustomers.map((c) => ({ value: c.id, label: c.name || 'Unnamed customer' })),
+    [allCustomers],
   );
 
   const addLineItem = () => {
@@ -148,7 +184,6 @@ export default function NewInvoicePage() {
   const isValid =
     customerId &&
     title.trim() &&
-    dueDate &&
     lineItems.every((item) => item.description.trim() && item.quantity > 0) &&
     total > 0 &&
     (!allowAddons || validAddonItems.length > 0);
@@ -163,10 +198,6 @@ export default function NewInvoicePage() {
       setError('Add a title for this invoice.');
       return;
     }
-    if (!dueDate) {
-      setError('Set a due date for this invoice.');
-      return;
-    }
     if (allowAddons && validAddonItems.length === 0) {
       setError('Add at least one optional item, or turn off optional add-ons.');
       return;
@@ -178,7 +209,7 @@ export default function NewInvoicePage() {
 
     setIsSaving(true);
     try {
-      const invoiceId = await createInvoice({
+      const result = await createInvoice({
         customerId,
         locationId: selectedLocationId || undefined,
         title: title.trim(),
@@ -188,7 +219,7 @@ export default function NewInvoicePage() {
         taxAmount,
         totalAmount: total,
         depositAmount: paymentType === 'deposit' ? depositAmount : 0,
-        dueDate,
+        dueDate: dueDate || undefined,
         lineItems: lineItems.map((item) => ({
           description: item.description.trim(),
           quantity: item.quantity,
@@ -204,8 +235,18 @@ export default function NewInvoicePage() {
             }))
           : undefined,
       });
-      router.push(`/invoices/${invoiceId}`);
+      if (!result.ok) {
+        setError(result.error);
+        setIsSaving(false);
+        return;
+      }
+      // The detail page reads invoices from the client data context, so reload
+      // it first; otherwise the new id is not found and the page 404s.
+      await refresh();
+      router.push(`/invoices/${result.id}`);
+      router.refresh();
     } catch (err) {
+      console.error('[NewInvoicePage] createInvoice failed', err);
       setError(err instanceof Error ? err.message : 'Failed to create invoice.');
       setIsSaving(false);
     }
@@ -242,7 +283,11 @@ export default function NewInvoicePage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="customer">Customer</Label>
-                    <Select value={customerId} onValueChange={(value) => setCustomerId(value ?? '')}>
+                    <Select
+                      items={customerItems}
+                      value={customerId}
+                      onValueChange={(value) => setCustomerId(value ?? '')}
+                    >
                       <SelectTrigger id="customer" className="w-full">
                         <SelectValue placeholder="Select a customer" />
                       </SelectTrigger>
