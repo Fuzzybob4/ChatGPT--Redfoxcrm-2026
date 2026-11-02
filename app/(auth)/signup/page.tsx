@@ -1,17 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
+import { createClient } from '@/lib/supabase/client';
+import { signupConfirmRedirect } from '@/lib/site-url';
 import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
 import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
+
+const RESEND_COOLDOWN_SECONDS = 60;
+
+async function resendSignupConfirmation(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await createClient().auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: signupConfirmRedirect(window.location.origin) },
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
 
 type Step = 'details' | 'card' | 'success';
 
 export default function SignupPage() {
+  const router = useRouter();
   const { signup } = useAuth();
   const [step, setStep] = useState<Step>('details');
   const [name, setName] = useState('');
@@ -24,6 +40,10 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [successEmail, setSuccessEmail] = useState('');
+  const [resendError, setResendError] = useState('');
+  const [resendNotice, setResendNotice] = useState('');
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Stripe setup state carried into the card step.
   const [clientSecret, setClientSecret] = useState('');
@@ -51,13 +71,21 @@ export default function SignupPage() {
     }
   };
 
-  // Card saved → create the account with the card details in metadata.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  // Card saved on this page, including a 3DS challenge that finishes in Stripe's
+  // modal. A full-page bank redirect reloads /signup and drops this state; that
+  // resume screen lives on the signup billing branch and should land here too.
   const handleCardComplete = async (card: SavedCard) => {
     setError('');
     setIsLoading(true);
 
     try {
-      await signup(name, email, password, locationName, {
+      const result = await signup(name, email, password, locationName, {
         stripe_customer_id: customerId,
         default_payment_method_id: card.paymentMethodId,
         plan,
@@ -66,7 +94,14 @@ export default function SignupPage() {
         card_brand: card.brand,
         card_last4: card.last4,
       });
+      setPassword('');
+      if (result.hasSession) {
+        router.replace('/onboarding');
+        return;
+      }
       setSuccessEmail(email);
+      setResendError('');
+      setResendNotice('');
       setStep('success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed');
@@ -74,6 +109,21 @@ export default function SignupPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleResend = async () => {
+    if (resending || resendCooldown > 0 || !successEmail) return;
+    setResending(true);
+    setResendError('');
+    setResendNotice('');
+    const result = await resendSignupConfirmation(successEmail);
+    setResending(false);
+    if (!result.ok) {
+      setResendError(result.error);
+      return;
+    }
+    setResendNotice('Confirmation email sent.');
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
   };
 
   return (
@@ -104,36 +154,48 @@ export default function SignupPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-semibold text-foreground text-center">Account created successfully!</h2>
-                <p className="text-sm text-muted-foreground text-center">We&apos;re almost done setting up your account</p>
+                <h2 className="text-xl font-semibold text-foreground text-center">Card saved</h2>
+                <p className="text-sm text-muted-foreground text-center">One step left before you can set up your business</p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-medium text-blue-900">Next step:</p>
+                <p className="text-sm font-medium text-blue-900">Confirm your email</p>
                 <p className="text-sm text-blue-800">
-                  Please check your email at <span className="font-semibold">{successEmail}</span> for a confirmation link. Click the link to verify your email address.
+                  We sent a confirmation link to <span className="font-semibold">{successEmail}</span>.
+                  Open it in this browser or any other browser. It signs you in and takes you to finish setting up your business.
                 </p>
               </div>
 
+              {resendError && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                  {resendError}
+                </div>
+              )}
+              {resendNotice && (
+                <p className="text-sm text-center text-muted-foreground">{resendNotice}</p>
+              )}
+
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground text-center">Once confirmed, you can log in to your account.</p>
                 <Button
-                  render={<Link href="/login" />}
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resending || resendCooldown > 0}
                   className="w-full bg-primary hover:bg-primary/90"
                 >
-                  Go to Login
+                  {resending
+                    ? 'Sending...'
+                    : resendCooldown > 0
+                      ? `Resend available in ${resendCooldown}s`
+                      : 'Resend confirmation email'}
+                </Button>
+                <Button
+                  render={<Link href="/login" />}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Go to sign in
                 </Button>
               </div>
-
-              <p className="text-center text-xs text-muted-foreground">
-                Didn&apos;t receive the email? Check your spam folder or{' '}
-                <button
-                  onClick={() => setStep('details')}
-                  className="text-primary font-semibold hover:underline"
-                >
-                  try again
-                </button>
-              </p>
             </div>
           ) : step === 'card' ? (
             <>

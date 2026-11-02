@@ -110,11 +110,21 @@ function isSameOriginPath(path: string, requestOrigin: string): boolean {
   return true;
 }
 
-/** Error-page copy: invite links should not offer a password reset. */
-export function authErrorType(next: string, explicit?: string | null): 'invite' | 'recovery' | null {
-  if (explicit === 'invite' || explicit === 'recovery') return explicit;
+/** Where a confirmed signup goes. Onboarding sends people who already have an org to the dashboard. */
+export const SIGNUP_NEXT_PATH = '/onboarding';
+
+/** HTTPS confirm link for signup and resend. Never uses a plain-http origin. */
+export function signupConfirmRedirect(currentOrigin?: string): string {
+  return `${getSiteUrl(currentOrigin)}/auth/confirm?next=${encodeURIComponent(SIGNUP_NEXT_PATH)}`;
+}
+
+/** Error-page copy: invite and signup links should not offer a password reset. */
+export function authErrorType(next: string, explicit?: string | null): 'invite' | 'recovery' | 'signup' | null {
+  if (explicit === 'invite' || explicit === 'recovery' || explicit === 'signup') return explicit;
+  if (explicit === 'email') return 'signup';
   if (isPath(next, '/update-password')) return 'recovery';
   if (isPath(next, '/auth/set-password')) return 'invite';
+  if (isPath(next, SIGNUP_NEXT_PATH)) return 'signup';
   return null;
 }
 

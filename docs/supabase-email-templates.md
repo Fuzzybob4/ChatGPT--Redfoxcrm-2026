@@ -65,10 +65,22 @@ invites from `app/admin/actions.ts`):
 The app sends `redirectTo = https://www.redfoxcrm.com/auth/confirm?next=/update-password`.
 If `next` is missing or untrusted, recovery defaults to `/update-password`.
 
-### Confirm signup / Magic link (optional, same pattern)
+### Confirm signup (required for new accounts)
+
+Not applied. Christian needs to paste this into **Authentication → Email Templates → Confirm signup** after this code is in production. `type=email` is accepted as an alias of `signup`.
+
+The app sets `emailRedirectTo` to `https://www.redfoxcrm.com/auth/confirm?next=/onboarding` (https, from `getSiteUrl`, never `http://redfoxcrm.com`). After the link is verified, `/onboarding` sends someone who already has an organization to the dashboard.
 
 ```html
-<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next={{ .RedirectTo }}">Confirm your email</a>
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup&next={{ .RedirectTo }}">Confirm your email</a>
+```
+
+`next` must stay last, same as the invite template. Until this template is saved, signup emails still use the stock PKCE `?code=` link. That works in the browser that signed up and fails in any other browser.
+
+### Magic link (optional, same pattern)
+
+```html
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next={{ .RedirectTo }}">Sign in</a>
 ```
 
 ## Link lifetime

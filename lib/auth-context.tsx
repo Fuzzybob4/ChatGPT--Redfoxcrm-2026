@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { signupConfirmRedirect } from '@/lib/site-url';
 
 export interface User {
   id: string;
@@ -21,7 +22,7 @@ interface AuthContextType {
     password: string,
     locationName: string,
     extra?: Record<string, string>,
-  ) => Promise<void>;
+  ) => Promise<{ hasSession: boolean }>;
   logout: () => void;
 }
 
@@ -75,9 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
       options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-          `${window.location.origin}/auth/callback`,
+        // /auth/confirm verifies token_hash in any browser. PKCE ?code= still works
+        // as a fallback. getSiteUrl never emits http://redfoxcrm.com.
+        emailRedirectTo: signupConfirmRedirect(window.location.origin),
         data: {
           full_name: name,
           location_name: locationName,
@@ -87,7 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     });
     if (error) throw new Error(error.message);
-    if (data.user) setUser(supabaseUserToUser(data.user));
+    // A user object is returned even when email confirmation is still required.
+    // Only a session means they are signed in and can continue to onboarding.
+    const hasSession = Boolean(data.session);
+    if (data.session?.user) setUser(supabaseUserToUser(data.session.user));
+    return { hasSession };
   };
 
   const logout = async () => {

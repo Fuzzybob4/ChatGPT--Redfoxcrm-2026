@@ -14,6 +14,7 @@ export default async function AuthErrorPage({ searchParams }: Props) {
   const { reason, type } = await searchParams
   const title = TITLES[reason ?? ''] ?? TITLES.invalid
   const isInvite = type === 'invite'
+  const isSignup = type === 'signup'
 
   let body = 'Email links only work once and expire after a short time.'
   if (reason === 'other_browser') {
@@ -21,7 +22,9 @@ export default async function AuthErrorPage({ searchParams }: Props) {
   }
   const nextStep = isInvite
     ? 'Ask the person who invited you to send a new invite.'
-    : 'You can request a new password reset link below.'
+    : isSignup
+      ? 'Go back to signup and resend the confirmation email.'
+      : 'You can request a new password reset link below.'
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -37,7 +40,12 @@ export default async function AuthErrorPage({ searchParams }: Props) {
           >
             Go to sign in
           </Link>
-          {!isInvite && (
+          {isSignup && (
+            <Link href="/signup" className="text-sm text-primary font-semibold hover:underline">
+              Back to signup
+            </Link>
+          )}
+          {!isInvite && !isSignup && (
             <Link href="/forgot-password" className="text-sm text-primary font-semibold hover:underline">
               Send a new reset link
             </Link>

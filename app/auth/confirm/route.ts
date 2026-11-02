@@ -1,15 +1,26 @@
 import { type EmailOtpType } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { authErrorType, resolveSafeNext } from '@/lib/site-url'
+import { authErrorType, resolveSafeNext, SIGNUP_NEXT_PATH } from '@/lib/site-url'
 
 // Where each link type goes when the email does not carry a usable `next`.
+// `email` is an alias of signup: some templates label the confirm-signup OTP that way.
 const DEFAULT_NEXT: Record<string, string> = {
   invite: '/auth/set-password',
   recovery: '/update-password',
-  signup: '/',
-  email: '/',
+  signup: SIGNUP_NEXT_PATH,
+  email: SIGNUP_NEXT_PATH,
   magiclink: '/',
+}
+
+/** verifyOtp type. `email` uses the signup verifier. */
+function otpTypeFor(type: string): EmailOtpType {
+  if (type === 'email') return 'signup'
+  return type as EmailOtpType
+}
+
+function isSignupConfirmation(type: string | null) {
+  return type === 'signup' || type === 'email'
 }
 
 const SUPPORTED_TYPES = new Set(Object.keys(DEFAULT_NEXT))
@@ -44,7 +55,17 @@ export async function GET(request: NextRequest) {
   if (tokenHash) {
     if (!type) return fail('invalid')
     const supabase = await createClient()
-    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+    if (isSignupConfirmation(type)) {
+      // A different person already signed in on this browser would keep their
+      // session if we only verified. Clear this browser first. The same account
+      // is signed back in by verifyOtp. scope: 'local' does not revoke their other devices.
+      const { data: { user: existing } } = await supabase.auth.getUser()
+      if (existing) await supabase.auth.signOut({ scope: 'local' })
+    }
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: otpTypeFor(type),
+    })
     if (error) {
       console.error('[auth/confirm] verifyOtp failed', { type, code: error.code, status: error.status })
       return fail(error.code === 'otp_expired' ? 'expired' : 'invalid')
