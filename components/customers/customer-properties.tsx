@@ -134,7 +134,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
         form.zip
       );
       if (result) {
-        setForm((f) => ({ ...f, ...result }));
+        setForm((f) => ({ ...f, lat: result.lat, lng: result.lng }));
         setError("");
       } else {
         setError("Address not found. Try a more complete address.");

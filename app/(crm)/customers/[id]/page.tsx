@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
+import { geocodeCustomer } from "@/app/(crm)/customers/geocode-actions";
 import { EditCustomerModal } from "@/components/customers/edit-customer-modal";
 import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gallery";
 import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
@@ -43,6 +44,21 @@ export default function CustomerDetailPage({ params }: Props) {
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
   const [editOpen, setEditOpen] = useState(false);
+
+  // Geocode-on-create (and backfill for older records): a customer with a
+  // street address but no coordinates gets geocoded in the background the
+  // first time its page is opened (customers/new redirects here after save).
+  // Fire-and-forget — the page never waits on Mapbox.
+  const needsGeocode =
+    !!customer && !!customer.address?.trim() && (customer.lat == null || customer.lng == null);
+  const geocodeTried = useRef<string | null>(null);
+  useEffect(() => {
+    if (!needsGeocode || geocodeTried.current === id) return;
+    geocodeTried.current = id;
+    void geocodeCustomer(id).then((r) => {
+      if (r.ok && r.located) void refresh();
+    });
+  }, [needsGeocode, id, refresh]);
 
   if (loading) {
     return (

@@ -3,6 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
+import { geocodePropertyAddress } from "@/lib/geocoding";
+import { geocodeCustomer } from "./geocode-actions";
+
+function isMissingColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const text = error.message ?? "";
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /schema cache/i.test(text) ||
+    /could not find the/i.test(text) ||
+    /does not exist/i.test(text)
+  );
+}
 
 export interface CustomerCreateInput {
   name: string;
@@ -130,8 +144,13 @@ export async function updateCustomer(customerId: string, input: CustomerUpdateIn
 
   if (error) throw new Error(error.message);
 
+  // Re-geocode after the save has committed. geocodeCustomer never throws, so
+  // a Mapbox outage can't fail the update.
+  await geocodeCustomer(customerId, { force: true });
+
   revalidatePath(`/customers/${customerId}`);
   revalidatePath("/customers");
+  revalidatePath("/mapping");
 }
 
 export async function deleteCustomer(customerId: string) {
@@ -163,6 +182,9 @@ export interface PropertyInput {
   isBillingAddress: boolean;
   isServiceAddress: boolean;
   notes: string;
+  /** Optional coordinates from the form's "Geocode Address" button. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export async function saveProperty(
@@ -174,7 +196,24 @@ export async function saveProperty(
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
 
-  const row = {
+  // Persist coordinates (previously the form's geocode result was dropped).
+  // Use the form's values if it already geocoded, otherwise try Mapbox here.
+  // A failed lookup omits lat/lng so an existing pin is not wiped, and a
+  // missing column does not fail the address save.
+  let lat = typeof input.lat === "number" ? input.lat : null;
+  let lng = typeof input.lng === "number" ? input.lng : null;
+  if ((lat == null || lng == null) && input.address.trim()) {
+    try {
+      const geo = await geocodePropertyAddress(input.address, input.city, input.state, input.zip, {
+        allowCityFallback: false,
+      });
+      if (geo) ({ lat, lng } = geo);
+    } catch (e) {
+      console.error("[saveProperty] geocode failed", e);
+    }
+  }
+
+  const row: Record<string, unknown> = {
     property_name: input.propertyName || null,
     address: input.address,
     city: input.city || null,
@@ -186,6 +225,10 @@ export async function saveProperty(
     is_service_address: input.isServiceAddress,
     notes: input.notes || null,
   };
+  if (typeof lat === "number" && typeof lng === "number") {
+    row.lat = lat;
+    row.lng = lng;
+  }
 
   // Only one primary per customer: clear others if this one is primary.
   if (input.isPrimary) {
@@ -196,23 +239,33 @@ export async function saveProperty(
       .eq("org_id", org.orgId);
   }
 
-  if (propertyId) {
-    const { error } = await supabase
-      .from("customer_properties")
-      .update(row)
-      .eq("id", propertyId)
-      .eq("org_id", org.orgId);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from("customer_properties").insert({
-      ...row,
-      customer_id: customerId,
-      org_id: org.orgId,
+  const payload = propertyId
+    ? row
+    : { ...row, customer_id: customerId, org_id: org.orgId };
+  const write = (body: Record<string, unknown>) =>
+    propertyId
+      ? supabase.from("customer_properties").update(body).eq("id", propertyId).eq("org_id", org.orgId)
+      : supabase.from("customer_properties").insert(body);
+
+  const { error } = await write(payload);
+  if (error && isMissingColumn(error) && ("lat" in payload || "lng" in payload)) {
+    console.error("[saveProperty] lat/lng rejected, saving without coordinates", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
     });
-    if (error) throw new Error(error.message);
+    const rest = { ...payload };
+    delete rest.lat;
+    delete rest.lng;
+    const retry = await write(rest);
+    if (retry.error) throw new Error(retry.error.message);
+  } else if (error) {
+    throw new Error(error.message);
   }
 
   revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/mapping");
 }
 
 export async function deleteProperty(customerId: string, propertyId: string) {

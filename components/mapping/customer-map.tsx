@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPin, Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { geocodeMissingCustomers } from "@/app/(crm)/customers/geocode-actions";
 import {
   Select,
   SelectContent,
@@ -15,6 +19,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+/** A customer with no pin (no geocoded address/property). */
+export interface UnmappedCustomer {
+  customerId: string;
+  customerName: string;
+  address: string;
+  hasStreetAddress: boolean;
+}
 
 export interface MapPin {
   id: string;
@@ -61,7 +73,10 @@ function matchesView(p: MapPin, view: MapView): boolean {
   return p.mapStatus === view;
 }
 
-export function CustomerMap({ pins }: { pins: MapPin[] }) {
+export function CustomerMap({ pins, unmapped = [] }: { pins: MapPin[]; unmapped?: UnmappedCustomer[] }) {
+  const router = useRouter();
+  const [locating, startLocating] = useTransition();
+  const [locateMsg, setLocateMsg] = useState<string | null>(null);
   const [view, setView] = useState<MapView>("all");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string>("all");
@@ -106,6 +121,30 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
       return true;
     });
   }, [pins, view, search, cityFilter]);
+
+  // Search used to look only at pins, so customers without coordinates
+  // (e.g. "QA Test 2") returned 0 results. Surface them separately.
+  const unmappedMatches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return unmapped.filter(
+      (u) => u.customerName.toLowerCase().includes(q) || u.address.toLowerCase().includes(q),
+    );
+  }, [unmapped, search]);
+  const locatable = unmapped.filter((u) => u.hasStreetAddress).length;
+
+  function locateMissing() {
+    setLocateMsg(null);
+    startLocating(async () => {
+      try {
+        const r = await geocodeMissingCustomers();
+        setLocateMsg(`Located ${r.located} of ${r.attempted} customer${r.attempted === 1 ? "" : "s"}.`);
+        router.refresh();
+      } catch {
+        setLocateMsg("Could not locate customers. Please try again.");
+      }
+    });
+  }
 
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -199,6 +238,41 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
           {filtered.length} shown
         </div>
       </div>
+
+      {(unmappedMatches.length > 0 || locatable > 0) && (
+        <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-sm">
+          {unmappedMatches.length > 0 && (
+            <div className="mb-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                {unmappedMatches.length} matching customer{unmappedMatches.length === 1 ? " is" : "s are"} not on the map yet:
+              </p>
+              <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                {unmappedMatches.slice(0, 10).map((u) => (
+                  <li key={u.customerId}>
+                    <Link href={`/customers/${u.customerId}`} className="font-medium text-primary hover:underline">
+                      {u.customerName}
+                    </Link>{" "}
+                    <span className="text-xs text-muted-foreground">
+                      {u.hasStreetAddress ? `(${u.address} — not geocoded)` : "(no street address)"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {locatable > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                {locatable} customer{locatable === 1 ? " has" : "s have"} an address but no map location.
+              </span>
+              <Button size="xs" variant="outline" onClick={locateMissing} disabled={locating}>
+                {locating ? "Locating…" : "Locate now"}
+              </Button>
+              {locateMsg && <span>{locateMsg}</span>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Map */}
       <div className="flex-1 min-h-96 rounded-lg overflow-hidden border border-border">

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
+import { CustomerMap, type MapPin, type UnmappedCustomer } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata = {
@@ -9,23 +9,58 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
+function missingColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const text = error.message ?? "";
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /schema cache|could not find the|does not exist/i.test(text)
+  );
+}
+
 export default async function MappingPage() {
   const supabase = await createClient();
   const locationId = (await cookies()).get("redfox_selected_location")?.value;
 
-  let customerQuery = supabase
-    .from("customers")
-    .select("id, full_name, first_name, last_name, email, phone, status, address, city, state, zip_code, lat, lng");
+  const customerColumns =
+    "id, full_name, first_name, last_name, email, phone, status, address, city, state, zip_code";
+  let customerQuery = supabase.from("customers").select(`${customerColumns}, lat, lng`);
   if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
-  const { data: customers } = await customerQuery;
+  const customerResult = await customerQuery;
+  let customers = customerResult.data;
+  if (customerResult.error && missingColumn(customerResult.error)) {
+    // lat/lng is what the import writes. Retry the long column names.
+    let alt = supabase.from("customers").select(`${customerColumns}, latitude, longitude`);
+    if (locationId) alt = alt.eq("location_id", locationId);
+    const retry = await alt;
+    customers = (retry.data ?? []).map((c) => ({ ...c, lat: c.latitude, lng: c.longitude }));
+    if (retry.error) console.error("[mapping] customers query failed", retry.error);
+  } else if (customerResult.error) {
+    console.error("[mapping] customers query failed", customerResult.error);
+  }
 
-  let propertyQuery = supabase
+  const propertyColumns =
+    "id, customer_id, property_name, address, city, state, zip_code, is_primary";
+  const propertyResult = await supabase
     .from("customer_properties")
-    .select("id, customer_id, property_name, address, city, state, zip_code, lat, lng, is_primary")
+    .select(`${propertyColumns}, lat, lng`)
     .not("lat", "is", null)
     .not("lng", "is", null);
-  if (locationId) propertyQuery = propertyQuery.eq("location_id", locationId);
-  const { data: properties } = await propertyQuery;
+  // customer_properties is scoped through its customer below (customerMap),
+  // not a location_id column, which is not confirmed to exist on that table.
+  let propertyRows = propertyResult.data;
+  if (propertyResult.error && missingColumn(propertyResult.error)) {
+    const retry = await supabase
+      .from("customer_properties")
+      .select(`${propertyColumns}, latitude, longitude`)
+      .not("latitude", "is", null)
+      .not("longitude", "is", null);
+    propertyRows = (retry.data ?? []).map((p) => ({ ...p, lat: p.latitude, lng: p.longitude }));
+    if (retry.error) console.error("[mapping] properties query failed", retry.error);
+  } else if (propertyResult.error) {
+    console.error("[mapping] properties query failed", propertyResult.error);
+  }
 
   let jobQuery = supabase
     .from("scheduled_jobs")
@@ -125,7 +160,9 @@ export default async function MappingPage() {
   }
 
   const customerName = (c: any) =>
-    c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+    c.full_name?.trim() || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unnamed customer";
+
+  const properties = (propertyRows ?? []).filter((p) => customerMap.has(p.customer_id));
 
   // Track which customers have at least one geocoded property, so we can
   // suppress the customer's main-address pin when properties cover them.
@@ -185,6 +222,18 @@ export default async function MappingPage() {
     });
   }
 
+  // Customers with no pin at all (no geocoded address and no geocoded
+  // property). Passed to the map so search can still find them.
+  const pinnedCustomerIds = new Set(mapPins.map((p) => p.customerId));
+  const unmapped: UnmappedCustomer[] = (customers ?? [])
+    .filter((c) => !pinnedCustomerIds.has(c.id))
+    .map((c) => ({
+      customerId: c.id,
+      customerName: customerName(c),
+      address: [c.address, c.city, c.state, c.zip_code].filter(Boolean).join(", "),
+      hasStreetAddress: !!String(c.address ?? "").trim(),
+    }));
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -192,7 +241,7 @@ export default async function MappingPage() {
         description="Visualize customers and their properties on the map by payment and installation status."
       />
       <div className="flex-1 min-h-0 px-4 pb-4 lg:px-6 lg:pb-6">
-        <CustomerMap pins={mapPins} />
+        <CustomerMap pins={mapPins} unmapped={unmapped} />
       </div>
     </div>
   );
