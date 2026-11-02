@@ -82,7 +82,7 @@ export default function InvoiceDetailPage({ params }: Props) {
               <ArrowLeft className="size-3.5" data-icon="inline-start" />
               Back
             </Button>
-            {invoice.status === "Draft" && (
+            {(invoice.status === "Draft" || invoice.status === "Sent") && (
               <Button size="sm" disabled={pending} onClick={() => setConfirmSend(true)}>
                 <Send className="size-3.5" data-icon="inline-start" />
                 {pending ? "Sending..." : "Send Invoice"}
@@ -93,7 +93,11 @@ export default function InvoiceDetailPage({ params }: Props) {
                 invoiceId={invoice.id}
                 customerId={invoice.customerId}
                 total={total}
-                onComplete={() => startTransition(async () => { await refresh(); })}
+                onComplete={(warning) => {
+                  setStatusNotice(warning ? `Payment recorded. ${warning}` : "Payment recorded.");
+                  setStatusError("");
+                  startTransition(async () => { await refresh(); });
+                }}
               />
             )}
           </div>
@@ -108,7 +112,7 @@ export default function InvoiceDetailPage({ params }: Props) {
             </p>
           )}
           {statusNotice && (
-            <p role="status" className="mb-4 rounded-lg border border-border bg-muted p-3 text-sm">
+            <p role="status" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-lg">
               {statusNotice}
             </p>
           )}

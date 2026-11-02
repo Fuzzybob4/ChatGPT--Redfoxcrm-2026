@@ -10,14 +10,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createPaymentAndWorkOrder } from "@/app/(crm)/invoices/actions";
 
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "check", label: "Check" },
+  { value: "card", label: "Card" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "other", label: "Other" },
+] as const;
+
 export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
   invoiceId: string;
   customerId: string;
   total: number;
-  onComplete: () => void;
+  onComplete: (warning?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<"full" | "deposit">("full");
+  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]["value"]>("cash");
   const [amount, setAmount] = useState(total.toFixed(2));
   const [createWorkOrder, setCreateWorkOrder] = useState(true);
   const [notes, setNotes] = useState("");
@@ -33,6 +42,7 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
         invoiceId,
         customerId,
         paymentType,
+        paymentMethod,
         amountReceived: received,
         createWorkOrder: paymentType === "full" && createWorkOrder,
         notes,
@@ -42,7 +52,7 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
         return;
       }
       setOpen(false);
-      onComplete();
+      onComplete(result.warning);
     });
   };
 
@@ -71,6 +81,19 @@ export function MarkAsPaidDialog({ invoiceId, customerId, total, onComplete }: {
               <SelectContent>
                 <SelectItem value="full">Full payment</SelectItem>
                 <SelectItem value="deposit">Deposit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payment-method">Payment method</Label>
+            <Select value={paymentMethod} onValueChange={(value) => {
+              if (value) setPaymentMethod(value as (typeof PAYMENT_METHODS)[number]["value"]);
+            }}>
+              <SelectTrigger id="payment-method"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAYMENT_METHODS.map((method) => (
+                  <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

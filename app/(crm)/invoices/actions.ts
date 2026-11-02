@@ -71,7 +71,7 @@ export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 // Returns errors instead of throwing: Next.js replaces thrown server-action
 // messages in production with "An error occurred in the Server Components
 // render", which hides the real cause (see createCustomer).
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true; warning?: string } | { ok: false; error: string };
 export type CreateInvoiceResult = { ok: true; id: string } | { ok: false; error: string };
 
 /** No org payment-terms column exists in the repo, so new invoices are due in 30 days. */
@@ -86,6 +86,20 @@ function logDbError(scope: string, error: DbError) {
     details: error?.details,
     hint: error?.hint,
   });
+}
+
+function isMissingColumn(error: DbError) {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`;
+  return (
+    error?.code === "42703" ||
+    error?.code === "PGRST204" ||
+    /schema cache|could not find the|does not exist/i.test(text)
+  );
+}
+
+function isMissingRelation(error: DbError) {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`;
+  return error?.code === "PGRST205" || error?.code === "42P01" || /could not find the table|does not exist/i.test(text);
 }
 
 function zodMessage(error: z.ZodError) {
@@ -169,15 +183,34 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
     const org = await getCurrentOrg();
     if (!org) return { ok: false, error: "Not authenticated" };
 
-    // Verify the customer belongs to this org before using their ID
-    const { data: customer, error: custErr } = await supabase
+    // Ownership is org_id only. The selected location does not matter, so a
+    // customer with no location_id still belongs to this org.
+    // Do not select customers.name: that column is not in the live schema
+    // (full_name / first_name / last_name are). PostgREST rejects the whole
+    // select when one column is missing, and the old code reported that as
+    // "customer not found".
+    let customerQuery = await supabase
       .from("customers")
-      .select("id, address, city, state, zip_code, full_name, first_name, last_name, name")
+      .select("id, address, city, state, zip_code, full_name, first_name, last_name")
       .eq("id", data.customerId)
       .eq("org_id", org.orgId)
       .maybeSingle();
-    if (custErr) logDbError("createInvoice customer lookup", custErr);
-    if (custErr || !customer) {
+    if (customerQuery.error && isMissingColumn(customerQuery.error)) {
+      logDbError("createInvoice customer lookup (retrying without name columns)", customerQuery.error);
+      customerQuery = await supabase
+        .from("customers")
+        .select("id, address, city, state, zip_code")
+        .eq("id", data.customerId)
+        .eq("org_id", org.orgId)
+        .maybeSingle();
+    }
+    const customer = customerQuery.data;
+    const custErr = customerQuery.error;
+    if (custErr) {
+      logDbError("createInvoice customer lookup", custErr);
+      return { ok: false, error: custErr.message ?? "Could not look up that customer" };
+    }
+    if (!customer) {
       return { ok: false, error: "Customer not found or does not belong to your organisation" };
     }
 
@@ -189,7 +222,10 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
         .eq("id", data.estimateId)
         .eq("org_id", org.orgId)
         .maybeSingle();
-      if (estErr) logDbError("createInvoice estimate lookup", estErr);
+      if (estErr) {
+        logDbError("createInvoice estimate lookup", estErr);
+        return { ok: false, error: estErr.message ?? "Could not look up that estimate" };
+      }
       if (!est) return { ok: false, error: "Estimate not found or does not belong to your organisation" };
     }
 
@@ -201,7 +237,10 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
         .eq("id", data.locationId)
         .eq("org_id", org.orgId)
         .maybeSingle();
-      if (locErr) logDbError("createInvoice location lookup", locErr);
+      if (locErr) {
+        logDbError("createInvoice location lookup", locErr);
+        return { ok: false, error: locErr.message ?? "Could not look up that location" };
+      }
       if (!loc) return { ok: false, error: "Location not found or does not belong to your organisation" };
     }
 
@@ -212,7 +251,6 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
     const invoiceNumber = `INV-${datePart}-${randomPart}`;
     const customerName =
       customer.full_name?.trim() ||
-      customer.name?.trim() ||
       [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() ||
       "Customer";
     const title = data.title?.trim() || `Invoice for ${customerName}`;
@@ -356,6 +394,8 @@ export async function createPaymentAndWorkOrder(data: {
   amountReceived: number;
   createWorkOrder: boolean;
   notes?: string;
+  /** Stored on invoices.payment_method when that column exists. Not written to payments. */
+  paymentMethod?: "cash" | "check" | "card" | "bank_transfer" | "other";
 }): Promise<ActionResult> {
   try {
     const supabase = await createClient();
@@ -398,6 +438,65 @@ export async function createPaymentAndWorkOrder(data: {
       return { ok: false, error: updateError.message };
     }
 
+    // The invoice is already marked paid. Everything below is extra: a failure
+    // is a warning, not a failed payment.
+    const warnings: string[] = [];
+
+    const amountCents = Math.round(data.amountReceived * 100);
+    const paymentInsert = await supabase.from("payments").insert({
+      org_id: org.orgId,
+      invoice_id: data.invoiceId,
+      amount_cents: amountCents,
+      status: "succeeded",
+      provider: "manual",
+      provider_payment_id: `manual-${crypto.randomUUID()}`,
+    });
+    let paymentError = paymentInsert.error;
+    if (paymentError && isMissingColumn(paymentError)) {
+      logDbError("createPaymentAndWorkOrder payments insert (retrying without provider_payment_id)", paymentError);
+      const retry = await supabase.from("payments").insert({
+        org_id: org.orgId,
+        invoice_id: data.invoiceId,
+        amount_cents: amountCents,
+        status: "succeeded",
+        provider: "manual",
+      });
+      paymentError = retry.error;
+    }
+    if (paymentError && isMissingColumn(paymentError)) {
+      logDbError("createPaymentAndWorkOrder payments insert (retrying with amount)", paymentError);
+      const retry = await supabase.from("payments").insert({
+        org_id: org.orgId,
+        invoice_id: data.invoiceId,
+        amount: data.amountReceived,
+        status: "succeeded",
+        provider: "manual",
+      });
+      paymentError = retry.error;
+    }
+    if (paymentError) {
+      logDbError("createPaymentAndWorkOrder payments insert", paymentError);
+      warnings.push(
+        isMissingRelation(paymentError)
+          ? "No payment row was saved because public.payments is missing."
+          : `No payment row was saved: ${paymentError.message}`,
+      );
+    }
+
+    if (data.paymentMethod) {
+      const { error: methodError } = await supabase
+        .from("invoices")
+        .update({ payment_method: data.paymentMethod })
+        .eq("id", data.invoiceId)
+        .eq("org_id", org.orgId);
+      if (methodError) {
+        logDbError("createPaymentAndWorkOrder payment_method", methodError);
+        if (!isMissingColumn(methodError)) {
+          warnings.push(`Payment method was not stored: ${methodError.message}`);
+        }
+      }
+    }
+
     const { error: termsError } = await supabase.from("payment_terms").upsert({
       invoice_id: data.invoiceId,
       org_id: org.orgId,
@@ -410,7 +509,11 @@ export async function createPaymentAndWorkOrder(data: {
     }, { onConflict: "invoice_id" });
     if (termsError) {
       logDbError("createPaymentAndWorkOrder payment_terms upsert", termsError);
-      return { ok: false, error: termsError.message };
+      warnings.push(
+        isMissingRelation(termsError)
+          ? "Payment terms were skipped because public.payment_terms is not in the database."
+          : `Payment terms were not saved: ${termsError.message}`,
+      );
     }
 
     if (data.createWorkOrder && isFullyPaid) {
@@ -459,7 +562,7 @@ export async function createPaymentAndWorkOrder(data: {
     revalidatePath(`/invoices/${data.invoiceId}`);
     revalidatePath("/jobs");
     revalidatePath("/mapping");
-    return { ok: true };
+    return warnings.length > 0 ? { ok: true, warning: warnings.join(" ") } : { ok: true };
   } catch (e) {
     console.error("[createPaymentAndWorkOrder] unexpected error", e);
     return { ok: false, error: e instanceof Error ? e.message : "Failed to record payment" };
@@ -532,13 +635,26 @@ export async function sendInvoice(invoiceId: string): Promise<ActionResult> {
     if (invoiceError) logDbError("sendInvoice lookup", invoiceError);
     if (invoiceError || !invoice) return { ok: false, error: invoiceError?.message ?? "Invoice not found" };
 
-    const { data: customer, error: customerError } = await supabase
+    let customerQuery = await supabase
       .from("customers")
-      .select("email, full_name, first_name, last_name, name")
+      .select("email, full_name, first_name, last_name")
       .eq("id", invoice.customer_id)
       .eq("org_id", org.orgId)
       .maybeSingle();
-    if (customerError) logDbError("sendInvoice customer", customerError);
+    if (customerQuery.error && isMissingColumn(customerQuery.error)) {
+      logDbError("sendInvoice customer (retrying email only)", customerQuery.error);
+      customerQuery = await supabase
+        .from("customers")
+        .select("email")
+        .eq("id", invoice.customer_id)
+        .eq("org_id", org.orgId)
+        .maybeSingle();
+    }
+    if (customerQuery.error) {
+      logDbError("sendInvoice customer", customerQuery.error);
+      return { ok: false, error: customerQuery.error.message ?? "Could not look up that customer" };
+    }
+    const customer = customerQuery.data;
     const email = String(customer?.email ?? "").trim();
     if (!email) {
       return { ok: false, error: "This customer has no email address, so the invoice was not sent." };
@@ -546,7 +662,6 @@ export async function sendInvoice(invoiceId: string): Promise<ActionResult> {
 
     const customerName =
       customer?.full_name?.trim() ||
-      customer?.name?.trim() ||
       [customer?.first_name, customer?.last_name].filter(Boolean).join(" ").trim() ||
       "there";
     const due = String(invoice.due_date ?? "").slice(0, 10) || "the due date on the invoice";
