@@ -145,6 +145,8 @@ export interface Estimate {
   validUntil: string;
   lineItems: EstimateLineItem[];
   discount?: number;
+  /** Tax in dollars (estimates.tax_amount); 0 for estimates saved without tax. */
+  taxAmount?: number;
   notes?: string;
 }
 
@@ -203,5 +205,5 @@ export function getEstimateTotal(estimate: Estimate): number {
     (sum, item) => sum + item.quantity * item.unitPrice,
     0
   );
-  return subtotal - (estimate.discount || 0);
+  return subtotal - (estimate.discount || 0) + (estimate.taxAmount || 0);
 }

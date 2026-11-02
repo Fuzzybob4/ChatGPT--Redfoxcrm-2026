@@ -155,26 +155,25 @@ export default function EstimateDetailPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="text-foreground font-medium">
-                    ${(total + (estimate.discount || 0)).toFixed(2)}
+                    ${(total + (estimate.discount || 0) - (estimate.taxAmount || 0)).toFixed(2)}
                   </span>
                 </div>
                 {estimate.discount ? (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Discount</span>
-                      <span className="text-red-600 font-medium">-${estimate.discount.toFixed(2)}</span>
-                    </div>
-                    <div className="border-t border-border pt-3 flex justify-between">
-                      <span className="font-semibold text-foreground">Total</span>
-                      <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="border-t border-border pt-3 flex justify-between">
-                    <span className="font-semibold text-foreground">Total</span>
-                    <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span className="text-red-600 font-medium">-${estimate.discount.toFixed(2)}</span>
                   </div>
-                )}
+                ) : null}
+                {estimate.taxAmount ? (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Tax</span>
+                    <span className="text-foreground font-medium">${estimate.taxAmount.toFixed(2)}</span>
+                  </div>
+                ) : null}
+                <div className="border-t border-border pt-3 flex justify-between">
+                  <span className="font-semibold text-foreground">Total</span>
+                  <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>

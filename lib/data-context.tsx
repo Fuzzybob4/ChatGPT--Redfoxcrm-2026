@@ -152,6 +152,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: invRows },
       { data: invLineItemRows },
       { data: estRows },
+      { data: estLineItemRows, error: estLineItemError },
       { data: jobRows },
       { data: empRows },
       { data: addonRows },
@@ -164,6 +165,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('invoice_line_items').select('*').order('order', { ascending: true }),
       supabase.from('estimates').select('*').order('created_at', { ascending: false }),
+      // Table added by migrations/20261102_estimate_line_items_ADDITIVE_REVIEW_REQUIRED.sql;
+      // until it exists this errors and estimates fall back to one synthetic line.
+      supabase.from('estimate_line_items').select('*').order('sort_order', { ascending: true }),
       supabase.from('scheduled_jobs').select('*').order('scheduled_date', { ascending: true }),
       supabase.from('employees').select('*').order('created_at', { ascending: true }),
       supabase.from('addon_catalog').select('*').order('price_cents', { ascending: true }),
@@ -173,13 +177,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     ]);
 
     if (custError) console.error('[v0] Failed to load customers:', custError);
+    if (estLineItemError) console.error('[v0] Failed to load estimate line items:', estLineItemError);
     if (photoError) console.error('[v0] Failed to load customer photos:', photoError);
     if (propertyPhotoError) console.error('[v0] Failed to load property photos:', propertyPhotoError);
 
     setCustomers((custRows ?? []).map(mapCustomer));
     setLocations((locRows ?? []).map(mapLocation));
     setInvoices((invRows ?? []).map((inv) => mapInvoice(inv, invLineItemRows ?? [])));
-    setEstimates((estRows ?? []).map(mapEstimate));
+    setEstimates((estRows ?? []).map((row) => mapEstimate(row, estLineItemRows ?? [])));
     setJobs((jobRows ?? []).map(mapJob));
     setEmployees(
       (empRows ?? []).map((r: Record<string, any>) => ({

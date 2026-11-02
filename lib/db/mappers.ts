@@ -144,9 +144,25 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   };
 }
 
-export function mapEstimate(row: Record<string, any>): Estimate & { total: number } {
+export function mapEstimate(
+  row: Record<string, any>,
+  lineItemRows: Record<string, any>[] = [],
+): Estimate & { total: number } {
   const total = toNum(row.total_amount) || toNum(row.subtotal);
   const status = (titleCase(row.status) as EstimateStatus) || 'Draft';
+
+  // Real line items (estimate_line_items, written by createEstimate). Older
+  // estimates have none and keep the single synthetic line below.
+  const realLineItems = lineItemRows
+    .filter((li) => li.estimate_id === row.id)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((li) => ({
+      id: li.id,
+      description: li.description ?? 'Item',
+      quantity: toNum(li.quantity) || 1,
+      unitPrice: money(li.unit_price, li.unit_price_cents),
+    }));
+  const hasRealLineItems = realLineItems.length > 0;
 
   return {
     id: row.id,
@@ -157,15 +173,19 @@ export function mapEstimate(row: Record<string, any>): Estimate & { total: numbe
     status,
     createdDate: (row.created_at ?? '').slice(0, 10),
     validUntil: row.valid_until ?? '',
-    lineItems: [
-      {
-        id: `${row.id}-li`,
-        description: row.title || row.description || 'Estimate',
-        quantity: 1,
-        unitPrice: toNum(row.subtotal) || total,
-      },
-    ],
-    discount: 0,
+    lineItems: hasRealLineItems
+      ? realLineItems
+      : [
+          {
+            id: `${row.id}-li`,
+            description: row.title || row.description || 'Estimate',
+            quantity: 1,
+            unitPrice: toNum(row.subtotal) || total,
+          },
+        ],
+    // Only applied with real line items so legacy estimates' totals are unchanged.
+    discount: hasRealLineItems ? money(row.discount_amount, row.discount_amount_cents) : 0,
+    taxAmount: hasRealLineItems ? money(row.tax_amount, row.tax_amount_cents) : 0,
     notes: row.notes ?? undefined,
     total,
   };

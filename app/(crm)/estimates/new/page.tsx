@@ -7,11 +7,22 @@ import { useLocation } from '@/lib/location-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createEstimate, getEstimateDefaults } from '../actions';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+
+/** Calendar date in the viewer's timezone, plus `days`. Avoids UTC off-by-one. */
+function localDatePlusDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 interface LineItem {
   id: string;
@@ -23,9 +34,14 @@ interface LineItem {
 export default function NewEstimatePage() {
   const router = useRouter();
   const { selectedLocationId } = useLocation();
-  const { getLocationCustomers } = useData();
+  // `customers` is location-scoped. The select label needs the full list.
+  const { allCustomers, getLocationCustomers, refresh } = useData();
   const [customerId, setCustomerId] = useState('');
+  const [title, setTitle] = useState('');
+  const [validUntil, setValidUntil] = useState(localDatePlusDays(30));
+  const [taxRate, setTaxRate] = useState('0');
   const [discount, setDiscount] = useState('0');
+  const [error, setError] = useState('');
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', description: '', quantity: 1, unitPrice: 0 },
@@ -34,6 +50,27 @@ export default function NewEstimatePage() {
 
   // Filter customers by location
   const locationCustomers = getLocationCustomers(selectedLocationId);
+
+  // Base UI Select.Value needs labels, otherwise it shows the customer UUID.
+  const customerItems = useMemo(
+    () => allCustomers.map((c) => ({ value: c.id, label: c.name || 'Unnamed customer' })),
+    [allCustomers],
+  );
+
+  // Org default tax rate (or 0) and a +30 day valid-until date.
+  useEffect(() => {
+    let cancelled = false;
+    getEstimateDefaults()
+      .then((d) => {
+        if (cancelled) return;
+        setTaxRate(String(d.taxRate));
+        setValidUntil((current) => current || d.validUntil);
+      })
+      .catch((err) => console.error('[NewEstimatePage] failed to load defaults', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const addLineItem = () => {
     setLineItems([
@@ -54,21 +91,63 @@ export default function NewEstimatePage() {
     );
   };
 
+  // Preview only; createEstimate recomputes every amount on the server.
+  const subtotal = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const discountValue = Math.max(parseFloat(discount || '0') || 0, 0);
+  const taxRateValue = Math.min(Math.max(parseFloat(taxRate || '0') || 0, 0), 100);
+  const taxAmount = Math.round(Math.max(subtotal - discountValue, 0) * taxRateValue) / 100;
+  const total = subtotal - discountValue + taxAmount;
+
   const handleSave = async () => {
+    setError('');
     if (!customerId) {
-      alert('Please select a customer');
+      setError('Select a customer to continue.');
+      return;
+    }
+    if (lineItems.some((item) => !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0)) {
+      setError('Every line item needs a description and a quantity greater than zero.');
+      return;
+    }
+    if (discountValue > subtotal) {
+      setError('Discount cannot be more than the subtotal.');
+      return;
+    }
+    if (total <= 0) {
+      setError('Estimate total must be greater than zero.');
       return;
     }
 
     setIsSaving(true);
-    // In production, this would call an API
-    setTimeout(() => {
-      router.push('/estimates');
-    }, 500);
+    try {
+      const result = await createEstimate({
+        customerId,
+        locationId: selectedLocationId || undefined,
+        title: title.trim() || undefined,
+        notes: notes.trim() || undefined,
+        validUntil: validUntil || undefined,
+        discount: discountValue,
+        taxRate: taxRateValue,
+        lineItems: lineItems.map((item) => ({
+          description: item.description.trim(),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      });
+      if (!result.ok) {
+        setError(result.error);
+        setIsSaving(false);
+        return;
+      }
+      // The detail page reads from the client data context; reload it first.
+      await refresh();
+      router.push(`/estimates/${result.id}`);
+      router.refresh();
+    } catch (err) {
+      console.error('[NewEstimatePage] createEstimate failed', err);
+      setError(err instanceof Error ? err.message : 'Failed to create estimate.');
+      setIsSaving(false);
+    }
   };
-
-  const subtotal = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const total = subtotal - parseFloat(discount || '0');
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -94,16 +173,38 @@ export default function NewEstimatePage() {
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Customer</label>
-                <Select value={customerId} onValueChange={(v) => setCustomerId(v || '')}>
-                  <SelectGroup>
-                    <SelectItem value="">Select a customer...</SelectItem>
+                <Select items={customerItems} value={customerId} onValueChange={(v) => setCustomerId(v || '')}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a customer..." />
+                  </SelectTrigger>
+                  <SelectContent>
                     {locationCustomers.map((cust) => (
                       <SelectItem key={cust.id} value={cust.id}>
                         {cust.name}
                       </SelectItem>
                     ))}
-                  </SelectGroup>
+                  </SelectContent>
                 </Select>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="estimate-title" className="text-sm font-medium text-foreground">Title (optional)</label>
+                  <Input
+                    id="estimate-title"
+                    placeholder="e.g. Holiday lighting – front of house"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="estimate-valid-until" className="text-sm font-medium text-foreground">Valid until</label>
+                  <Input
+                    id="estimate-valid-until"
+                    type="date"
+                    value={validUntil}
+                    onChange={(e) => setValidUntil(e.target.value)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -182,6 +283,23 @@ export default function NewEstimatePage() {
                     placeholder="0"
                   />
                 </div>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm text-muted-foreground">Tax rate (%)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
+                    className="w-32"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span className="font-medium">${taxAmount.toFixed(2)}</span>
+                </div>
                 <div className="border-t border-border pt-2 flex justify-between">
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
@@ -199,6 +317,12 @@ export default function NewEstimatePage() {
               </div>
             </CardContent>
           </Card>
+
+          {error && (
+            <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2 justify-end pb-6">
