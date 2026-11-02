@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
+import Link from "next/link";
 import {
   Search, CalendarDays, LayoutList, Navigation, Play,
   CheckCircle2, Plus, Users, Truck, Wrench, MapPin, Clock,
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -25,6 +26,7 @@ import { type Job, type JobStatus } from "@/lib/data";
 import { useData, type Employee } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
 import { updateJobStatus, reassignJob, createRemovalJob } from "./actions";
+import { formatDateOnly, todayDateKey } from "@/lib/dates";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -89,37 +91,51 @@ function WorkOrderCard({
   const [removalDate, setRemovalDate] = useState("");
   const [removalTime, setRemovalTime] = useState("08:00");
   const [removalEndTime, setRemovalEndTime] = useState("12:00");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const next = nextStatus(job.status);
   const typeConfig = JOB_TYPE_STYLES[job.jobType] ?? JOB_TYPE_STYLES.other;
   const TypeIcon = typeConfig.icon;
   const statusStyle = STATUS_STYLES[job.status];
 
+  // Every menu/advance action goes through here so a failed server action
+  // (RLS, missing column, network) shows an inline message instead of an
+  // unhandled rejection that takes the page down.
+  function runAction(action: () => Promise<unknown>, onSuccess?: () => void) {
+    setActionError(null);
+    startTransition(async () => {
+      try {
+        await action();
+        onSuccess?.();
+      } catch (err) {
+        console.error("Work order action failed:", err);
+        setActionError(err instanceof Error && err.message ? err.message : "Action failed. Please try again.");
+      } finally {
+        onRefresh();
+      }
+    });
+  }
+
   function handleAdvance() {
     if (!next) return;
-    startTransition(async () => {
-      await updateJobStatus(job.id, next.value);
-      onRefresh();
-    });
+    runAction(() => updateJobStatus(job.id, next.value));
   }
 
   function handleReassign() {
     if (!selectedEmployee) return;
     const emp = employees.find((e) => e.id === selectedEmployee);
-    startTransition(async () => {
-      await reassignJob(job.id, emp?.crewName ?? emp?.fullName ?? "", [selectedEmployee]);
-      onRefresh();
-      setReassignOpen(false);
-    });
+    runAction(
+      () => reassignJob(job.id, emp?.crewName ?? emp?.fullName ?? "", [selectedEmployee]),
+      () => setReassignOpen(false),
+    );
   }
 
   function handleCreateRemoval() {
     if (!removalDate) return;
-    startTransition(async () => {
-      await createRemovalJob(job.id, removalDate, removalTime, removalEndTime);
-      onRefresh();
-      setRemovalOpen(false);
-    });
+    runAction(
+      () => createRemovalJob(job.id, removalDate, removalTime, removalEndTime),
+      () => setRemovalOpen(false),
+    );
   }
 
   const NextIcon = next ? nextButtonIcon(job.status) : null;
@@ -139,14 +155,20 @@ function WorkOrderCard({
             </div>
             {/* Always-visible menu — no hover required on mobile */}
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Button variant="ghost" size="icon" className="size-8 shrink-0 -mr-1 -mt-0.5" type="button">
-                  <MoreVertical className="size-4" />
-                  <span className="sr-only">Work order actions</span>
-                </Button>
+              {/* render= makes the trigger *be* the Button (no <button> inside <button>) */}
+              <DropdownMenuTrigger
+                render={<Button variant="ghost" size="icon" className="size-8 shrink-0 -mr-1 -mt-0.5" type="button" />}
+                disabled={pending}
+              >
+                <MoreVertical className="size-4" />
+                <span className="sr-only">Work order actions</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-xs">Work Order</DropdownMenuLabel>
+                {/* Base UI's Menu.GroupLabel throws "MenuGroupContext is missing"
+                    (error #31 in prod) unless it is inside a Menu.Group. */}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="text-xs">Work Order</DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setReassignOpen(true)}>
                   <Users className="size-3.5 mr-2" />
@@ -161,18 +183,19 @@ function WorkOrderCard({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => {
-                    startTransition(async () => {
-                      await updateJobStatus(job.id, "cancelled");
-                      onRefresh();
-                    });
-                  }}
+                  onClick={() => runAction(() => updateJobStatus(job.id, "cancelled"))}
                 >
                   Cancel job
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {actionError && (
+            <p role="alert" className="mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">
+              {actionError}
+            </p>
+          )}
 
           {/* Status + type chips */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -369,7 +392,7 @@ function CalendarView({
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayStr = todayDateKey(today);
 
   const selectedJobs = selectedDay
     ? (jobsByDate[selectedDay] ?? []).filter((j) => {
@@ -451,7 +474,7 @@ function CalendarView({
       {selectedDay && (
         <div>
           <p className="text-sm font-semibold mb-3">
-            {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {formatDateOnly(selectedDay, { weekday: "long", month: "long", day: "numeric" })}
             {selectedJobs.length > 0 && (
               <span className="ml-2 text-xs font-normal text-muted-foreground">{selectedJobs.length} job{selectedJobs.length !== 1 ? "s" : ""}</span>
             )}
@@ -491,6 +514,14 @@ export default function JobsPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
   const { loading, jobs: allJobs, getCustomerById, employees, refresh } = useData();
   const { selectedLocationId } = useLocation();
+
+  // DataProvider loads once per session and is not touched by revalidatePath(),
+  // so work orders created elsewhere (customer page, invoices, tickets) never
+  // showed up until a hard reload. Re-fetch whenever /jobs is opened.
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const jobs = useMemo(
     () => (selectedLocationId ? allJobs.filter((j) => j.locationId === selectedLocationId) : allJobs),
@@ -548,7 +579,7 @@ export default function JobsPage() {
         title="Work Orders"
         description={`${jobs.length} total work orders`}
         actions={
-          <Button size="sm" disabled>
+          <Button size="sm" render={<Link href="/jobs/new" />}>
             <Plus className="size-3.5 mr-1.5" />
             New
           </Button>
@@ -630,9 +661,7 @@ export default function JobsPage() {
                     <div key={date}>
                       <div className="flex items-center gap-3 mb-3">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
-                          {new Date(date + "T00:00:00").toLocaleDateString("en-US", {
-                            weekday: "short", month: "short", day: "numeric", year: "numeric",
-                          })}
+                          {formatDateOnly(date, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
                         </p>
                         <div className="flex-1 h-px bg-border" />
                         <span className="text-xs text-muted-foreground whitespace-nowrap">

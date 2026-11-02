@@ -88,6 +88,18 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+function isMissingColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const text = error.message ?? '';
+  return (
+    error.code === '42703' ||
+    error.code === 'PGRST204' ||
+    /schema cache/i.test(text) ||
+    /could not find the/i.test(text) ||
+    /does not exist/i.test(text)
+  );
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [org, setOrg] = useState<OrgInfo | null>(null);
@@ -150,7 +162,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: custRows, error: custError },
       { data: locRows },
       { data: invRows },
-      { data: invLineItemRows },
+      { data: invLineItemRows, error: invLineItemError },
       { data: estRows },
       { data: estLineItemRows, error: estLineItemError },
       { data: jobRows },
@@ -163,7 +175,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('locations').select('*').order('created_at', { ascending: true }),
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
-      supabase.from('invoice_line_items').select('*').order('order', { ascending: true }),
+      // Column is `sort_order` (see invoices/actions.ts createInvoice); `order` does not
+      // exist and made PostgREST return 400 on every load.
+      supabase.from('invoice_line_items').select('*').order('sort_order', { ascending: true }),
       supabase.from('estimates').select('*').order('created_at', { ascending: false }),
       // Table added by migrations/20261102_estimate_line_items_ADDITIVE_REVIEW_REQUIRED.sql;
       // until it exists this errors and estimates fall back to one synthetic line.
@@ -176,14 +190,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('customer_properties').select('*').order('created_at', { ascending: true }),
     ]);
 
+    // sort_order is what createInvoice writes. If that column is absent, retry
+    // the older `order` column so invoice lines still load.
+    let invoiceLines = invLineItemRows;
+    let invoiceLineError = invLineItemError;
+    if (isMissingColumn(invLineItemError)) {
+      const retry = await supabase
+        .from('invoice_line_items')
+        .select('*')
+        .order('order', { ascending: true });
+      if (!retry.error) {
+        invoiceLines = retry.data;
+        invoiceLineError = null;
+      }
+    }
+
     if (custError) console.error('[v0] Failed to load customers:', custError);
+    if (invoiceLineError) console.error('[v0] Failed to load invoice line items:', invoiceLineError);
     if (estLineItemError) console.error('[v0] Failed to load estimate line items:', estLineItemError);
     if (photoError) console.error('[v0] Failed to load customer photos:', photoError);
     if (propertyPhotoError) console.error('[v0] Failed to load property photos:', propertyPhotoError);
 
     setCustomers((custRows ?? []).map(mapCustomer));
     setLocations((locRows ?? []).map(mapLocation));
-    setInvoices((invRows ?? []).map((inv) => mapInvoice(inv, invLineItemRows ?? [])));
+    setInvoices((invRows ?? []).map((inv) => mapInvoice(inv, invoiceLines ?? [])));
     setEstimates((estRows ?? []).map((row) => mapEstimate(row, estLineItemRows ?? [])));
     setJobs((jobRows ?? []).map(mapJob));
     setEmployees(

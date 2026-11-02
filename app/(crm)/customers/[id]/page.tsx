@@ -30,6 +30,7 @@ import { CustomerPhotoUploader } from "@/components/customers/customer-photo-upl
 import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-link-card";
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
+import { formatDateOnly, formatJobWhen } from "@/lib/dates";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -336,7 +337,7 @@ export default function CustomerDetailPage({ params }: Props) {
                 <Button
                   variant="outline"
                   size="sm"
-                  render={<Link href={`/jobs/new?customer=${customer.id}`} />}
+                  render={<Link href={`/jobs/new?${new URLSearchParams({ customer: customer.id })}`} />}
                 >
                   <Plus className="size-3.5" data-icon="inline-start" />
                   Schedule
@@ -353,12 +354,8 @@ export default function CustomerDetailPage({ params }: Props) {
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{job.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(job.scheduledDate).toLocaleDateString("en-US", {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            })}{" "}
-                            at {job.scheduledTime} &middot; {job.technicianName}
+                            {formatJobWhen(job.scheduledDate, job.scheduledTime)}
+                            {job.technicianName ? <> &middot; {job.technicianName}</> : null}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -406,11 +403,7 @@ export default function CustomerDetailPage({ params }: Props) {
                           <p className="text-sm font-medium">{inv.invoiceNumber}</p>
                           <p className="text-xs text-muted-foreground">
                             Due{" "}
-                            {new Date(inv.dueDate).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
+                            {formatDateOnly(inv.dueDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

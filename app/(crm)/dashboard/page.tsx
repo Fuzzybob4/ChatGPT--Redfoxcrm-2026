@@ -34,6 +34,7 @@ import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
 import { useOrgContext } from "@/lib/org-context";
+import { formatJobWhen } from "@/lib/dates";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -217,14 +218,7 @@ export default function DashboardPage() {
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {customer?.name} &middot;{" "}
-                          {new Date(
-                            job.scheduledDate + "T" + job.scheduledTime
-                          ).toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}{" "}
-                          at {job.scheduledTime}
+                          {formatJobWhen(job.scheduledDate, job.scheduledTime)}
                         </p>
                       </div>
                       <StatusBadge status={job.status} />

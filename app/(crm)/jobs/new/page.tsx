@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
@@ -13,38 +13,110 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 import { useData } from "@/lib/data-context";
+import { useLocation } from "@/lib/location-context";
 import { createJob } from "../actions";
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+type JobForm = {
+  title: string;
+  jobType: "install" | "removal" | "other";
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  crewName: string;
+  notes: string;
+};
 
 export default function NewJobPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const customerId = searchParams.get("customer");
-  const { getCustomerById } = useData();
-  const customer = customerId ? getCustomerById(customerId) : null;
+  // Only accept a bare id; anything after a "/" or "?" (e.g. a malformed
+  // "/jobs/new?customer=<id>/jobs") is dropped instead of producing a lookup miss.
+  const customerParam = (searchParams.get("customer") ?? "").trim().split(/[/?#&\s]/)[0];
+  const dateParam = searchParams.get("date") ?? "";
+  // `customers` and `properties` are limited to the selected location, same as
+  // getCustomerById. A Schedule link for a customer in another location (or
+  // with no location) needs the full lists.
+  const { loading, allCustomers, allProperties, refresh } = useData();
+  const { selectedLocationId } = useLocation();
+
+  const [pickedCustomerId, setPickedCustomerId] = useState(customerParam);
+  useEffect(() => setPickedCustomerId(customerParam), [customerParam]);
+  const customerId = pickedCustomerId;
+
+  // Look the customer up across every location. The location-scoped list used
+  // to miss a customer with no location_id, or one in a different location,
+  // and the page dead-ended on "No customer selected".
+  const customer = customerId ? allCustomers.find((c) => c.id === customerId) ?? null : null;
+  const pickerCustomers = useMemo(() => {
+    const scoped = selectedLocationId
+      ? allCustomers.filter((c) => c.locationId === selectedLocationId || !c.locationId)
+      : allCustomers;
+    return [...scoped].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allCustomers, selectedLocationId]);
 
   const [isPending, startTransition] = useTransition();
-  const [formData, setFormData] = useState({
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<JobForm>({
     title: "",
-    jobType: "install" as "install" | "removal" | "other",
-    scheduledDate: "",
+    jobType: "install",
+    scheduledDate: DATE_ONLY.test(dateParam) ? dateParam : "",
     startTime: "08:00",
     endTime: "12:00",
-    address: customer?.address ?? "",
-    city: customer?.city ?? "",
-    state: customer?.state ?? "",
-    zipCode: customer?.zip ?? "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
     crewName: "",
     notes: "",
   });
 
+  // Prefill the address once the customer is known. Previously this only ran
+  // on the first render, before DataProvider finished loading, so the address
+  // was always blank. Fall back to the customer's service/primary property
+  // when the customer record itself has no street address.
+  const prefilledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!customer || prefilledFor.current === customer.id) return;
+    prefilledFor.current = customer.id;
+    const props = allProperties.filter((p) => p.customerId === customer.id && p.isActive !== false);
+    const prop =
+      props.find((p) => p.isPrimary && p.isServiceAddress) ??
+      props.find((p) => p.isServiceAddress) ??
+      props.find((p) => p.isPrimary) ??
+      props[0];
+    const src = customer.address?.trim()
+      ? { address: customer.address, city: customer.city, state: customer.state, zip: customer.zip }
+      : prop
+        ? { address: prop.address, city: prop.city, state: prop.state, zip: prop.zip }
+        : null;
+    setFormData((f) => ({
+      ...f,
+      address: src?.address ?? "",
+      city: src?.city ?? "",
+      state: src?.state ?? "",
+      zipCode: src?.zip ?? "",
+    }));
+  }, [customer, allProperties]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || !customer) return;
+    if (!customerId || !customer) {
+      setSubmitError("Select a customer first.");
+      return;
+    }
+    setSubmitError(null);
 
     startTransition(async () => {
       try {
-        const jobId = await createJob({
+        await createJob({
           customerId,
+          locationId: customer.locationId || selectedLocationId || undefined,
           title: formData.title,
           jobType: formData.jobType,
           scheduledDate: formData.scheduledDate,
@@ -58,12 +130,29 @@ export default function NewJobPage() {
           notes: formData.notes || undefined,
         });
 
+        // DataProvider is client state; revalidatePath() in the action does not
+        // touch it, so reload it before navigating or /jobs shows stale data.
+        await refresh();
         router.push("/jobs");
       } catch (error) {
         console.error("Failed to create job:", error);
+        setSubmitError(
+          error instanceof Error && error.message ? error.message : "Could not create the work order. Please try again.",
+        );
       }
     });
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <PageHeader title="Create Work Order" />
+        <div className="flex flex-1 items-center justify-center p-10">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
   if (!customer) {
     return (
@@ -71,13 +160,43 @@ export default function NewJobPage() {
         <PageHeader title="Create Work Order" />
         <div className="flex flex-1 items-center justify-center p-4">
           <Card className="max-w-md w-full">
-            <CardContent className="pt-6 text-center">
-              <p className="text-muted-foreground mb-4">
-                No customer selected. Please select a customer to create a work order.
-              </p>
-              <Link href="/jobs">
-                <Button>Back to Jobs</Button>
-              </Link>
+            <CardHeader>
+              <CardTitle className="text-base">Choose a customer</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {customerParam && (
+                <p className="text-sm text-destructive">
+                  That customer could not be found. Pick one below.
+                </p>
+              )}
+              {pickerCustomers.length > 0 ? (
+                <Select
+                  items={pickerCustomers.map((c) => ({ value: c.id, label: c.name }))}
+                  value={pickedCustomerId || null}
+                  onValueChange={(v) => setPickedCustomerId((v as string | null) ?? "")}
+                >
+                  <SelectTrigger className="w-full" aria-label="Customer">
+                    <SelectValue placeholder="Select a customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickerCustomers.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground">No customers yet.</p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" render={<Link href="/jobs" />}>
+                  Back to Jobs
+                </Button>
+                <Button variant="outline" render={<Link href="/customers/new" />}>
+                  New customer
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -111,7 +230,7 @@ export default function NewJobPage() {
                 {/* Job Type */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Job Type</label>
-                  <Select value={formData.jobType} onValueChange={(v) => setFormData({ ...formData, jobType: v as any })}>
+                  <Select value={formData.jobType} onValueChange={(v) => setFormData({ ...formData, jobType: (v as JobForm["jobType"]) ?? "install" })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -216,13 +335,17 @@ export default function NewJobPage() {
                   />
                 </div>
 
+                {submitError && (
+                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {submitError}
+                  </p>
+                )}
+
                 {/* Actions */}
                 <div className="flex gap-2 pt-4">
-                  <Link href="/jobs">
-                    <Button variant="outline" type="button">
-                      Cancel
-                    </Button>
-                  </Link>
+                  <Button variant="outline" type="button" render={<Link href="/jobs" />}>
+                    Cancel
+                  </Button>
                   <Button className="flex-1" type="submit" disabled={isPending || !formData.title || !formData.scheduledDate}>
                     {isPending ? (
                       <>

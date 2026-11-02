@@ -213,8 +213,10 @@ export async function importInvoicesFromCSV(
               invoice_id: invoice.id,
               description: row.lineItemDescription,
               quantity: 1,
-              unit_price_cents: Math.round((row.total || 0) * 100),
-              order: 0,
+              // Same column set as invoices/actions.ts createInvoice.
+              unit_price: row.total || 0,
+              line_total: row.total || 0,
+              sort_order: 0,
             });
 
           if (lineItemError) {

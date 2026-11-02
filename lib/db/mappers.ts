@@ -107,7 +107,7 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   // Fetch line items for this invoice from the provided rows
   const invoiceLineItems = lineItemRows
     .filter((li) => li.invoice_id === row.id)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .sort((a, b) => (a.sort_order ?? a.order ?? 0) - (b.sort_order ?? b.order ?? 0))
     .map((li) => ({
       description: li.description ?? 'Services',
       quantity: li.quantity ?? 1,
@@ -216,7 +216,8 @@ export function mapJob(row: Record<string, any>): Job {
     serviceType: (row.job_type as ServiceType) || 'Custom Installation',
     jobType,
     status,
-    scheduledDate: row.scheduled_date ?? '',
+    // Keep only the calendar day so a timestamp-typed column can't shift keys.
+    scheduledDate: String(row.scheduled_date ?? '').slice(0, 10),
     scheduledTime: (row.start_time ?? '').slice(0, 5),
     durationMins: row.duration_minutes ?? 0,
     technicianName: row.crew_name ?? '',

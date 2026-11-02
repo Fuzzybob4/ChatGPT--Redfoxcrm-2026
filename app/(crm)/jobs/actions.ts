@@ -96,15 +96,39 @@ export async function createJob(input: CreateJobInput) {
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
 
+  // Jobs without a location_id disappear from /jobs whenever a location is
+  // selected (the list filters on job.locationId), so inherit the customer's.
+  let customerLocationId: string | null = null;
+  if (!input.locationId) {
+    const { data: cust, error: custErr } = await supabase
+      .from("customers")
+      .select("location_id")
+      .eq("id", input.customerId)
+      .eq("org_id", org.orgId)
+      .maybeSingle();
+    if (custErr) {
+      // Missing location_id must not block the insert; the job is still saved.
+      console.error("[createJob] customer location lookup failed", {
+        code: custErr.code,
+        message: custErr.message,
+        details: custErr.details,
+        hint: custErr.hint,
+      });
+    }
+    customerLocationId = (cust?.location_id as string | null) ?? null;
+  }
+
   const { data, error } = await supabase
     .from("scheduled_jobs")
     .insert({
       org_id: org.orgId,
       customer_id: input.customerId,
       invoice_id: input.invoiceId ?? null,
-      estimate_id: input.estimateId ?? null,
+      // Omit a null estimate_id. invoices.estimate_id is already missing in
+      // production; sending null here would fail every job if this column is too.
+      ...(input.estimateId ? { estimate_id: input.estimateId } : {}),
       property_id: input.propertyId ?? null,
-      location_id: input.locationId ?? null,
+      location_id: input.locationId ?? customerLocationId,
       title: input.title,
       job_type: input.jobType,
       scheduled_date: input.scheduledDate,
@@ -118,7 +142,8 @@ export async function createJob(input: CreateJobInput) {
       crew_name: input.crewName ?? null,
       assigned_employees: input.assignedEmployees ?? [],
       notes: input.notes ?? null,
-      season_year: input.seasonYear ?? new Date().getFullYear(),
+      // Season follows the scheduled calendar date, not the server's UTC clock.
+      season_year: input.seasonYear ?? (Number(input.scheduledDate?.slice(0, 4)) || new Date().getFullYear()),
       status: "scheduled",
       status_key: "scheduled",
     })

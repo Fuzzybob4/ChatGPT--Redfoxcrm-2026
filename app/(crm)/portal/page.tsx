@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
+import { formatDateOnly, formatJobWhen } from "@/lib/dates";
 
 // Optional upsell services customers can add when paying
 const UPSELL_SERVICES = [
@@ -390,9 +391,7 @@ export default function CustomerPortalPage() {
                               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <CalendarDays className="size-3" />
-                                  {new Date(job.scheduledDate + "T" + job.scheduledTime).toLocaleDateString("en-US", {
-                                    weekday: "short", month: "short", day: "numeric",
-                                  })}{" "}at {job.scheduledTime}
+                                  {formatJobWhen(job.scheduledDate, job.scheduledTime)}
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <Clock className="size-3" />
@@ -419,7 +418,7 @@ export default function CustomerPortalPage() {
                             <div>
                               <p className="font-medium text-sm">{job.title}</p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(job.scheduledDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                {formatDateOnly(job.scheduledDate, { month: "short", day: "numeric", year: "numeric" })}
                               </p>
                             </div>
                             <StatusBadge status={job.status} />
