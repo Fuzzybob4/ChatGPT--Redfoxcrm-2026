@@ -41,8 +41,9 @@ function CardForm({
     setProcessing(true);
 
     try {
+      // return_url is set on the Checkout Session. Passing returnUrl here too
+      // makes Stripe reject confirm() with "return_url was already provided".
       const confirmation = await checkoutState.checkout.confirm({
-        returnUrl: window.location.href,
         redirect: 'if_required',
       });
 

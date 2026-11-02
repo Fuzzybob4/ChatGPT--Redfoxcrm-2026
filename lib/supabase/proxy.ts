@@ -2,6 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  // These routes authenticate themselves (Stripe signature, cron bearer,
+  // portal token, or the unsubscribe link). A missing Supabase session must
+  // not 307 them to /login — that blocks webhooks and customer links.
+  if (isSessionlessPath(request.nextUrl.pathname)) {
+    return NextResponse.next({ request })
+  }
+
   // Skip during build-time static generation (env vars not available)
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return NextResponse.next({ request })
@@ -87,4 +94,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   return supabaseResponse
+}
+
+function isSessionlessPath(pathname: string) {
+  return (
+    pathname === '/api/webhooks/stripe' ||
+    pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/portal/') ||
+    pathname === '/customer-portal' ||
+    pathname.startsWith('/customer-portal/') ||
+    pathname === '/unsubscribe' ||
+    pathname.startsWith('/unsubscribe/')
+  )
 }

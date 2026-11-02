@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
+import { resolveVerifiedSignupBilling } from '@/lib/stripe/signup-billing';
 import { getCurrentOrg } from '@/lib/org';
 
 async function getOrigin() {
@@ -48,14 +49,24 @@ export async function createOrganization(
   let orgId = existing?.org_id as string | undefined;
 
   if (!orgId) {
-    // Card + plan details captured at signup live in the user's auth metadata.
-    const meta = (user.user_metadata ?? {}) as Record<string, string>;
+    // Plan choices are still taken from signup metadata. Stripe customer and
+    // card fields are not: users can edit their own metadata, so a copied
+    // stripe_customer_id could point at someone else's customer. The id is
+    // accepted only after Stripe confirms the customer's email is this user.
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const metaString = (key: string) => (typeof meta[key] === 'string' ? (meta[key] as string) : undefined);
     const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const plan = meta.plan === 'enterprise' || meta.plan === 'professional' ? meta.plan : 'starter';
-    const requestedLocations = Math.min(100, Math.max(1, Number.parseInt(meta.location_count ?? '1', 10) || 1));
+    const planValue = metaString('plan');
+    const plan = planValue === 'enterprise' || planValue === 'professional' ? planValue : 'starter';
+    const requestedLocations = Math.min(100, Math.max(1, Number.parseInt(metaString('location_count') ?? '1', 10) || 1));
     const maxLocations = plan === 'starter' ? 1 : plan === 'professional' ? requestedLocations : requestedLocations;
-    const subscriptionInterval = meta.billing_interval === 'yearly' ? 'yearly' : 'monthly';
+    const subscriptionInterval = metaString('billing_interval') === 'yearly' ? 'yearly' : 'monthly';
+    const billing = await resolveVerifiedSignupBilling({
+      email: user.email,
+      hintedSessionId: metaString('checkout_session_id'),
+      hintedCustomerId: metaString('stripe_customer_id'),
+    });
 
     const { data: org, error: orgErr } = await supabase
       .from('organizations')
@@ -69,10 +80,10 @@ export async function createOrganization(
         subscription_interval: subscriptionInterval,
         trial_ends_at: trialEndsAt,
         subscription_status: 'trialing',
-        stripe_customer_id: meta.stripe_customer_id ?? null,
-        default_payment_method_id: meta.default_payment_method_id ?? null,
-        card_brand: meta.card_brand ?? null,
-        card_last4: meta.card_last4 ?? null,
+        stripe_customer_id: billing?.customerId ?? null,
+        default_payment_method_id: billing?.paymentMethodId ?? null,
+        card_brand: billing?.brand ?? null,
+        card_last4: billing?.last4 ?? null,
       })
       .select('id')
       .single();

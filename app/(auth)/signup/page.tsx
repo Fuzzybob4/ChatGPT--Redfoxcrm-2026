@@ -1,15 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
-import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
+import { createSignupCheckoutSession, resumeSignupCheckout } from '@/app/(auth)/signup/actions';
 import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
 
-type Step = 'details' | 'card' | 'success';
+type Step = 'details' | 'card' | 'finish' | 'success';
+
+function subscribeToLocation() {
+  return () => {};
+}
+
+function readReturnSessionId() {
+  return new URLSearchParams(window.location.search).get('session_id') ?? '';
+}
 
 export default function SignupPage() {
   const { signup } = useAuth();
@@ -28,6 +36,11 @@ export default function SignupPage() {
   // Stripe setup state carried into the card step.
   const [clientSecret, setClientSecret] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [checkoutSessionId, setCheckoutSessionId] = useState('');
+  const [savedCard, setSavedCard] = useState<SavedCard | null>(null);
+  const [returnHandled, setReturnHandled] = useState(false);
+  const returnSessionId = useSyncExternalStore(subscribeToLocation, readReturnSessionId, () => '');
+  const resuming = Boolean(returnSessionId) && !returnHandled;
 
   // Move from the details form to the card-collection step.
   const handleDetailsSubmit = async (e: React.FormEvent) => {
@@ -36,13 +49,21 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const result = await createSignupCheckoutSession(email);
+      const result = await createSignupCheckoutSession(email, {
+        fullName: name,
+        locationName,
+        plan,
+        billingInterval,
+        locationCount,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
       }
+      setEmail(result.email);
       setClientSecret(result.clientSecret);
       setCustomerId(result.customerId);
+      setCheckoutSessionId(result.sessionId);
       setStep('card');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start signup');
@@ -51,29 +72,99 @@ export default function SignupPage() {
     }
   };
 
-  // Card saved → create the account with the card details in metadata.
-  const handleCardComplete = async (card: SavedCard) => {
+  // A 3D Secure redirect reloads /signup and drops React state. The Checkout
+  // Session (session_id in the URL) is the source of truth for email, plan,
+  // and the saved card. The password is asked for again — it is never stored.
+  useEffect(() => {
+    if (!returnSessionId) return;
+
+    let cancelled = false;
+    resumeSignupCheckout(returnSessionId)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setError(result.error);
+          setStep('details');
+          return;
+        }
+
+        setEmail(result.email);
+        setName(result.fullName);
+        setLocationName(result.locationName);
+        setPlan(result.plan);
+        setBillingInterval(result.billingInterval);
+        setLocationCount(result.locationCount);
+        setCheckoutSessionId(result.sessionId);
+
+        if (result.status === 'open') {
+          setClientSecret(result.clientSecret);
+          setCustomerId(result.customerId);
+          setError('Card authentication was not completed. Please try the card again.');
+          setStep('card');
+          return;
+        }
+
+        setSavedCard({
+          paymentMethodId: result.paymentMethodId,
+          brand: result.brand,
+          last4: result.last4,
+        });
+        setPassword('');
+        setStep('finish');
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Could not restore signup');
+        setStep('details');
+      })
+      .finally(() => {
+        if (!cancelled) setReturnHandled(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [returnSessionId]);
+
+  const createAccount = async () => {
     setError('');
     setIsLoading(true);
 
     try {
       await signup(name, email, password, locationName, {
-        stripe_customer_id: customerId,
-        default_payment_method_id: card.paymentMethodId,
+        checkout_session_id: checkoutSessionId,
         plan,
         billing_interval: billingInterval,
         location_count: locationCount,
-        card_brand: card.brand,
-        card_last4: card.last4,
       });
+      setPassword('');
       setSuccessEmail(email);
       setStep('success');
+      window.history.replaceState(null, '', '/signup');
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed');
-      setStep('details');
+      return false;
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Card saved on this page (no bank redirect). Password is still in memory.
+  const handleCardComplete = async (card: SavedCard) => {
+    setSavedCard(card);
+    if (!password) {
+      setStep('finish');
+      return;
+    }
+    const created = await createAccount();
+    if (!created) setStep('finish');
+  };
+
+  const handleFinishSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!savedCard) return;
+    await createAccount();
   };
 
   return (
@@ -96,7 +187,9 @@ export default function SignupPage() {
 
         {/* Signup Form */}
         <div className="bg-card rounded-lg shadow-lg p-8 space-y-6">
-          {step === 'success' ? (
+          {resuming ? (
+            <p className="text-sm text-muted-foreground text-center">Restoring your signup…</p>
+          ) : step === 'success' ? (
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
@@ -135,6 +228,54 @@ export default function SignupPage() {
                 </button>
               </p>
             </div>
+          ) : step === 'finish' ? (
+            <>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Finish creating your account</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your card{savedCard ? ` (${savedCard.brand} •••• ${savedCard.last4})` : ''} is saved.
+                  Enter your password again to create the account.
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleFinishSubmit} className="space-y-4">
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium text-foreground">{name}</p>
+                  <p className="text-muted-foreground">{email}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="finish-password" className="text-sm font-medium text-foreground">Password</label>
+                  <Input
+                    id="finish-password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={isLoading || !savedCard}
+                  className="w-full bg-primary hover:bg-primary/90"
+                >
+                  {isLoading ? 'Creating account...' : 'Create account'}
+                </Button>
+              </form>
+
+              <p className="text-center text-sm">
+                <Link href="/login" className="text-primary font-semibold hover:underline">
+                  Already have an account? Sign in
+                </Link>
+              </p>
+            </>
           ) : step === 'card' ? (
             <>
               <div>
@@ -149,6 +290,7 @@ export default function SignupPage() {
               )}
 
               <SignupCardStep
+                key={clientSecret}
                 clientSecret={clientSecret}
                 customerId={customerId}
                 onComplete={handleCardComplete}

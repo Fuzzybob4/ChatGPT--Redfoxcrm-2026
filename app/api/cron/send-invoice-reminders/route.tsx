@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isCronAuthorized } from '@/lib/cron-auth';
 import { getPendingEmailReminders, markReminderAsSent, markReminderAsFailed } from '@/app/(crm)/invoices/billing-actions';
 import { getOrCreatePortalToken } from '@/app/(crm)/customers/portal-actions';
 import { sendEmail } from '@/lib/email/resend';
@@ -12,9 +13,9 @@ function getPortalBaseUrl() {
 }
 
 export async function GET(request: Request) {
-  // Verify this is a valid cron request
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Fail closed when CRON_SECRET is unset. Comparing against `Bearer ${undefined}`
+  // would accept the literal header "Bearer undefined".
+  if (!isCronAuthorized(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -121,12 +122,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // Allow manual trigger from admin panel
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Delegate to GET handler
+  // Same bearer check as GET, including the missing-secret rejection.
   return GET(request);
 }
