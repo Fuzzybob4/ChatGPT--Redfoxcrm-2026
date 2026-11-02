@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { authConfirmRedirect } from '@/lib/auth-link-origin';
+import { authEmailRedirect } from '@/lib/auth-link-origin';
 
 export async function adminLoginAction(formData: FormData) {
   const email = formData.get('email') as string;
@@ -64,7 +64,9 @@ export async function adminRequestAccessAction(formData: FormData) {
     redirect('/admin?tab=request&error=account_deactivated');
   }
 
-  const redirectTo = await authConfirmRedirect('/admin/setup');
+  const link = await authEmailRedirect('/admin/setup');
+  if (!link.ok) redirect('/admin?tab=request&error=invite_failed');
+  const redirectTo = link.redirectTo;
 
   if (adminRecord) {
     const supabase = await createClient();

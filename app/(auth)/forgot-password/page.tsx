@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import { authConfirmRedirect } from '@/lib/auth-link-origin';
+import { authEmailRedirect } from '@/lib/auth-link-origin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft } from 'lucide-react';
@@ -24,10 +24,14 @@ export default function ForgotPasswordPage() {
       const supabase = createClient();
       // /auth/confirm verifies a token_hash, so the link works in any browser.
       // It also still accepts ?code= from the stock template (same browser).
-      const redirectTo = await authConfirmRedirect('/update-password');
+      const link = await authEmailRedirect('/update-password', window.location.origin);
+      if (!link.ok) {
+        setError(link.error);
+        return;
+      }
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+        redirectTo: link.redirectTo,
       });
 
       if (resetError) throw new Error(resetError.message);

@@ -1,5 +1,7 @@
 const PRODUCTION_URL = 'https://www.redfoxcrm.com';
 
+const PRODUCTION_HOSTS = new Set(['www.redfoxcrm.com', 'redfoxcrm.com']);
+
 // Origins whose paths we accept in a `next` value. We only ever keep the path,
 // never redirect to these origins directly.
 const KNOWN_ORIGINS = new Set([
@@ -11,6 +13,37 @@ const KNOWN_ORIGINS = new Set([
 
 function isLocalHost(hostname: string) {
   return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+export function isPreviewDeployment() {
+  return (process.env.VERCEL_ENV ?? process.env.NEXT_PUBLIC_VERCEL_ENV) === 'preview';
+}
+
+export function isProductionEmailOrigin(origin: string) {
+  try {
+    return PRODUCTION_HOSTS.has(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** https://*.vercel.app, or http://localhost. Anything else is rejected. */
+export function previewOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/\/$/, '');
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withProtocol);
+    if (isLocalHost(url.hostname)) return url.origin;
+    if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app')) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function previewFallbackOrigin(): string | null {
+  return previewOrigin(process.env.VERCEL_BRANCH_URL) ?? previewOrigin(process.env.VERCEL_URL);
 }
 
 function normalizeOrigin(value: string | undefined): string | null {
@@ -30,10 +63,16 @@ function normalizeOrigin(value: string | undefined): string | null {
 
 /**
  * Public base URL for links that leave the app (auth emails, redirects).
- * NEXT_PUBLIC_SITE_URL ?? NEXT_PUBLIC_APP_URL ?? https://www.redfoxcrm.com.
- * Pass the current origin from the browser so local development keeps working.
+ * Preview: the origin you pass (the deployment host), then VERCEL_BRANCH_URL,
+ * then VERCEL_URL. Never https://www.redfoxcrm.com.
+ * Production: NEXT_PUBLIC_SITE_URL ?? NEXT_PUBLIC_APP_URL ?? https://www.redfoxcrm.com,
+ * and never a *.vercel.app host.
+ * Pass the current origin so local development and previews keep their own host.
  */
 export function getSiteUrl(currentOrigin?: string): string {
+  if (isPreviewDeployment()) {
+    return previewOrigin(currentOrigin) ?? previewFallbackOrigin() ?? '';
+  }
   if (currentOrigin) {
     try {
       if (isLocalHost(new URL(currentOrigin).hostname)) return new URL(currentOrigin).origin;
@@ -46,6 +85,25 @@ export function getSiteUrl(currentOrigin?: string): string {
     normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
     PRODUCTION_URL
   );
+}
+
+/**
+ * Preview deploys must not email a production redirect. Supabase would open
+ * www.redfoxcrm.com when that redirect is missing from the allowlist, which
+ * changes whoever is already signed in on production.
+ */
+export function guardPreviewEmailOrigin(
+  origin: string,
+): { ok: true; origin: string } | { ok: false; error: string } {
+  if (!isPreviewDeployment()) return { ok: true, origin };
+  if (!origin || isProductionEmailOrigin(origin) || !previewOrigin(origin)) {
+    return {
+      ok: false,
+      error:
+        'Refusing to send this email from a preview. The link would open production (https://www.redfoxcrm.com) instead of this deployment.',
+    };
+  }
+  return { ok: true, origin };
 }
 
 /**
@@ -113,9 +171,12 @@ function isSameOriginPath(path: string, requestOrigin: string): boolean {
 /** Where a confirmed signup goes. Onboarding sends people who already have an org to the dashboard. */
 export const SIGNUP_NEXT_PATH = '/onboarding';
 
-/** HTTPS confirm link for signup and resend. Never uses a plain-http origin. */
+/** HTTPS confirm link for signup and resend. Never uses a plain-http or production origin on preview. */
 export function signupConfirmRedirect(currentOrigin?: string): string {
-  return `${getSiteUrl(currentOrigin)}/auth/confirm?next=${encodeURIComponent(SIGNUP_NEXT_PATH)}`;
+  const origin = getSiteUrl(currentOrigin);
+  const guard = guardPreviewEmailOrigin(origin);
+  if (!guard.ok) throw new Error(guard.error);
+  return `${guard.origin}/auth/confirm?next=${encodeURIComponent(SIGNUP_NEXT_PATH)}`;
 }
 
 /** Error-page copy: invite and signup links should not offer a password reset. */

@@ -1,6 +1,7 @@
 'use server';
 
 import { requireAdmin, logAdminAction, type AdminRole } from '@/lib/admin-auth';
+import { authEmailRedirect } from '@/lib/auth-link-origin';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 
@@ -19,9 +20,12 @@ export async function inviteAdminMember(formData: FormData) {
   }
 
   // Create Supabase auth user with a temporary password
+  const link = await authEmailRedirect('/admin/login');
+  if (!link.ok) throw new Error(link.error);
+
   const { data: newUser, error: userError } = await db.auth.admin.inviteUserByEmail(email, {
     data: { full_name: name, admin_role: role },
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.redfoxcrm.com'}/admin/login`,
+    redirectTo: link.redirectTo,
   });
 
   if (userError || !newUser.user) {

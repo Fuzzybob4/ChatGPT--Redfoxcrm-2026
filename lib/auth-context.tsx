@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { authConfirmRedirect } from '@/lib/auth-link-origin';
+import { authEmailRedirect } from '@/lib/auth-link-origin';
 
 export interface User {
   id: string;
@@ -72,13 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     locationName: string,
     extra?: Record<string, string>,
   ) => {
+    const link = await authEmailRedirect('/onboarding', window.location.origin);
+    if (!link.ok) throw new Error(link.error);
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // /auth/confirm verifies token_hash in any browser. PKCE ?code= still works
-        // as a fallback. Preview emails stay on that preview; production stays on https.
-        emailRedirectTo: await authConfirmRedirect('/onboarding'),
+        emailRedirectTo: link.redirectTo,
         data: {
           full_name: name,
           location_name: locationName,

@@ -1,45 +1,54 @@
 'use server'
 
 import { headers } from 'next/headers'
-import { getSiteUrl } from '@/lib/site-url'
+import {
+  getSiteUrl,
+  guardPreviewEmailOrigin,
+  isPreviewDeployment,
+  previewOrigin,
+} from '@/lib/site-url'
 
-function hostnameOf(host: string) {
-  return host.split(',')[0]?.trim().split(':')[0]?.toLowerCase() ?? ''
-}
-
-function isLocalHost(hostname: string) {
-  return hostname === 'localhost' || hostname === '127.0.0.1'
-}
-
-function isVercelPreviewHost(hostname: string) {
-  return hostname.endsWith('.vercel.app')
+function headerHost(value: string | null) {
+  return value?.split(',')[0]?.trim() ?? ''
 }
 
 /**
- * Origin embedded in auth emails.
- * Production stays on https://www.redfoxcrm.com.
- * Preview uses the host the browser called, then VERCEL_BRANCH_URL.
+ * Origin for auth emails. On a preview, uses this request's host (https),
+ * then VERCEL_BRANCH_URL, then VERCEL_URL. Production stays on
+ * https://www.redfoxcrm.com and never uses *.vercel.app.
+ * Pass window.location.origin from the browser; the request host wins when
+ * it is a preview host.
  */
-export async function getAuthLinkOrigin(): Promise<string> {
+export async function getRequestSiteUrl(requestOrigin?: string): Promise<string> {
   const headerList = await headers()
-  const host = (headerList.get('x-forwarded-host') ?? headerList.get('host') ?? '').split(',')[0]?.trim() ?? ''
-  const hostname = hostnameOf(host)
+  const host = headerHost(headerList.get('x-forwarded-host') ?? headerList.get('host'))
+  const hostname = host.split(':')[0]?.toLowerCase() ?? ''
+  const forwardedProto = headerList.get('x-forwarded-proto')
 
-  if (isLocalHost(hostname)) {
-    const proto = headerList.get('x-forwarded-proto') ?? 'http'
-    return `${proto}://${host}`
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${forwardedProto ?? 'http'}://${host}`
   }
 
-  if (process.env.VERCEL_ENV === 'preview') {
-    if (host && isVercelPreviewHost(hostname)) return `https://${host}`
-    const branch = process.env.VERCEL_BRANCH_URL?.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    if (branch) return `https://${branch}`
+  if (isPreviewDeployment()) {
+    const fromHeaders = host ? previewOrigin(`https://${host}`) : null
+    if (fromHeaders) return fromHeaders
+    const fromCaller = previewOrigin(requestOrigin)
+    if (fromCaller) return fromCaller
+    return previewOrigin(process.env.VERCEL_BRANCH_URL) ?? previewOrigin(process.env.VERCEL_URL) ?? ''
   }
 
   return getSiteUrl()
 }
 
-export async function authConfirmRedirect(nextPath: string): Promise<string> {
-  const origin = await getAuthLinkOrigin()
-  return `${origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`
+export async function authEmailRedirect(
+  nextPath: string,
+  requestOrigin?: string,
+): Promise<{ ok: true; redirectTo: string } | { ok: false; error: string }> {
+  const origin = await getRequestSiteUrl(requestOrigin)
+  const guard = guardPreviewEmailOrigin(origin)
+  if (!guard.ok) return guard
+  return {
+    ok: true,
+    redirectTo: `${guard.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
+  }
 }

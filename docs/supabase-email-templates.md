@@ -28,18 +28,24 @@ emails sent before or after the template change keep working.
   - `https://www.redfoxcrm.com/**`
   - `http://localhost:3000/**` (local development)
   - `https://redfoxcrm.com/**` (optional, only if the apex is still used)
-  - Preview branch aliases, **not applied**. Add this before testing auth from a
-    Vercel preview, or Supabase ignores `redirect_to` and uses the Site URL
-    (`https://www.redfoxcrm.com`), which is production:
+  - Preview hosts, **not applied**. Supabase only honors `redirect_to` when it
+    is on this allowlist. Otherwise it throws the link away and uses the Site
+    URL, which is production (`https://www.redfoxcrm.com`). That is how a reset
+    sent from a preview changed a password on production. Add this before
+    testing auth on a preview:
     - `https://*-thesimpleserviceatx-gmailcoms-projects.vercel.app/**`
-  - A one-off deployment host such as `https://chatgpt-redfoxcrm-2026-<id>.vercel.app/**`
-    is a different name. Preview emails use the request host when it is
-    `*.vercel.app`, otherwise `VERCEL_BRANCH_URL` (the branch alias above).
-    If the host in the email is not on this list, the link still opens production.
+  - One-off deployment hosts (`https://chatgpt-redfoxcrm-2026-<id>.vercel.app/**`)
+    are different names. Preview emails use the request host when it is
+    `*.vercel.app`, then `VERCEL_BRANCH_URL`, then `VERCEL_URL`. Each of those
+    hosts has to be allowlisted or the link still opens production.
+  - Previews are behind Vercel SSO. Testers must be signed into Vercel or the
+    link stops on a Vercel login page. This has not been changed in the dashboard.
 
 If `redirectTo` is not on the allowlist, Supabase silently uses the Site URL
 instead. That is how invites lost their destination before, and how a reset
-requested on a preview changed a password on production.
+requested on a preview changed a password on production. The app now refuses
+to send a reset, invite, or signup email from a preview when the link would
+use `https://www.redfoxcrm.com`.
 
 ## Authentication → Email Templates
 

@@ -8,17 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import { authConfirmRedirect } from '@/lib/auth-link-origin';
+import { authEmailRedirect } from '@/lib/auth-link-origin';
 import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
 import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
 async function resendSignupConfirmation(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const link = await authEmailRedirect('/onboarding', window.location.origin);
+  if (!link.ok) return link;
   const { error } = await createClient().auth.resend({
     type: 'signup',
     email,
-    options: { emailRedirectTo: await authConfirmRedirect('/onboarding') },
+    options: { emailRedirectTo: link.redirectTo },
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
