@@ -443,8 +443,8 @@ export default function CustomerPortalPage() {
                         <div>
                           <p className="font-medium text-sm">{inv.invoiceNumber}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Issued {new Date(inv.issuedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            {" "}&middot; Due {new Date(inv.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            Issued {formatDateOnly(inv.issuedDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
+                            {" "}&middot; Due {formatDateOnly(inv.dueDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                           </p>
                         </div>
                         <div className="text-right">

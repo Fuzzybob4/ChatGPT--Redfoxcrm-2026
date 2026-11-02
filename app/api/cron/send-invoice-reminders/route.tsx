@@ -3,6 +3,7 @@ import { getPendingEmailReminders, markReminderAsSent, markReminderAsFailed } fr
 import { getOrCreatePortalToken } from '@/app/(crm)/customers/portal-actions';
 import { sendEmail } from '@/lib/email/resend';
 import { renderInvoiceReminderEmail } from '@/lib/email-templates/invoice-reminders-html';
+import { formatDateOnly } from '@/lib/dates';
 
 function getPortalBaseUrl() {
   return (
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
         let paymentLink: string | undefined;
         try {
           const portalToken = await getOrCreatePortalToken(reminder.customer_id);
-          paymentLink = `${getPortalBaseUrl()}/customer-portal/${portalToken}`;
+          if (portalToken.ok) paymentLink = `${getPortalBaseUrl()}/customer-portal/${portalToken.token}`;
         } catch (linkError) {
           console.error('[v0] Failed to generate portal link for reminder:', linkError);
         }
@@ -43,8 +44,8 @@ export async function GET(request: Request) {
           customerName: reminder.customers?.name || 'Valued Customer',
           invoiceNumber: reminder.invoices?.invoice_number || 'Unknown',
           invoiceAmount: `$${reminder.invoices?.total_amount || 0}`,
-          dueDate: reminder.invoices?.due_date 
-            ? new Date(reminder.invoices.due_date).toLocaleDateString()
+          dueDate: reminder.invoices?.due_date
+            ? formatDateOnly(reminder.invoices.due_date, { month: "short", day: "numeric", year: "numeric" }, "TBD")
             : 'TBD',
           companyName: reminder.organizations?.name || 'Our Company',
           companyEmail: reminder.organizations?.email || 'billing@company.com',

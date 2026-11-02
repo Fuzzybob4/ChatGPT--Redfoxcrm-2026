@@ -11,6 +11,7 @@ import {
   setPortalInvoiceAddonSelection,
 } from '@/app/(crm)/customers/portal-invoice-actions';
 import type { PortalInvoice } from '@/app/(crm)/customers/portal-invoice-actions';
+import { formatDateOnly } from '@/lib/dates';
 
 interface CustomerPortalInvoicesProps {
   token: string;
@@ -120,11 +121,7 @@ export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPorta
                     <>
                       {' '}
                       &middot; Due{' '}
-                      {new Date(invoice.dueDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
+                      {formatDateOnly(invoice.dueDate, { month: 'short', day: 'numeric', year: 'numeric' }, '—')}
                     </>
                   )}
                 </p>

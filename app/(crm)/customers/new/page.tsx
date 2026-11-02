@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function NewCustomerPage() {
   const router = useRouter();
-  const { locations, refresh } = useData();
+  const { locations, refresh, stageCreatedCustomer } = useData();
   const { selectedLocationId } = useLocation();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -32,9 +32,33 @@ export default function NewCustomerPage() {
           setError(result.error);
           return;
         }
-        // The detail page reads from the client data provider; reload it so the
-        // new customer is found instead of hitting notFound().
-        await refresh();
+        // The detail page reads the in-memory list. Stage this customer now and
+        // reload the rest in the background. Waiting on the full reload (every
+        // table, including a missing estimate_line_items query) held "Creating..."
+        // for many seconds.
+        const status = (form.status.charAt(0).toUpperCase() + form.status.slice(1).toLowerCase()) as "Active" | "Inactive" | "Lead";
+        stageCreatedCustomer({
+          id: result.id,
+          locationId: form.locationId || "",
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          status,
+          propertyIds: [],
+          createdAt: new Date().toISOString(),
+          address: form.address.trim(),
+          city: form.city.trim(),
+          state: form.state.trim(),
+          zip: form.zip.trim(),
+          lat: null,
+          lng: null,
+          installStatus: "",
+          tags: [],
+          notes: form.notes,
+          isPropertyManager: false,
+          propertyManagerCompany: "",
+        });
+        void refresh();
         router.push(`/customers/${result.id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to create customer.");

@@ -33,8 +33,13 @@ export function CustomerPortalAccess({
   const handleGetToken = async () => {
     setLoading(true);
     try {
-      const newToken = await getOrCreatePortalToken(customerId);
-      setToken(newToken);
+      const result = await getOrCreatePortalToken(customerId);
+      if (!result.ok) {
+        console.error('Failed to get portal token:', result.error);
+        setToken(null);
+        return;
+      }
+      setToken(result.token);
     } catch (error) {
       console.error('Failed to get portal token:', error);
     } finally {
@@ -49,8 +54,12 @@ export function CustomerPortalAccess({
 
     setLoading(true);
     try {
-      const newToken = await regeneratePortalToken(customerId);
-      setToken(newToken);
+      const result = await regeneratePortalToken(customerId);
+      if (!result.ok) {
+        console.error('Failed to regenerate token:', result.error);
+        return;
+      }
+      setToken(result.token);
     } catch (error) {
       console.error('Failed to regenerate token:', error);
     } finally {

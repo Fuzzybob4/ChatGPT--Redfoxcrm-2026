@@ -40,6 +40,7 @@ export default function NewEstimatePage() {
   const [title, setTitle] = useState('');
   const [validUntil, setValidUntil] = useState(localDatePlusDays(30));
   const [taxRate, setTaxRate] = useState('0');
+  const [hasDefaultTax, setHasDefaultTax] = useState(true);
   const [discount, setDiscount] = useState('0');
   const [error, setError] = useState('');
   const [notes, setNotes] = useState('');
@@ -64,6 +65,7 @@ export default function NewEstimatePage() {
       .then((d) => {
         if (cancelled) return;
         setTaxRate(String(d.taxRate));
+        setHasDefaultTax(d.hasDefaultTax);
         setValidUntil((current) => current || d.validUntil);
       })
       .catch((err) => console.error('[NewEstimatePage] failed to load defaults', err));
@@ -296,6 +298,12 @@ export default function NewEstimatePage() {
                     placeholder="0"
                   />
                 </div>
+                {!hasDefaultTax && (
+                  <p className="text-xs text-muted-foreground">
+                    No default tax rate set. Set one in{' '}
+                    <Link href="/settings/tax-settings" className="underline">Settings</Link>.
+                  </p>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tax</span>
                   <span className="font-medium">${taxAmount.toFixed(2)}</span>

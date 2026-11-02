@@ -65,6 +65,8 @@ interface DataContextType {
   /** Every property, ignoring the selected location. `properties` is location-scoped. */
   allProperties: CustomerProperty[];
   refresh: () => Promise<void>;
+  /** Puts a just-created customer in memory so the detail page can open without waiting on a full reload. */
+  stageCreatedCustomer: (customer: LiveCustomer) => void;
   // helper API (mirrors the former mock lib/data.ts)
   getCustomerById: (id: string) => LiveCustomer | undefined;
   getLocationById: (id: string) => Location | undefined;
@@ -87,6 +89,9 @@ interface DataContextType {
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
+
+/** After the first missing-table error, later refreshes skip this query. */
+let skipEstimateLineItems = false;
 
 function isMissingColumn(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return false;
@@ -125,6 +130,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('redfox-location-change', handleLocationChange);
     return () => window.removeEventListener('redfox-location-change', handleLocationChange);
+  }, []);
+
+  const stageCreatedCustomer = useCallback((customer: LiveCustomer) => {
+    setCustomers((current) => [customer, ...current.filter((row) => row.id !== customer.id)]);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -179,9 +188,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // exist and made PostgREST return 400 on every load.
       supabase.from('invoice_line_items').select('*').order('sort_order', { ascending: true }),
       supabase.from('estimates').select('*').order('created_at', { ascending: false }),
-      // Table added by migrations/20261102_estimate_line_items_ADDITIVE_REVIEW_REQUIRED.sql;
-      // until it exists this errors and estimates fall back to one synthetic line.
-      supabase.from('estimate_line_items').select('*').order('sort_order', { ascending: true }),
+      // Table added by migrations/20261102_estimate_line_items_ADDITIVE_REVIEW_REQUIRED.sql.
+      // Skip it after the first "table missing" response so later loads don't 404.
+      skipEstimateLineItems
+        ? Promise.resolve({ data: [] as Record<string, unknown>[] | null, error: null })
+        : supabase.from('estimate_line_items').select('*').order('sort_order', { ascending: true }),
       supabase.from('scheduled_jobs').select('*').order('scheduled_date', { ascending: true }),
       supabase.from('employees').select('*').order('created_at', { ascending: true }),
       supabase.from('addon_catalog').select('*').order('price_cents', { ascending: true }),
@@ -207,7 +218,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     if (custError) console.error('[v0] Failed to load customers:', custError);
     if (invoiceLineError) console.error('[v0] Failed to load invoice line items:', invoiceLineError);
-    if (estLineItemError) console.error('[v0] Failed to load estimate line items:', estLineItemError);
+    if (estLineItemError) {
+      const code = (estLineItemError as { code?: string }).code ?? '';
+      const message = (estLineItemError as { message?: string }).message ?? '';
+      if (code === 'PGRST205' || code === '42P01' || /schema cache|does not exist/i.test(message)) {
+        skipEstimateLineItems = true;
+      }
+      console.error('[v0] Failed to load estimate line items:', estLineItemError);
+    }
     if (photoError) console.error('[v0] Failed to load customer photos:', photoError);
     if (propertyPhotoError) console.error('[v0] Failed to load property photos:', propertyPhotoError);
 
@@ -385,6 +403,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         properties: visibleProperties,
         allProperties: properties,
         refresh,
+        stageCreatedCustomer,
         getCustomerById,
         getLocationById,
         getEstimateById,

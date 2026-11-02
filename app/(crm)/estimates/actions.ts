@@ -35,7 +35,7 @@ const createEstimateSchema = z.object({
 
 export type CreateEstimateInput = z.infer<typeof createEstimateSchema>;
 export type CreateEstimateResult = { ok: true; id: string } | { ok: false; error: string };
-export type EstimateDefaults = { taxRate: number; validUntil: string };
+export type EstimateDefaults = { taxRate: number; validUntil: string; hasDefaultTax: boolean };
 
 type DbError = { code?: string; message?: string; details?: string | null; hint?: string | null } | null | undefined;
 
@@ -83,7 +83,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Org default tax rate (Settings → Tax, tax_settings) or 0, plus a +30 day valid-until. */
 export async function getEstimateDefaults(): Promise<EstimateDefaults> {
-  const fallback = { taxRate: 0, validUntil: addDaysIso(DEFAULT_VALID_DAYS) };
+  const fallback = { taxRate: 0, validUntil: addDaysIso(DEFAULT_VALID_DAYS), hasDefaultTax: false };
   try {
     const org = await getCurrentOrg();
     if (!org) return fallback;
@@ -96,12 +96,16 @@ export async function getEstimateDefaults(): Promise<EstimateDefaults> {
       .eq("is_default", true)
       .limit(1)
       .maybeSingle();
-    if (error) {
-      logDbError("getEstimateDefaults tax_settings", error);
+    if (error || !data) {
+      if (error) logDbError("getEstimateDefaults tax_settings", error);
       return fallback;
     }
-    const rate = Number(data?.tax_rate ?? 0);
-    return { ...fallback, taxRate: Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : 0 };
+    const rate = Number(data.tax_rate ?? 0);
+    return {
+      ...fallback,
+      hasDefaultTax: true,
+      taxRate: Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : 0,
+    };
   } catch (e) {
     console.error("[getEstimateDefaults] unexpected error", e);
     return fallback;

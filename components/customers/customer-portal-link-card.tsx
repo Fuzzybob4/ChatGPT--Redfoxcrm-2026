@@ -23,6 +23,7 @@ export function CustomerPortalLinkCard({
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadPortalToken();
@@ -31,10 +32,17 @@ export function CustomerPortalLinkCard({
   const loadPortalToken = async () => {
     setLoading(true);
     try {
-      const newToken = await getOrCreatePortalToken(customerId);
-      setToken(newToken);
-    } catch (error) {
-      console.error('Failed to load portal token:', error);
+      const result = await getOrCreatePortalToken(customerId);
+      if (!result.ok) {
+        setError(result.error);
+        setToken(null);
+        return;
+      }
+      setError('');
+      setToken(result.token);
+    } catch (err) {
+      console.error('Failed to load portal token:', err);
+      setError(err instanceof Error ? err.message : 'Could not load the portal link.');
     } finally {
       setLoading(false);
     }
@@ -57,11 +65,17 @@ export function CustomerPortalLinkCard({
 
     setLoading(true);
     try {
-      const newToken = await regeneratePortalToken(customerId);
-      setToken(newToken);
+      const result = await regeneratePortalToken(customerId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setError('');
+      setToken(result.token);
       setCopied(false);
-    } catch (error) {
-      console.error('Failed to regenerate token:', error);
+    } catch (err) {
+      console.error('Failed to regenerate token:', err);
+      setError(err instanceof Error ? err.message : 'Could not regenerate the portal link.');
     } finally {
       setLoading(false);
     }
@@ -110,6 +124,19 @@ export function CustomerPortalLinkCard({
     );
   }
 
+  if (error && !token) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Customer Portal</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p role="alert" className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -124,6 +151,9 @@ export function CustomerPortalLinkCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {error && (
+          <p role="alert" className="text-sm text-destructive">{error}</p>
+        )}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Portal Link</label>
           <div className="flex gap-2">

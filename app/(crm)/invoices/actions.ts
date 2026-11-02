@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
+import { sendEmail } from "@/lib/email/resend";
 
 // ── Input schemas ─────────────────────────────────────────────────────────────
 
@@ -41,7 +42,8 @@ const createInvoiceSchema = z.object({
   customerId: uuidSchema,
   locationId: uuidSchema.optional(),
   estimateId: uuidSchema.optional(),
-  title: z.string().min(1, "Title is required").max(200),
+  // Optional. A blank title is filled with the customer name before insert.
+  title: z.string().trim().max(200).optional(),
   description: z.string().max(2000).optional(),
   totalAmount: z.number().positive("Total amount must be greater than zero").max(1_000_000),
   subtotal: z.number().min(0).optional(),
@@ -101,14 +103,20 @@ function addDaysIso(days: number) {
   return `${y}-${m}-${day}`;
 }
 
-export type InvoiceDefaults = { taxRate: number; dueDays: number; dueDate: string };
+export type InvoiceDefaults = {
+  taxRate: number;
+  dueDays: number;
+  dueDate: string;
+  /** False when tax_settings has no default row, or the table is missing. */
+  hasDefaultTax: boolean;
+};
 
 /**
  * Defaults for the New Invoice form: the org's default active tax setting
  * (Settings → Tax), or 0 when there is none, and a due date DEFAULT_DUE_DAYS out.
  */
 export async function getInvoiceDefaults(): Promise<InvoiceDefaults> {
-  const fallback = { taxRate: 0, dueDays: DEFAULT_DUE_DAYS, dueDate: addDaysIso(DEFAULT_DUE_DAYS) };
+  const fallback = { taxRate: 0, dueDays: DEFAULT_DUE_DAYS, dueDate: addDaysIso(DEFAULT_DUE_DAYS), hasDefaultTax: false };
   try {
     const org = await getCurrentOrg();
     if (!org) return fallback;
@@ -121,12 +129,16 @@ export async function getInvoiceDefaults(): Promise<InvoiceDefaults> {
       .eq("is_default", true)
       .limit(1)
       .maybeSingle();
-    if (error) {
-      logDbError("getInvoiceDefaults tax_settings", error);
+    if (error || !data) {
+      if (error) logDbError("getInvoiceDefaults tax_settings", error);
       return fallback;
     }
-    const rate = Number(data?.tax_rate ?? 0);
-    return { ...fallback, taxRate: Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : 0 };
+    const rate = Number(data.tax_rate ?? 0);
+    return {
+      ...fallback,
+      hasDefaultTax: true,
+      taxRate: Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : 0,
+    };
   } catch (e) {
     console.error("[getInvoiceDefaults] unexpected error", e);
     return fallback;
@@ -160,7 +172,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
     // Verify the customer belongs to this org before using their ID
     const { data: customer, error: custErr } = await supabase
       .from("customers")
-      .select("id, address, city, state, zip_code")
+      .select("id, address, city, state, zip_code, full_name, first_name, last_name, name")
       .eq("id", data.customerId)
       .eq("org_id", org.orgId)
       .maybeSingle();
@@ -198,6 +210,12 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
     const datePart = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
     const randomPart = Math.floor(1000 + Math.random() * 9000);
     const invoiceNumber = `INV-${datePart}-${randomPart}`;
+    const customerName =
+      customer.full_name?.trim() ||
+      customer.name?.trim() ||
+      [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() ||
+      "Customer";
+    const title = data.title?.trim() || `Invoice for ${customerName}`;
 
     // NOTE: no estimate_id here. The invoices table has no estimate_id column
     // (PostgREST PGRST204 "Could not find the 'estimate_id' column of
@@ -212,7 +230,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
         customer_id: data.customerId,
         location_id: data.locationId ?? null,
         invoice_number: invoiceNumber,
-        title: data.title,
+        title,
         description: data.description ?? null,
         subtotal: calculatedSubtotal,
         tax_rate: data.taxRate ?? 0,
@@ -297,7 +315,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateIn
         invoice_id: invoice.id,
         ...(data.estimateId ? { estimate_id: data.estimateId } : {}),
         location_id: data.locationId ?? null,
-        title: `Install – ${data.title}`,
+        title: `Install – ${title}`,
         job_type: "install",
         scheduled_date: wo.scheduledDate,
         start_time: wo.startTime,
@@ -491,5 +509,87 @@ export async function updateInvoiceStatus(
   } catch (e) {
     console.error("[updateInvoiceStatus] unexpected error", e);
     return { ok: false, error: e instanceof Error ? e.message : "Failed to update invoice" };
+  }
+}
+
+/**
+ * Emails an invoice and, only after the email is accepted, marks it sent.
+ * Does not throw: a missing address or a missing RESEND_API_KEY comes back
+ * as { ok: false, error } so the button can show it.
+ */
+export async function sendInvoice(invoiceId: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const org = await getCurrentOrg();
+    if (!org) return { ok: false, error: "Not authenticated" };
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("id, invoice_number, total_amount, due_date, customer_id, title")
+      .eq("id", invoiceId)
+      .eq("org_id", org.orgId)
+      .maybeSingle();
+    if (invoiceError) logDbError("sendInvoice lookup", invoiceError);
+    if (invoiceError || !invoice) return { ok: false, error: invoiceError?.message ?? "Invoice not found" };
+
+    const { data: customer, error: customerError } = await supabase
+      .from("customers")
+      .select("email, full_name, first_name, last_name, name")
+      .eq("id", invoice.customer_id)
+      .eq("org_id", org.orgId)
+      .maybeSingle();
+    if (customerError) logDbError("sendInvoice customer", customerError);
+    const email = String(customer?.email ?? "").trim();
+    if (!email) {
+      return { ok: false, error: "This customer has no email address, so the invoice was not sent." };
+    }
+
+    const customerName =
+      customer?.full_name?.trim() ||
+      customer?.name?.trim() ||
+      [customer?.first_name, customer?.last_name].filter(Boolean).join(" ").trim() ||
+      "there";
+    const due = String(invoice.due_date ?? "").slice(0, 10) || "the due date on the invoice";
+    const total = Number(invoice.total_amount ?? 0).toFixed(2);
+    const html = `<p>Hi ${customerName},</p><p>Invoice <strong>${invoice.invoice_number}</strong>${invoice.title ? ` (${invoice.title})` : ""} for $${total} is ready. It is due ${due}.</p><p>${org.businessName || org.orgName}</p>`;
+
+    try {
+      const sent = await sendEmail({
+        to: email,
+        subject: `Invoice ${invoice.invoice_number} from ${org.businessName || org.orgName}`,
+        html,
+      });
+      if (sent.error) {
+        console.error("[sendInvoice] resend rejected", sent.error);
+        return { ok: false, error: sent.error.message || "The email service rejected this invoice." };
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not send email";
+      console.error("[sendInvoice] email failed", e);
+      if (/RESEND_API_KEY/i.test(message)) {
+        return {
+          ok: false,
+          error: "Email is not configured. Set RESEND_API_KEY. The default from-address is RedFox CRM <onboarding@resend.dev>, which only delivers to the Resend account owner until a verified domain is set.",
+        };
+      }
+      return { ok: false, error: message };
+    }
+
+    const { error: statusError } = await supabase
+      .from("invoices")
+      .update({ status: "sent", updated_at: new Date().toISOString() })
+      .eq("id", invoiceId)
+      .eq("org_id", org.orgId);
+    if (statusError) {
+      logDbError("sendInvoice status", statusError);
+      return { ok: false, error: `The email was sent, but the invoice status did not update: ${statusError.message}` };
+    }
+
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${invoiceId}`);
+    return { ok: true };
+  } catch (e) {
+    console.error("[sendInvoice] unexpected error", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to send invoice" };
   }
 }

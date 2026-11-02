@@ -227,12 +227,20 @@ export default async function MappingPage() {
   const pinnedCustomerIds = new Set(mapPins.map((p) => p.customerId));
   const unmapped: UnmappedCustomer[] = (customers ?? [])
     .filter((c) => !pinnedCustomerIds.has(c.id))
-    .map((c) => ({
-      customerId: c.id,
-      customerName: customerName(c),
-      address: [c.address, c.city, c.state, c.zip_code].filter(Boolean).join(", "),
-      hasStreetAddress: !!String(c.address ?? "").trim(),
-    }));
+    .map((c) => {
+      const street = String(c.address ?? "").trim();
+      const addressKind: UnmappedCustomer["addressKind"] = !street
+        ? "none"
+        : /\d/.test(street) && /[a-z]/i.test(street)
+          ? "street"
+          : "partial";
+      return {
+        customerId: c.id,
+        customerName: customerName(c),
+        address: [c.address, c.city, c.state, c.zip_code].filter(Boolean).join(", "),
+        addressKind,
+      };
+    });
 
   return (
     <div className="flex flex-col h-full">

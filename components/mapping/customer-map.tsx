@@ -25,7 +25,8 @@ export interface UnmappedCustomer {
   customerId: string;
   customerName: string;
   address: string;
-  hasStreetAddress: boolean;
+  /** street = house number present; partial = some text but not a street; none = blank */
+  addressKind: "street" | "partial" | "none";
 }
 
 export interface MapPin {
@@ -131,7 +132,8 @@ export function CustomerMap({ pins, unmapped = [] }: { pins: MapPin[]; unmapped?
       (u) => u.customerName.toLowerCase().includes(q) || u.address.toLowerCase().includes(q),
     );
   }, [unmapped, search]);
-  const locatable = unmapped.filter((u) => u.hasStreetAddress).length;
+  const streetUnmapped = unmapped.filter((u) => u.addressKind === "street");
+  const partialUnmapped = unmapped.filter((u) => u.addressKind === "partial");
 
   function locateMissing() {
     setLocateMsg(null);
@@ -239,7 +241,7 @@ export function CustomerMap({ pins, unmapped = [] }: { pins: MapPin[]; unmapped?
         </div>
       </div>
 
-      {(unmappedMatches.length > 0 || locatable > 0) && (
+      {(unmappedMatches.length > 0 || streetUnmapped.length > 0 || partialUnmapped.length > 0) && (
         <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-sm">
           {unmappedMatches.length > 0 && (
             <div className="mb-1">
@@ -253,23 +255,33 @@ export function CustomerMap({ pins, unmapped = [] }: { pins: MapPin[]; unmapped?
                       {u.customerName}
                     </Link>{" "}
                     <span className="text-xs text-muted-foreground">
-                      {u.hasStreetAddress ? `(${u.address} — not geocoded)` : "(no street address)"}
+                      {u.addressKind === "street"
+                        ? `(${u.address} — not on the map)`
+                        : u.addressKind === "partial"
+                          ? `(${u.address} — partial address, no street number)`
+                          : "(no street address)"}
                     </span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-          {locatable > 0 && (
+          {streetUnmapped.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
-                {locatable} customer{locatable === 1 ? " has" : "s have"} an address but no map location.
+                {streetUnmapped.length} customer{streetUnmapped.length === 1 ? " has" : "s have"} a street address but no map pin.
+                Locate now asks Mapbox. If they stay here, the address could not be matched.
               </span>
               <Button size="xs" variant="outline" onClick={locateMissing} disabled={locating}>
                 {locating ? "Locating…" : "Locate now"}
               </Button>
               {locateMsg && <span>{locateMsg}</span>}
             </div>
+          )}
+          {partialUnmapped.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {partialUnmapped.length} customer{partialUnmapped.length === 1 ? " has" : "s have"} only a partial address (no street number), so {partialUnmapped.length === 1 ? "that customer is" : "those customers are"} not placed on the map.
+            </p>
           )}
         </div>
       )}

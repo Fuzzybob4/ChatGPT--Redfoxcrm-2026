@@ -16,10 +16,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
-import { updateInvoiceStatus } from "../actions";
+import { formatDateOnly } from "@/lib/dates";
+import { sendInvoice } from "../actions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -31,16 +36,20 @@ export default function InvoiceDetailPage({ params }: Props) {
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
   const [statusError, setStatusError] = useState("");
+  const [statusNotice, setStatusNotice] = useState("");
+  const [confirmSend, setConfirmSend] = useState(false);
 
-  // NOTE: "Send Invoice" only changes the status to "sent"; no email is sent.
-  function handleStatusUpdate(status: "sent" | "paid") {
+  function handleSend() {
     setStatusError("");
+    setStatusNotice("");
+    setConfirmSend(false);
     startTransition(async () => {
-      const result = await updateInvoiceStatus(id, status);
+      const result = await sendInvoice(id);
       if (!result.ok) {
         setStatusError(result.error);
         return;
       }
+      setStatusNotice("Invoice emailed.");
       await refresh();
     });
   }
@@ -74,12 +83,12 @@ export default function InvoiceDetailPage({ params }: Props) {
               Back
             </Button>
             {invoice.status === "Draft" && (
-              <Button size="sm" disabled={pending} onClick={() => handleStatusUpdate("sent")}>
+              <Button size="sm" disabled={pending} onClick={() => setConfirmSend(true)}>
                 <Send className="size-3.5" data-icon="inline-start" />
                 {pending ? "Sending..." : "Send Invoice"}
               </Button>
             )}
-            {(invoice.status === "Sent" || invoice.status === "Overdue") && (
+            {(invoice.status === "Draft" || invoice.status === "Sent" || invoice.status === "Overdue") && (
               <MarkAsPaidDialog
                 invoiceId={invoice.id}
                 customerId={invoice.customerId}
@@ -98,6 +107,31 @@ export default function InvoiceDetailPage({ params }: Props) {
               {statusError}
             </p>
           )}
+          {statusNotice && (
+            <p role="status" className="mb-4 rounded-lg border border-border bg-muted p-3 text-sm">
+              {statusNotice}
+            </p>
+          )}
+          <AlertDialog open={confirmSend} onOpenChange={setConfirmSend}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Send invoice</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {customer?.email
+                    ? `Send invoice ${invoice.invoiceNumber} to ${customer.email}?`
+                    : `${customer?.name ?? "This customer"} has no email address, so this invoice cannot be emailed.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                {customer?.email && (
+                  <Button onClick={handleSend} disabled={pending}>
+                    {pending ? "Sending..." : "Send"}
+                  </Button>
+                )}
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between gap-4">
@@ -137,11 +171,7 @@ export default function InvoiceDetailPage({ params }: Props) {
                     Issued
                   </p>
                   <p className="text-sm">
-                    {new Date(invoice.issuedDate).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDateOnly(invoice.issuedDate, { month: "long", day: "numeric", year: "numeric" }, "—")}
                   </p>
                 </div>
                 <div>
@@ -149,11 +179,7 @@ export default function InvoiceDetailPage({ params }: Props) {
                     Due Date
                   </p>
                   <p className="text-sm">
-                    {new Date(invoice.dueDate).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDateOnly(invoice.dueDate, { month: "long", day: "numeric", year: "numeric" }, "—")}
                   </p>
                 </div>
               </div>
@@ -224,11 +250,11 @@ export default function InvoiceDetailPage({ params }: Props) {
 
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => window.print()}>
                   <Printer className="size-3.5" data-icon="inline-start" />
                   Print
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => window.print()} title="Opens the print dialog, where you can save a PDF">
                   <Download className="size-3.5" data-icon="inline-start" />
                   Download PDF
                 </Button>

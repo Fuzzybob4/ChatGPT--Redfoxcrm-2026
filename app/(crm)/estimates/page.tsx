@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
 import { useState } from 'react';
 import { Plus, Eye } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDateOnly } from '@/lib/dates';
 
 const statusConfig: Record<EstimateStatus, { label: string; variant: 'default' | 'secondary' | 'outline'; color: string }> = {
   Draft: { label: 'Draft', variant: 'outline', color: 'text-gray-600' },
@@ -135,7 +135,7 @@ export default function EstimatesPage() {
                         <TableCell className="text-foreground">{customer?.name}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">{customer?.address || '—'}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {format(new Date(est.createdDate), 'MMM dd, yyyy')}
+                          {formatDateOnly(est.createdDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                         </TableCell>
                         <TableCell className="font-semibold text-foreground">
                           ${getEstimateTotal(est).toFixed(2)}

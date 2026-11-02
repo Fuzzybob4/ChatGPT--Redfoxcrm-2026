@@ -90,6 +90,7 @@ export default function NewInvoicePage() {
   const [includeTax, setIncludeTax] = useState(true);
   // Was hard-coded to 8.5. Now 0 until the org's default tax setting loads.
   const [taxRate, setTaxRate] = useState(0);
+  const [hasDefaultTax, setHasDefaultTax] = useState(true);
   const [paymentType, setPaymentType] = useState<'full' | 'deposit'>('full');
   const [depositPercentage, setDepositPercentage] = useState(50);
 
@@ -107,6 +108,7 @@ export default function NewInvoicePage() {
       .then((defaults) => {
         if (cancelled) return;
         setTaxRate(defaults.taxRate);
+        setHasDefaultTax(defaults.hasDefaultTax);
         setDueDate((current) => current || defaults.dueDate);
       })
       .catch((err) => console.error('[NewInvoicePage] failed to load invoice defaults', err));
@@ -183,7 +185,6 @@ export default function NewInvoicePage() {
 
   const isValid =
     customerId &&
-    title.trim() &&
     lineItems.every((item) => item.description.trim() && item.quantity > 0) &&
     total > 0 &&
     (!allowAddons || validAddonItems.length > 0);
@@ -192,10 +193,6 @@ export default function NewInvoicePage() {
     setError('');
     if (!customerId) {
       setError('Select a customer to continue.');
-      return;
-    }
-    if (!title.trim()) {
-      setError('Add a title for this invoice.');
       return;
     }
     if (allowAddons && validAddonItems.length === 0) {
@@ -212,7 +209,7 @@ export default function NewInvoicePage() {
       const result = await createInvoice({
         customerId,
         locationId: selectedLocationId || undefined,
-        title: title.trim(),
+        title: title.trim() || undefined,
         notes: notes.trim() || undefined,
         subtotal,
         taxRate: includeTax ? taxRate : 0,
@@ -312,7 +309,7 @@ export default function NewInvoicePage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="title">Invoice Title</Label>
+                  <Label htmlFor="title">Invoice title (optional)</Label>
                   <Input
                     id="title"
                     placeholder="e.g. Holiday Lighting Installation – Front & Back Yard"
@@ -647,6 +644,15 @@ export default function NewInvoicePage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </div>
+                  {includeTax && !hasDefaultTax && (
+                    <p className="text-xs text-muted-foreground">
+                      No default tax rate set. Set one in{' '}
+                      <Link href="/settings/tax-settings" className="underline">
+                        Settings
+                      </Link>
+                      .
+                    </p>
+                  )}
                   {includeTax && (
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>Tax amount</span>

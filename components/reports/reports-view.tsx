@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Search } from "lucide-react";
+import { formatDateOnly } from "@/lib/dates";
 
 type CustomerRef = { full_name: string | null; city: string | null } | null;
 
@@ -79,8 +80,15 @@ const fmtMoney = (n: number) =>
     n ?? 0
   );
 
-const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString() : "—";
+const fmtDate = (d: string | null) => {
+  if (!d) return "—";
+  // Date-only values (invoice due dates) must not be parsed as UTC midnight.
+  if (/^\d{4}-\d{2}-\d{2}(?:$|T00:00:00)/.test(d)) {
+    return formatDateOnly(d, { month: "short", day: "numeric", year: "numeric" }, "—");
+  }
+  const parsed = new Date(d);
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleDateString();
+};
 
 const statusVariant = (s: string) => {
   switch (s) {

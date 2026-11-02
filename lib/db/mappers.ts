@@ -2,6 +2,7 @@
 // The DB carries dual column conventions in places; these helpers normalize
 // everything to the shapes the UI already consumes.
 
+import { toDateKey } from '@/lib/dates';
 import type {
   Customer,
   Invoice,
@@ -132,8 +133,8 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
     locationId: row.location_id ?? '',
     estimateId: undefined,
     status,
-    issuedDate: (row.created_at ?? '').slice(0, 10),
-    dueDate: row.due_date ?? '',
+    issuedDate: toDateKey(row.issued_date) || toDateKey(row.created_at),
+    dueDate: toDateKey(row.due_date),
     lineItems,
     notes: row.notes ?? undefined,
     // extra normalized fields
@@ -171,8 +172,8 @@ export function mapEstimate(
     propertyId: '',
     locationId: row.location_id ?? '',
     status,
-    createdDate: (row.created_at ?? '').slice(0, 10),
-    validUntil: row.valid_until ?? '',
+    createdDate: toDateKey(row.created_at),
+    validUntil: toDateKey(row.valid_until),
     lineItems: hasRealLineItems
       ? realLineItems
       : [

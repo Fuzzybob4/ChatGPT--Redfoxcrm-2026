@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search, Send, CheckCircle, AlertCircle, Trash2, Download, GitMerge } from "lucide-react";
 
@@ -21,13 +21,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import {
   getInvoiceTotal,
+  type Invoice,
   type InvoiceStatus,
 } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
+import { formatDateOnly, todayDateKey, toDateKey } from "@/lib/dates";
+import { sendInvoice } from "./actions";
 import { InvoiceCSVImportDialog } from "@/components/invoices/invoice-csv-import-dialog";
 
 const ALL_STATUSES: InvoiceStatus[] = ["Draft", "Sent", "Paid", "Overdue"];
@@ -36,7 +44,10 @@ export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | InvoiceStatus>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const { loading, invoices: allInvoices, estimates: allEstimates, getCustomerById } = useData();
+  const [pendingSend, setPendingSend] = useState<Invoice | null>(null);
+  const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
+  const { loading, invoices: allInvoices, estimates: allEstimates, getCustomerById, refresh } = useData();
   const { selectedLocationId } = useLocation();
   const invoices = selectedLocationId
     ? allInvoices.filter((i) => i.locationId === selectedLocationId)
@@ -54,14 +65,21 @@ export default function InvoicesPage() {
     return matchesQuery && matchesTab;
   });
 
-  const today = new Date();
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const todayKey = todayDateKey();
   const totalPaid = invoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0);
   const totalSent = invoices.reduce(
     (sum, invoice) => sum + Math.max(getInvoiceTotal(invoice) - invoice.amountPaid, 0),
     0,
   );
   const totalOverdue = invoices.reduce((sum, invoice) => {
-    const isPastDue = invoice.dueDate && new Date(invoice.dueDate) < today;
+    const dueKey = toDateKey(invoice.dueDate);
+    const isPastDue = dueKey && dueKey < todayKey;
     const isUnpaid = invoice.amountPaid < getInvoiceTotal(invoice);
     return sum + (isPastDue && isUnpaid ? Math.max(getInvoiceTotal(invoice) - invoice.amountPaid, 0) : 0);
   }, 0);
@@ -112,8 +130,8 @@ export default function InvoicesPage() {
         return [
           inv.invoiceNumber,
           customer?.name || "",
-          new Date(inv.issuedDate).toLocaleDateString(),
-          new Date(inv.dueDate).toLocaleDateString(),
+          formatDateOnly(inv.issuedDate, { month: "short", day: "numeric", year: "numeric" }, ""),
+          formatDateOnly(inv.dueDate, { month: "short", day: "numeric", year: "numeric" }, ""),
           total.toString(),
           inv.status,
         ];
@@ -142,6 +160,28 @@ export default function InvoicesPage() {
     alert("Merge functionality coming soon");
   };
 
+  const pendingCustomer = pendingSend ? getCustomerById(pendingSend.customerId) : undefined;
+
+  async function confirmSend() {
+    if (!pendingSend) return;
+    setSending(true);
+    try {
+      const result = await sendInvoice(pendingSend.id);
+      if (!result.ok) {
+        setToast({ ok: false, text: result.error });
+      } else {
+        const who = getCustomerById(pendingSend.customerId)?.email;
+        setToast({ ok: true, text: who ? `Invoice emailed to ${who}.` : "Invoice emailed." });
+        await refresh();
+      }
+    } catch (err) {
+      setToast({ ok: false, text: err instanceof Error ? err.message : "Failed to send invoice." });
+    } finally {
+      setSending(false);
+      setPendingSend(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center p-10">
@@ -151,6 +191,7 @@ export default function InvoicesPage() {
   }
 
   return (
+    <TooltipProvider>
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
         title="Invoices"
@@ -319,16 +360,10 @@ export default function InvoicesPage() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {new Date(inv.issuedDate).toLocaleDateString(
-                                  "en-US",
-                                  { month: "short", day: "numeric", year: "numeric" }
-                                )}
+                                {formatDateOnly(inv.issuedDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {new Date(inv.dueDate).toLocaleDateString(
-                                  "en-US",
-                                  { month: "short", day: "numeric", year: "numeric" }
-                                )}
+                                {formatDateOnly(inv.dueDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                               </TableCell>
                               <TableCell className="font-semibold text-sm">
                                 ${total.toLocaleString()}
@@ -346,9 +381,23 @@ export default function InvoicesPage() {
                                     View
                                   </Button>
                                   {(inv.status === "Draft" || inv.status === "Sent") && (
-                                    <Button variant="ghost" size="sm">
-                                      <Send className="size-3.5" />
-                                    </Button>
+                                    <Tooltip>
+                                      <TooltipTrigger
+                                        render={
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            type="button"
+                                            aria-label={`Send ${inv.invoiceNumber}`}
+                                            onClick={() => setPendingSend(inv)}
+                                          />
+                                        }
+                                      >
+                                        <Send className="size-3.5" />
+                                        Send
+                                      </TooltipTrigger>
+                                      <TooltipContent>Email this invoice</TooltipContent>
+                                    </Tooltip>
                                   )}
                                 </div>
                               </TableCell>
@@ -390,10 +439,7 @@ export default function InvoicesPage() {
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 Due{" "}
-                                {new Date(inv.dueDate).toLocaleDateString(
-                                  "en-US",
-                                  { month: "short", day: "numeric", year: "numeric" }
-                                )}
+                                {formatDateOnly(inv.dueDate, { month: "short", day: "numeric", year: "numeric" }, "—")}
                               </p>
                             </div>
                             <div className="text-right shrink-0">
@@ -418,6 +464,37 @@ export default function InvoicesPage() {
           ))}
         </Tabs>
       </div>
+      <AlertDialog open={!!pendingSend} onOpenChange={(open) => { if (!open && !sending) setPendingSend(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCustomer?.email
+                ? `Send invoice ${pendingSend?.invoiceNumber} to ${pendingCustomer.email}?`
+                : `${pendingCustomer?.name ?? "This customer"} has no email address, so this invoice cannot be emailed.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sending}>Cancel</AlertDialogCancel>
+            {pendingCustomer?.email && (
+              <Button onClick={confirmSend} disabled={sending}>
+                {sending ? "Sending..." : "Send"}
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {toast && (
+        <div
+          role={toast.ok ? "status" : "alert"}
+          className={`fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-lg ${
+            toast.ok ? "border-border bg-background" : "border-destructive/40 bg-destructive/10 text-destructive"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
     </div>
+    </TooltipProvider>
   );
 }

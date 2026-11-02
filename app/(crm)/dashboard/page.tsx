@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const recentInvoices = [...locationInvoices]
     .sort(
       (a, b) =>
-        new Date(b.issuedDate).getTime() - new Date(a.issuedDate).getTime()
+        (b.issuedDate || "").localeCompare(a.issuedDate || "")
     )
     .slice(0, 5);
 

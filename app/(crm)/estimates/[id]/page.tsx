@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { format } from 'date-fns';
+import { formatDateOnly } from '@/lib/dates';
 import { ArrowLeft, Download, Mail, CheckCircle2 } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -103,11 +103,11 @@ export default function EstimateDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Created Date</p>
-                  <p className="font-medium text-foreground">{format(new Date(estimate.createdDate), 'PPP')}</p>
+                  <p className="font-medium text-foreground">{formatDateOnly(estimate.createdDate, { month: "long", day: "numeric", year: "numeric" }, "—")}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Valid Until</p>
-                  <p className="font-medium text-foreground">{format(new Date(estimate.validUntil), 'PPP')}</p>
+                  <p className="font-medium text-foreground">{formatDateOnly(estimate.validUntil, { month: "long", day: "numeric", year: "numeric" }, "—")}</p>
                 </div>
               </div>
             </CardContent>
