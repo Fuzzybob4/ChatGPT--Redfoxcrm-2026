@@ -5,11 +5,11 @@ import { Label } from '@/components/ui/label';
 import { saveCrewProfileAction } from './actions';
 
 interface Props {
-  searchParams: Promise<{ employee_id?: string; error?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }
 
 export default async function CrewProfileSetupPage({ searchParams }: Props) {
-  const { employee_id, error } = await searchParams;
+  const { error } = await searchParams;
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-12">
@@ -43,13 +43,15 @@ export default async function CrewProfileSetupPage({ searchParams }: Props) {
 
           {error && (
             <div className="mb-5 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-              Failed to save your profile. Please try again.
+              {error === 'no_invite'
+                ? "We couldn't find a pending invite for your account. Ask your employer to send a new one."
+                : error === 'ambiguous_invite'
+                  ? 'More than one business has invited this email. Ask your employer to resend the invite.'
+                  : 'Failed to save your profile. Please try again.'}
             </div>
           )}
 
           <form action={saveCrewProfileAction} className="flex flex-col gap-5">
-            <input type="hidden" name="employee_id" value={employee_id ?? ''} />
-
             {/* Legal name */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Legal Name</p>

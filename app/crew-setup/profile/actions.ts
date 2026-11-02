@@ -2,44 +2,50 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { acceptCrewInviteForUser } from '@/lib/crew-invite';
 import { redirect } from 'next/navigation';
 
 export async function saveCrewProfileAction(formData: FormData) {
-  const employeeId = formData.get('employee_id') as string;
-
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect('/login');
 
-  const adminClient = createAdminClient();
-
-  // Find the employee row — match by employee_id param or by auth email
-  let query = adminClient.from('employees').update({
-    first_name: formData.get('first_name') as string,
-    last_name: formData.get('last_name') as string,
-    full_name: `${formData.get('first_name')} ${formData.get('last_name')}`,
-    phone: formData.get('phone') as string,
-    date_of_birth: formData.get('date_of_birth') as string,
-    address: formData.get('address') as string,
-    city: formData.get('city') as string,
-    state: formData.get('state') as string,
-    zip: formData.get('zip') as string,
-    emergency_contact_name: formData.get('emergency_contact_name') as string,
-    emergency_contact_phone: formData.get('emergency_contact_phone') as string,
-    emergency_contact_relationship: formData.get('emergency_contact_relationship') as string,
-    user_id: user.id,
-    invite_accepted_at: new Date().toISOString(),
-    is_active: true,
-    profile_completed: true,
-  });
-
-  if (employeeId) {
-    query = query.eq('id', employeeId);
-  } else {
-    query = query.eq('email', user.email!);
+  // The employee row comes from the authenticated user's invite, never from
+  // a form field (previously employee_id was posted and updated with the
+  // service role, letting anyone overwrite any employee).
+  const invite = await acceptCrewInviteForUser(user);
+  if (!invite.ok) {
+    const code = invite.error === 'server_error' ? 'save_failed' : invite.error;
+    redirect(`/crew-setup/profile?error=${code}`);
   }
 
-  const { error } = await query;
+  const field = (name: string) => String(formData.get(name) ?? '').trim();
+  const firstName = field('first_name');
+  const lastName = field('last_name');
+  if (!firstName || !lastName) redirect('/crew-setup/profile?error=save_failed');
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
+    .from('employees')
+    .update({
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`,
+      phone: field('phone'),
+      date_of_birth: field('date_of_birth'),
+      address: field('address'),
+      city: field('city'),
+      state: field('state'),
+      zip: field('zip'),
+      emergency_contact_name: field('emergency_contact_name'),
+      emergency_contact_phone: field('emergency_contact_phone'),
+      emergency_contact_relationship: field('emergency_contact_relationship'),
+      is_active: true,
+      profile_completed: true,
+    })
+    .eq('id', invite.employeeId)
+    .eq('user_id', user.id);
+
   if (error) redirect('/crew-setup/profile?error=save_failed');
 
   // After profile completion, redirect to the CRM login

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
+import { getSiteUrl } from "@/lib/site-url";
+import { CREW_MEMBERSHIP_ROLE, escapeIlike, type CrewInviteClaim } from "@/lib/crew-invite";
+
+const ORG_ADMIN_ROLES = new Set(["owner", "admin"]);
 
 export async function inviteEmployee(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -16,40 +20,113 @@ export async function inviteEmployee(formData: FormData) {
 
   const org = await getCurrentOrg();
   if (!org) return { error: "Organization not found." };
+  // Crew now get a membership too, so only owners/admins may invite.
+  if (!ORG_ADMIN_ROLES.has(org.role)) return { error: "Only owners and admins can invite crew." };
 
   const adminClient = createAdminClient();
 
-  // Create the employee record (no name yet — filled on profile setup)
-  const { data: empRow, error: insertError } = await adminClient
+  // Re-inviting a pending or revoked address resends the email instead of adding a duplicate row.
+  const { data: pending, error: pendingError } = await adminClient
     .from("employees")
-    .insert({
-      org_id: org.orgId,
-      first_name: "",
-      last_name: "",
-      full_name: "",
-      email,
-      role,
-      position: position || role,
-      is_active: false, // becomes active after profile setup
-      can_access_work_orders: true,
-      can_access_mapping: false,
-      invited_at: new Date().toISOString(),
-      profile_completed: false,
-    })
-    .select("id")
-    .single();
+    .select("id, user_id, invite_accepted_at")
+    .eq("org_id", org.orgId)
+    .ilike("email", escapeIlike(email))
+    .not("invited_at", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (pendingError) return { error: pendingError.message };
 
-  if (insertError) return { error: insertError.message };
+  let existing = pending;
+  if (!existing) {
+    // Revoke clears invited_at. Match that empty shell, not a manually added crew row (those have a name).
+    const { data: revoked, error: revokedError } = await adminClient
+      .from("employees")
+      .select("id, user_id, invite_accepted_at")
+      .eq("org_id", org.orgId)
+      .ilike("email", escapeIlike(email))
+      .is("invited_at", null)
+      .is("user_id", null)
+      .is("invite_accepted_at", null)
+      .eq("profile_completed", false)
+      .eq("is_active", false)
+      .eq("first_name", "")
+      .limit(1)
+      .maybeSingle();
+    if (revokedError) return { error: revokedError.message };
+    existing = revoked;
+  }
+  if (existing && (existing.user_id || existing.invite_accepted_at)) {
+    return { error: "This person has already accepted an invite." };
+  }
 
-  // Send Supabase invite email so they can set their password
-  const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?next=/crew-setup?employee_id=${empRow.id}`,
+  let employeeId = existing?.id as string | undefined;
+  const createdRow = !employeeId;
+  if (employeeId) {
+    const { error: refreshError } = await adminClient
+      .from("employees")
+      .update({
+        invited_at: new Date().toISOString(),
+        role,
+        position: position || role,
+        is_active: false,
+        profile_completed: false,
+      })
+      .eq("id", employeeId)
+      .eq("org_id", org.orgId)
+      .is("user_id", null);
+    if (refreshError) return { error: refreshError.message };
+  } else {
+    // Create the employee record (no name yet — filled on profile setup)
+    const { data: empRow, error: insertError } = await adminClient
+      .from("employees")
+      .insert({
+        org_id: org.orgId,
+        first_name: "",
+        last_name: "",
+        full_name: "",
+        email,
+        role,
+        position: position || role,
+        is_active: false, // becomes active after profile setup
+        can_access_work_orders: true,
+        can_access_mapping: false,
+        invited_at: new Date().toISOString(),
+        profile_completed: false,
+      })
+      .select("id")
+      .single();
+
+    if (insertError) return { error: insertError.message };
+    employeeId = empRow.id as string;
+  }
+
+  if (!employeeId) return { error: "Failed to send invite email. Please try again." };
+
+  // Send Supabase invite email so they can set their password. The email
+  // template links to /auth/confirm (token_hash), which sends invites to
+  // /auth/set-password. NEXT_PUBLIC_SITE_URL was unset in production, so the
+  // old link fell back to the Supabase Site URL (http://redfoxcrm.com).
+  const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${getSiteUrl()}/auth/confirm?next=/auth/set-password`,
   });
 
-  if (inviteError) {
+  if (inviteError || !invited?.user) {
+    console.error("[inviteEmployee] inviteUserByEmail failed", inviteError?.message);
     // Roll back the employee row if invite failed
-    await adminClient.from("employees").delete().eq("id", empRow.id);
+    if (createdRow) await adminClient.from("employees").delete().eq("id", employeeId);
     return { error: "Failed to send invite email. Please try again." };
+  }
+
+  // Server-trusted invite claim: app_metadata is writable only with the
+  // service role (user_metadata is user-editable and must not be used).
+  const claim: CrewInviteClaim = { employee_id: employeeId, org_id: org.orgId };
+  const { error: claimError } = await adminClient.auth.admin.updateUserById(invited.user.id, {
+    // Merge so provider and other service-role keys are kept if this call replaces app_metadata.
+    app_metadata: { ...(invited.user.app_metadata ?? {}), redfox_invite: claim },
+  });
+  if (claimError) {
+    // Acceptance still works via the single pending employee row for this email.
+    console.error("[inviteEmployee] could not store invite claim", claimError.message);
   }
 
   revalidatePath("/crew");
@@ -115,13 +192,47 @@ export async function updateEmployeeAccess(
 }
 
 export async function removeEmployee(employeeId: string) {
+  const org = await getCurrentOrg();
+  if (!org) return { error: "Organization not found." };
+  if (!ORG_ADMIN_ROLES.has(org.role)) return { error: "Only owners and admins can remove crew." };
+
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: employee, error } = await supabase
     .from("employees")
     .update({ is_active: false })
-    .eq("id", employeeId);
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId)
+    .select("id, user_id, invite_accepted_at")
+    .maybeSingle();
 
   if (error) return { error: error.message };
+  if (!employee) return { error: "Crew member not found." };
+
+  if (!employee.user_id && !employee.invite_accepted_at) {
+    // Revoke a pending invite so the emailed link can no longer be accepted.
+    const { error: revokeError } = await supabase
+      .from("employees")
+      .update({ invited_at: null })
+      .eq("id", employee.id)
+      .eq("org_id", org.orgId);
+    if (revokeError) return { error: revokeError.message };
+  } else if (employee.user_id && employee.user_id !== org.userId) {
+    // Clear invited_at before dropping the membership so a refresh cannot recreate it.
+    const { error: revokeError } = await supabase
+      .from("employees")
+      .update({ invited_at: null })
+      .eq("id", employee.id)
+      .eq("org_id", org.orgId);
+    if (revokeError) return { error: revokeError.message };
+
+    const { error: membershipError } = await createAdminClient()
+      .from("user_memberships")
+      .delete()
+      .eq("user_id", employee.user_id)
+      .eq("org_id", org.orgId)
+      .eq("role", CREW_MEMBERSHIP_ROLE);
+    if (membershipError) return { error: membershipError.message };
+  }
 
   revalidatePath("/crew");
   return { success: true };

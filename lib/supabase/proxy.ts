@@ -10,7 +10,9 @@ export async function updateSession(request: NextRequest) {
   // The recovery callback must receive the untouched PKCE verifier cookie.
   // Calling getUser() here can refresh or clear auth cookies before the route
   // handler exchanges the one-time recovery code for a session.
-  if (request.nextUrl.pathname === '/auth/callback') {
+  // /auth/confirm can forward a ?code= to /auth/callback, so it must not touch
+  // cookies either.
+  if (request.nextUrl.pathname === '/auth/callback' || request.nextUrl.pathname === '/auth/confirm') {
     return NextResponse.next({ request })
   }
 

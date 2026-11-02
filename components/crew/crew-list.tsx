@@ -41,6 +41,8 @@ import {
 export interface CrewMember {
   id: string;
   name: string;
+  /** invited = email sent, not accepted; setup = accepted, profile not finished */
+  status: "active" | "invited" | "setup" | "inactive";
   email: string;
   phone: string;
   position: string;
@@ -104,6 +106,7 @@ export function CrewList({ members }: { members: CrewMember[] }) {
   const [isPending, startTransition] = useTransition();
 
   const active = members.filter((m) => m.isActive);
+  const pending = members.filter((m) => !m.isActive && (m.status === "invited" || m.status === "setup"));
   const crews = Array.from(new Set(active.map((m) => m.crewName).filter(Boolean)));
 
   function handleToggle(
@@ -153,6 +156,10 @@ export function CrewList({ members }: { members: CrewMember[] }) {
           <div>
             <p className="text-2xl font-bold text-foreground">{active.length}</p>
             <p className="text-muted-foreground text-xs">Active members</p>
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-foreground">{pending.length}</p>
+            <p className="text-muted-foreground text-xs">Pending invites</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-foreground">{crews.length}</p>
@@ -304,7 +311,7 @@ export function CrewList({ members }: { members: CrewMember[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {active.length === 0 && (
+            {active.length === 0 && pending.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                   No crew members yet. Add your first member to get started.
@@ -371,6 +378,42 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                     disabled={isPending}
                     onClick={() => handleRemove(m.id)}
                     aria-label={`Deactivate ${m.name}`}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <UserX className="w-4 h-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {pending.map((m) => (
+              <TableRow key={m.id} className="opacity-80">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="size-8">
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
+                        {(m.name || m.email).slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{m.name || m.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">{m.position || m.email}</p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <Badge variant="outline">{m.status === "invited" ? "Invited" : "Finishing setup"}</Badge>
+                </TableCell>
+                <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">—</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {m.status === "invited" ? "Waiting for them to accept" : "Accepted, profile not finished"}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={isPending}
+                    onClick={() => handleRemove(m.id)}
+                    aria-label={m.status === "invited" ? `Revoke invite for ${m.email}` : `Deactivate ${m.name || m.email}`}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <UserX className="w-4 h-4" />
