@@ -96,6 +96,7 @@ export function mapLocation(row: Record<string, any>): Location {
 }
 
 export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string, any>[] = []): Invoice & {
+  title: string;
   total: number;
   amountPaid: number;
   customerId: string;
@@ -129,6 +130,7 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   return {
     id: row.id,
     invoiceNumber: row.invoice_number ?? '',
+    title: row.title ?? '',
     customerId: row.customer_id ?? '',
     locationId: row.location_id ?? '',
     estimateId: undefined,

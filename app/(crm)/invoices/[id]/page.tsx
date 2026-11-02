@@ -34,7 +34,8 @@ export default function InvoiceDetailPage({ params }: Props) {
   const { id } = use(params);
   const { loading, invoices, getCustomerById, refresh } = useData();
   const invoice = invoices.find((i) => i.id === id);
-  const [pending, startTransition] = useTransition();
+  const [, startRefresh] = useTransition();
+  const [sending, setSending] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [statusNotice, setStatusNotice] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
@@ -43,15 +44,20 @@ export default function InvoiceDetailPage({ params }: Props) {
     setStatusError("");
     setStatusNotice("");
     setConfirmSend(false);
-    startTransition(async () => {
-      const result = await sendInvoice(id);
-      if (!result.ok) {
-        setStatusError(result.error);
-        return;
+    setSending(true);
+    void (async () => {
+      try {
+        const result = await sendInvoice(id);
+        if (!result.ok) {
+          setStatusError(result.error);
+          return;
+        }
+        setStatusNotice("Invoice emailed.");
+        await refresh();
+      } finally {
+        setSending(false);
       }
-      setStatusNotice("Invoice emailed.");
-      await refresh();
-    });
+    })();
   }
 
   if (loading) {
@@ -71,7 +77,7 @@ export default function InvoiceDetailPage({ params }: Props) {
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
         title={invoice.invoiceNumber}
-        description={customer?.name}
+        description={[invoice.title, customer?.name].filter(Boolean).join(" · ")}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -83,9 +89,9 @@ export default function InvoiceDetailPage({ params }: Props) {
               Back
             </Button>
             {(invoice.status === "Draft" || invoice.status === "Sent") && (
-              <Button size="sm" disabled={pending} onClick={() => setConfirmSend(true)}>
+              <Button size="sm" disabled={sending} onClick={() => setConfirmSend(true)}>
                 <Send className="size-3.5" data-icon="inline-start" />
-                {pending ? "Sending..." : "Send Invoice"}
+                {sending ? "Sending..." : "Send Invoice"}
               </Button>
             )}
             {(invoice.status === "Draft" || invoice.status === "Sent" || invoice.status === "Overdue") && (
@@ -96,7 +102,7 @@ export default function InvoiceDetailPage({ params }: Props) {
                 onComplete={(warning) => {
                   setStatusNotice(warning ? `Payment recorded. ${warning}` : "Payment recorded.");
                   setStatusError("");
-                  startTransition(async () => { await refresh(); });
+                  startRefresh(async () => { await refresh(); });
                 }}
               />
             )}
@@ -129,8 +135,8 @@ export default function InvoiceDetailPage({ params }: Props) {
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 {customer?.email && (
-                  <Button onClick={handleSend} disabled={pending}>
-                    {pending ? "Sending..." : "Send"}
+                  <Button onClick={handleSend} disabled={sending}>
+                    {sending ? "Sending..." : "Send"}
                   </Button>
                 )}
               </AlertDialogFooter>
@@ -154,6 +160,9 @@ export default function InvoiceDetailPage({ params }: Props) {
                   <CardTitle className="text-xl font-bold">
                     {invoice.invoiceNumber}
                   </CardTitle>
+                  {invoice.title && (
+                    <p className="mt-1 text-sm text-muted-foreground">{invoice.title}</p>
+                  )}
                 </div>
                 <StatusBadge status={invoice.status} />
               </div>

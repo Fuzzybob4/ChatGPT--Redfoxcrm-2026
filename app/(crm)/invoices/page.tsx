@@ -345,7 +345,10 @@ export default function InvoicesPage() {
                                 />
                               </TableCell>
                               <TableCell className="font-medium text-sm">
-                                {inv.invoiceNumber}
+                                <div>{inv.invoiceNumber}</div>
+                                {inv.title && inv.title !== inv.invoiceNumber && (
+                                  <div className="max-w-56 truncate text-xs font-normal text-muted-foreground">{inv.title}</div>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
@@ -434,6 +437,9 @@ export default function InvoicesPage() {
                               <p className="font-medium text-sm">
                                 {inv.invoiceNumber}
                               </p>
+                              {inv.title && inv.title !== inv.invoiceNumber && (
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">{inv.title}</p>
+                              )}
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {customer?.name}
                               </p>
