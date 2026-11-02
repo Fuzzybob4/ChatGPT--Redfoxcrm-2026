@@ -19,47 +19,75 @@ export interface CustomerCreateInput {
   locationId?: string;
 }
 
-export async function createCustomer(input: CustomerCreateInput) {
-  const supabase = await createClient();
-  const org = await getCurrentOrg();
-  if (!org) throw new Error("Not authenticated");
-  if (!input.name.trim()) throw new Error("Name is required.");
+export type CreateCustomerResult = { ok: true; id: string } | { ok: false; error: string };
 
-  let locationId = input.locationId || null;
-  if (locationId) {
-    const { data: location, error: locationError } = await supabase
-      .from("locations")
+// Returns errors instead of throwing: Next.js replaces thrown server-action
+// messages in production with "An error occurred in the Server Components
+// render", which hides the real cause from the user.
+export async function createCustomer(input: CustomerCreateInput): Promise<CreateCustomerResult> {
+  try {
+    const supabase = await createClient();
+    const org = await getCurrentOrg();
+    if (!org) return { ok: false, error: "Not authenticated" };
+    const fullName = input.name.trim();
+    if (!fullName) return { ok: false, error: "Name is required." };
+
+    const locationId = input.locationId || null;
+    if (locationId) {
+      const { data: location, error: locationError } = await supabase
+        .from("locations")
+        .select("id")
+        .eq("id", locationId)
+        .eq("org_id", org.orgId)
+        .maybeSingle();
+      if (locationError || !location) return { ok: false, error: "Invalid location." };
+    }
+
+    // Mirror the customer import insert (import-actions.ts), which works in
+    // production: always set first_name/last_name and use null, not "", for
+    // empty optional fields.
+    const [firstName, ...rest] = fullName.split(/\s+/);
+    const blankToNull = (value: string) => value.trim() || null;
+
+    const { data, error } = await supabase
+      .from("customers")
+      .insert({
+        org_id: org.orgId,
+        location_id: locationId,
+        first_name: firstName,
+        last_name: rest.join(" "),
+        full_name: fullName,
+        email: blankToNull(input.email),
+        phone: blankToNull(input.phone),
+        address: blankToNull(input.address),
+        city: blankToNull(input.city),
+        state: blankToNull(input.state),
+        zip_code: blankToNull(input.zip),
+        status: input.status.toLowerCase() || "active",
+        notes: blankToNull(input.notes),
+        tags: input.tags,
+        marketing_opt_in: input.marketingOptIn,
+        marketing_opt_in_at: input.marketingOptIn ? new Date().toISOString() : null,
+      })
       .select("id")
-      .eq("id", locationId)
-      .eq("org_id", org.orgId)
       .single();
-    if (locationError || !location) throw new Error("Invalid location.");
+
+    if (error || !data) {
+      console.error("[createCustomer] insert failed", {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      return { ok: false, error: error?.message ?? "Unable to create customer." };
+    }
+
+    revalidatePath("/customers");
+    return { ok: true, id: data.id };
+  } catch (e) {
+    console.error("[createCustomer] unexpected error", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Unable to create customer." };
   }
-
-  const { data, error } = await supabase
-    .from("customers")
-    .insert({
-      org_id: org.orgId,
-      location_id: locationId,
-      full_name: input.name.trim(),
-      email: input.email.trim(),
-      phone: input.phone.trim(),
-      address: input.address.trim(),
-      city: input.city.trim(),
-      state: input.state.trim(),
-      zip_code: input.zip.trim(),
-      status: input.status.toLowerCase(),
-      notes: input.notes.trim(),
-      tags: input.tags,
-      marketing_opt_in: input.marketingOptIn,
-      marketing_opt_in_at: input.marketingOptIn ? new Date().toISOString() : null,
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/customers");
-  return data.id;
 }
 
 export interface CustomerUpdateInput {
