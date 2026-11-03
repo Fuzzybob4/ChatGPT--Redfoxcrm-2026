@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -92,36 +92,46 @@ function WorkOrderCard({
   const [removalTime, setRemovalTime] = useState("08:00");
   const [removalEndTime, setRemovalEndTime] = useState("12:00");
 
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const next = nextStatus(job.status);
   const typeConfig = JOB_TYPE_STYLES[job.jobType] ?? JOB_TYPE_STYLES.other;
   const TypeIcon = typeConfig.icon;
   const statusStyle = STATUS_STYLES[job.status];
 
+  function run(action: () => Promise<unknown>, onSuccess?: () => void) {
+    setActionError(null);
+    startTransition(async () => {
+      try {
+        await action();
+        onRefresh();
+        onSuccess?.();
+      } catch {
+        setActionError("Couldn't save that change. Please try again.");
+      }
+    });
+  }
+
   function handleAdvance() {
     if (!next) return;
-    startTransition(async () => {
-      await updateJobStatus(job.id, next.value);
-      onRefresh();
-    });
+    run(() => updateJobStatus(job.id, next.value));
   }
 
   function handleReassign() {
     if (!selectedEmployee) return;
     const emp = employees.find((e) => e.id === selectedEmployee);
-    startTransition(async () => {
-      await reassignJob(job.id, emp?.crewName ?? emp?.fullName ?? "", [selectedEmployee]);
-      onRefresh();
-      setReassignOpen(false);
-    });
+    run(
+      () => reassignJob(job.id, emp?.crewName ?? emp?.fullName ?? "", [selectedEmployee]),
+      () => setReassignOpen(false),
+    );
   }
 
   function handleCreateRemoval() {
     if (!removalDate) return;
-    startTransition(async () => {
-      await createRemovalJob(job.id, removalDate, removalTime, removalEndTime);
-      onRefresh();
-      setRemovalOpen(false);
-    });
+    run(
+      () => createRemovalJob(job.id, removalDate, removalTime, removalEndTime),
+      () => setRemovalOpen(false),
+    );
   }
 
   const NextIcon = next ? nextButtonIcon(job.status) : null;
@@ -141,14 +151,18 @@ function WorkOrderCard({
             </div>
             {/* Always-visible menu — no hover required on mobile */}
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Button variant="ghost" size="icon" className="size-8 shrink-0 -mr-1 -mt-0.5" type="button">
-                  <MoreVertical className="size-4" />
-                  <span className="sr-only">Work order actions</span>
-                </Button>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="icon" className="size-10 shrink-0 -mr-2 -mt-1.5" type="button" />
+                }
+              >
+                <MoreVertical className="size-4" />
+                <span className="sr-only">Work order actions</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-xs">Work Order</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="text-xs">Work Order</DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setReassignOpen(true)}>
                   <Users className="size-3.5 mr-2" />
@@ -163,12 +177,7 @@ function WorkOrderCard({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => {
-                    startTransition(async () => {
-                      await updateJobStatus(job.id, "cancelled");
-                      onRefresh();
-                    });
-                  }}
+                  onClick={() => run(() => updateJobStatus(job.id, "cancelled"))}
                 >
                   Cancel job
                 </DropdownMenuItem>
@@ -229,6 +238,21 @@ function WorkOrderCard({
                 </p>
               )}
             </div>
+          )}
+
+          {!job.technicianName && job.status !== "Completed" && job.status !== "Cancelled" && (
+            <Button
+              variant="outline"
+              className="w-full h-11 text-sm mb-2"
+              onClick={() => setReassignOpen(true)}
+            >
+              <Users className="size-4 mr-2" />
+              Assign crew
+            </Button>
+          )}
+
+          {actionError && (
+            <p role="alert" className="text-xs text-destructive mb-2">{actionError}</p>
           )}
 
           {/* Primary action — full width, tall touch target */}

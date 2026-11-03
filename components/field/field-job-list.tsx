@@ -60,7 +60,7 @@ export function FieldJobList({
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
           <p className="font-medium text-foreground">No jobs assigned yet</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground text-pretty">
-            Jobs show up here when the office assigns you on the Jobs page.
+            Work orders show up here when the office taps &quot;Assign crew&quot; on a work order and picks you.
           </p>
         </div>
       )}
