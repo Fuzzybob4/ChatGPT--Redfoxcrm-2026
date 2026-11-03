@@ -31,8 +31,8 @@ export function CustomerPhotoUploader({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB');
       return;
     }
 
@@ -146,7 +146,7 @@ export function CustomerPhotoUploader({
                 Drop image here or click to upload
               </div>
               <div className="text-xs text-muted-foreground">
-                PNG, JPG, GIF up to 5MB
+                PNG, JPG, GIF up to 10MB
               </div>
             </div>
           )}
