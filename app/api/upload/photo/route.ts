@@ -26,9 +26,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Generate a unique filename with customer ID and timestamp
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'Only images can be uploaded' }, { status: 400 });
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Photos must be under 10MB' }, { status: 400 });
+    }
+
+    // customer_photos.org_id is required. Reading the customer through the
+    // user's session also confirms (via RLS) they can access this customer.
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('id, org_id')
+      .eq('id', customerId)
+      .maybeSingle();
+    if (!customer?.org_id) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
     const timestamp = Date.now();
-    const filename = `customers/${customerId}/photos/${timestamp}-${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80) || 'photo.jpg';
+    const filename = `customers/${customerId}/photos/${timestamp}-${safeName}`;
 
     // Upload to Blob with private access
     const blob = await put(filename, file, {
@@ -40,6 +58,7 @@ export async function POST(request: NextRequest) {
       .from('customer_photos')
       .insert({
         customer_id: customerId,
+        org_id: customer.org_id,
         photo_url: blob.pathname,
         file_size: file.size,
         photo_type: photoType,
