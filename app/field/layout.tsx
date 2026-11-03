@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getFieldContext } from "@/lib/field";
 import { FieldHeader } from "@/components/field/field-header";
+import { FieldTabs } from "@/components/field/field-tabs";
 
 export const metadata: Metadata = {
   title: "RedFox Field",
@@ -17,6 +18,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
     <div className="flex min-h-dvh flex-col bg-background">
       <FieldHeader name={employee?.name ?? org.businessName} officeLink={isOffice} />
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col">{children}</main>
+      <FieldTabs />
     </div>
   );
 }

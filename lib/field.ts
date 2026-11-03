@@ -149,6 +149,84 @@ export async function getOpenTimeEntry(employeeId: string): Promise<OpenTimeEntr
   return data ? { id: data.id, jobId: data.scheduled_job_id, clockIn: data.clock_in } : null;
 }
 
+export interface FieldMapStop {
+  job: FieldJob;
+  lat: number;
+  lng: number;
+}
+
+export interface FieldCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  nextJob: FieldJob | null;
+  lastJob: FieldJob | null;
+}
+
+/** Pin each assigned job to its property, or the customer's primary property when none is set. */
+export async function getAssignedMapStops(jobs: FieldJob[]): Promise<FieldMapStop[]> {
+  const customerIds = Array.from(new Set(jobs.map((j) => j.customerId).filter(Boolean))) as string[];
+  if (customerIds.length === 0) return [];
+
+  const admin = createAdminClient();
+  const { data: properties } = await admin
+    .from("properties")
+    .select("id, customer_id, is_primary, lat, lng")
+    .in("customer_id", customerIds)
+    .not("lat", "is", null)
+    .not("lng", "is", null);
+
+  const byId = new Map((properties ?? []).map((p) => [p.id, p]));
+  const primaryByCustomer = new Map<string, { lat: number; lng: number }>();
+  for (const p of properties ?? []) {
+    if (p.is_primary || !primaryByCustomer.has(p.customer_id)) primaryByCustomer.set(p.customer_id, p);
+  }
+
+  return jobs.flatMap((job) => {
+    const point = (job.propertyId && byId.get(job.propertyId)) || (job.customerId && primaryByCustomer.get(job.customerId));
+    if (!point) return [];
+    return [{ job, lat: Number(point.lat), lng: Number(point.lng) }];
+  });
+}
+
+/** Customers this employee has been assigned to, with their next and most recent visit. */
+export async function getAssignedCustomers(orgId: string, employeeId: string): Promise<FieldCustomer[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("scheduled_jobs")
+    .select(JOB_COLUMNS)
+    .eq("org_id", orgId)
+    .contains("assigned_employees", [employeeId])
+    .neq("status", "cancelled")
+    .not("customer_id", "is", null)
+    .order("scheduled_date", { ascending: true })
+    .limit(300);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const customers = new Map<string, FieldCustomer>();
+  for (const row of data ?? []) {
+    const job = toFieldJob(row);
+    const id = job.customerId as string;
+    const entry =
+      customers.get(id) ??
+      { id, name: job.customerName, phone: job.customerPhone, address: job.address, nextJob: null, lastJob: null };
+    if (isOpenStatus(job.status) && job.scheduledDate >= today) {
+      entry.nextJob ??= job;
+    } else {
+      entry.lastJob = job;
+    }
+    if (!entry.address && job.address) entry.address = job.address;
+    customers.set(id, entry);
+  }
+
+  return Array.from(customers.values()).sort((a, b) => {
+    const ad = a.nextJob?.scheduledDate ?? "9999";
+    const bd = b.nextJob?.scheduledDate ?? "9999";
+    return ad === bd ? a.name.localeCompare(b.name) : ad.localeCompare(bd);
+  });
+}
+
 export function isOpenStatus(status: string): boolean {
   return ["scheduled", "en_route", "in_progress"].includes(status);
 }
