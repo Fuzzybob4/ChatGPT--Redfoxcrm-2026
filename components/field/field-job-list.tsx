@@ -99,8 +99,8 @@ function JobCard({ job, clockedInSince }: { job: FieldJob; clockedInSince: strin
         done && "opacity-70",
       )}
     >
-      <div className="flex w-16 shrink-0 flex-col justify-center border-r border-border pr-4">
-        <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+      <div className="flex w-20 shrink-0 flex-col justify-center border-r border-border pr-3">
+        <span className="whitespace-nowrap font-mono text-sm font-semibold tabular-nums text-foreground">
           {formatClock(job.startTime) || "Any time"}
         </span>
         <span className="text-xs text-muted-foreground">{formatDay(job.scheduledDate)}</span>

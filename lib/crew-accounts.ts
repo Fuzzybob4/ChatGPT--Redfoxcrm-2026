@@ -68,7 +68,17 @@ export async function linkEmployeeAccount(user: AuthUserLike): Promise<boolean> 
       org_id: employee.org_id,
       role: membershipRoleFor(employee.role),
     });
-    if (memberError) return false;
+    if (memberError) {
+      // Parallel requests on first sign-in can race to create the membership;
+      // succeed if another request already did.
+      const { data: raced } = await admin
+        .from("user_memberships")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("org_id", employee.org_id)
+        .maybeSingle();
+      if (!raced) return false;
+    }
   }
 
   return true;
