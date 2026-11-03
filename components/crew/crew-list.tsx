@@ -34,6 +34,7 @@ import {
 import {
   addEmployee,
   inviteEmployee,
+  sendLoginInvite,
   updateEmployeeAccess,
   removeEmployee,
 } from "@/app/(crm)/crew/actions";
@@ -46,6 +47,7 @@ export interface CrewMember {
   position: string;
   crewName: string;
   isActive: boolean;
+  loginStatus: "active" | "invited" | "none";
   canWorkOrders: boolean;
   canMapping: boolean;
 }
@@ -113,6 +115,27 @@ export function CrewList({ members }: { members: CrewMember[] }) {
   ) {
     startTransition(async () => {
       await updateEmployeeAccess(id, field, value);
+    });
+  }
+
+  const [loginNotice, setLoginNotice] = useState<{ id: string; message: string; isError: boolean } | null>(null);
+
+  function handleSendLogin(member: CrewMember) {
+    setLoginNotice(null);
+    startTransition(async () => {
+      const result = await sendLoginInvite(member.id);
+      if ("error" in result && result.error) {
+        setLoginNotice({ id: member.id, message: result.error, isError: true });
+      } else {
+        setLoginNotice({
+          id: member.id,
+          message:
+            "existingAccount" in result && result.existingAccount
+              ? `${member.email} already has an account — they can sign in with it now.`
+              : `Login invite sent to ${member.email}.`,
+          isError: false,
+        });
+      }
     });
   }
 
@@ -329,6 +352,31 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                       <p className="text-xs text-muted-foreground truncate">
                         {m.position || m.email}
                       </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {m.loginStatus === "active" ? (
+                          <Badge variant="secondary" className="text-xs">Can sign in</Badge>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-xs"
+                            disabled={isPending || !m.email}
+                            onClick={() => handleSendLogin(m)}
+                          >
+                            <Mail className="size-3.5" />
+                            {m.loginStatus === "invited" ? "Resend login invite" : "Send login invite"}
+                          </Button>
+                        )}
+                      </div>
+                      {loginNotice?.id === m.id && (
+                        <p
+                          role="status"
+                          className={cn("mt-1 text-xs", loginNotice.isError ? "text-destructive" : "text-muted-foreground")}
+                        >
+                          {loginNotice.message}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </TableCell>

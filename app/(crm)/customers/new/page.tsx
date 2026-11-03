@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function NewCustomerPage() {
   const router = useRouter();
-  const { locations } = useData();
+  const { locations, refresh } = useData();
   const { selectedLocationId } = useLocation();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -28,6 +28,11 @@ export default function NewCustomerPage() {
     startTransition(async () => {
       try {
         const id = await createCustomer({ ...form, tags: [], marketingOptIn: false, locationId: form.locationId || undefined });
+        // The detail page reads from the client data provider. Refresh it before
+        // navigating so the newly-created customer is available immediately.
+        await refresh();
+        // Small delay to ensure the data context has updated before navigation.
+        await new Promise(r => setTimeout(r, 200));
         router.push(`/customers/${id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to create customer.");
@@ -51,7 +56,7 @@ export default function NewCustomerPage() {
             <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="jane@example.com" /></div>
             <div className="space-y-2"><Label htmlFor="phone">Phone</Label><Input id="phone" type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="(512) 555-0123" /></div>
             <div className="space-y-2"><Label htmlFor="status">Status</Label><Select value={form.status} onValueChange={(value) => value && update("status", value)}><SelectTrigger id="status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="lead">Lead</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="location">Location</Label><Select value={form.locationId || "unassigned"} onValueChange={(value) => value && update("locationId", value === "unassigned" ? "" : value)}><SelectTrigger id="location"><SelectValue placeholder="Choose a location" /></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="location">Location</Label><Select value={form.locationId || "unassigned"} onValueChange={(value) => value && update("locationId", value === "unassigned" ? "" : value)}><SelectTrigger id="location" className="w-full"><SelectValue>{locations.find((location) => location.id === form.locationId)?.name ?? "Unassigned"}</SelectValue></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="address">Street address</Label><Input id="address" value={form.address} onChange={(e) => update("address", e.target.value)} placeholder="123 Main St" /></div>
             <div className="space-y-2"><Label htmlFor="city">City</Label><Input id="city" value={form.city} onChange={(e) => update("city", e.target.value)} placeholder="Austin" /></div>
             <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label htmlFor="state">State</Label><Input id="state" maxLength={2} value={form.state} onChange={(e) => update("state", e.target.value)} placeholder="TX" /></div><div className="space-y-2"><Label htmlFor="zip">ZIP</Label><Input id="zip" value={form.zip} onChange={(e) => update("zip", e.target.value)} placeholder="78701" /></div></div>

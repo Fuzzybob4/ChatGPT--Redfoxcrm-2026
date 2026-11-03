@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { linkEmployeeAccount } from '@/lib/crew-accounts';
 
 export interface OrgMembership {
   userId: string;
@@ -31,15 +32,24 @@ export async function getCurrentOrg(): Promise<OrgMembership | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: membership } = await supabase
-    .from('user_memberships')
-    .select(
-      'user_id, org_id, role, organizations(name, is_enterprise, location_count, plan, trial_ends_at, subscription_status, subscription_interval, subscription_current_period_end, card_brand, card_last4, active_addons)',
-    )
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const fetchMembership = () =>
+    supabase
+      .from('user_memberships')
+      .select(
+        'user_id, org_id, role, organizations(name, is_enterprise, location_count, plan, trial_ends_at, subscription_status, subscription_interval, subscription_current_period_end, card_brand, card_last4, active_addons)',
+      )
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+  let { data: membership } = await fetchMembership();
+
+  // An invited employee signing in for the first time has no membership yet —
+  // connect them to the business that invited their email address.
+  if (!membership && (await linkEmployeeAccount(user))) {
+    ({ data: membership } = await fetchMembership());
+  }
 
   if (!membership) return null;
 

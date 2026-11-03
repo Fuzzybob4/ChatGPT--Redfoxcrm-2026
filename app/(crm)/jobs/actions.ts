@@ -96,6 +96,18 @@ export async function createJob(input: CreateJobInput) {
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
 
+  let locationId = input.locationId ?? null;
+  if (!locationId) {
+    const { data: customer, error: customerError } = await supabase
+      .from("customers")
+      .select("location_id")
+      .eq("id", input.customerId)
+      .eq("org_id", org.orgId)
+      .single();
+    if (customerError || !customer) throw new Error(customerError?.message ?? "Customer not found");
+    locationId = customer.location_id;
+  }
+
   const { data, error } = await supabase
     .from("scheduled_jobs")
     .insert({
@@ -104,7 +116,7 @@ export async function createJob(input: CreateJobInput) {
       invoice_id: input.invoiceId ?? null,
       estimate_id: input.estimateId ?? null,
       property_id: input.propertyId ?? null,
-      location_id: input.locationId ?? null,
+      location_id: locationId,
       title: input.title,
       job_type: input.jobType,
       scheduled_date: input.scheduledDate,

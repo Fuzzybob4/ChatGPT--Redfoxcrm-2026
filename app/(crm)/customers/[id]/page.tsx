@@ -29,7 +29,8 @@ import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gall
 import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
 import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-link-card";
 import { CustomerProperties } from "@/components/customers/customer-properties";
-import { deriveLifecycleStatus, LIFECYCLE_META } from "@/lib/lifecycle";
+import { deriveLifecycleStatus, invoicePaymentSignal, LIFECYCLE_META } from "@/lib/lifecycle";
+import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-control";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -58,19 +59,26 @@ export default function CustomerDetailPage({ params }: Props) {
 
   // Derive the live pipeline status from real invoices + jobs so it stays in
   // sync with the mapping page (both use lib/lifecycle).
-  const hasUnpaidInvoice = invs.some(
-    (i) => i.status === "Sent" || i.status === "Overdue",
+  const paymentSignals = invs.map((i) =>
+    invoicePaymentSignal({
+      status: i.status,
+      paymentState: (i as { paymentState?: string | null }).paymentState,
+      amountPaid: (i as { amountPaid?: number | null }).amountPaid,
+    }),
   );
-  const hasPaidInvoice = invs.some((i) => i.status === "Paid");
   const lifecycle = deriveLifecycleStatus({
-    hasUnpaidInvoice,
-    hasPaidInvoice,
+    hasUnpaidInvoice: paymentSignals.some((s) => s.unpaid),
+    hasPaidInvoice: paymentSignals.some((s) => s.paid),
+    hasDepositPaid: paymentSignals.some((s) => s.deposit),
     jobs: jobs.map((j) => ({
       status: j.status,
-      hasCrew: Boolean(j.technicianName?.trim()),
+      jobType: j.jobType,
+      date: j.scheduledDate,
+      hasCrew: Boolean(j.technicianName?.trim()) || (j.assignedEmployees?.length ?? 0) > 0,
     })),
     installStatus: customer.installStatus,
   });
+
   const lifecycleMeta = LIFECYCLE_META[lifecycle];
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -128,14 +136,12 @@ export default function CustomerDetailPage({ params }: Props) {
                   <div className="flex flex-col items-center gap-1.5">
                     <p className="font-semibold text-base">{customer.name}</p>
                     <StatusBadge status={customer.status} className="mt-1" />
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
-                      style={{ backgroundColor: lifecycleMeta.color }}
-                      title={lifecycleMeta.description}
-                    >
-                      <span className="inline-block size-1.5 rounded-full bg-white/90" />
-                      {lifecycleMeta.label}
-                    </span>
+                    <LifecycleStageControl
+                      customerId={customer.id}
+                      stage={lifecycle}
+                      override={customer.installStatus}
+                      onChanged={refresh}
+                    />
                   </div>
                 </div>
 

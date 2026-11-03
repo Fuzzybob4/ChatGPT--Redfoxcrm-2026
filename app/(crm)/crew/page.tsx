@@ -14,18 +14,20 @@ export default async function CrewPage() {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, full_name, first_name, last_name, email, phone, position, crew_name, is_active, can_access_work_orders, can_access_mapping, created_at"
+      "id, full_name, first_name, last_name, email, phone, position, crew_name, is_active, can_access_work_orders, can_access_mapping, created_at, user_id, invited_at, invite_accepted_at"
     )
     .order("created_at", { ascending: true });
 
   const members: CrewMember[] = (employees ?? []).map((e) => ({
     id: e.id,
-    name: e.full_name ?? `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim(),
+    name: (e.full_name || `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim()) || (e.email ?? "Invited employee"),
     email: e.email ?? "",
+    loginStatus: e.user_id ? "active" : e.invited_at ? "invited" : "none",
+    // Invited employees haven't finished setup yet, but should still be listed.
+    isActive: (e.is_active ?? true) || (!!e.invited_at && !e.invite_accepted_at),
     phone: e.phone ?? "",
     position: e.position ?? "",
     crewName: e.crew_name ?? "",
-    isActive: e.is_active ?? true,
     canWorkOrders: e.can_access_work_orders ?? false,
     canMapping: e.can_access_mapping ?? false,
   }));
