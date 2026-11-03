@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
-import { deriveLifecycleStatus, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
+import { buildStageResolver } from "@/lib/customer-stages";
 
 export const metadata = {
   title: "Mapping - RedFox CRM",
@@ -67,69 +67,14 @@ export default async function MappingPage() {
     }
   }
 
-  // Build customer lookup
   const customerMap = new Map<string, any>();
   for (const c of customers ?? []) customerMap.set(c.id, c);
 
-  // Group jobs per customer (already ordered by scheduled_date desc)
-  const jobsByCustomer = new Map<string, any[]>();
-  for (const j of jobs ?? []) {
-    if (!j.customer_id) continue;
-    const list = jobsByCustomer.get(j.customer_id) ?? [];
-    list.push(j);
-    jobsByCustomer.set(j.customer_id, list);
-  }
-
-  // Aggregate payment signals per customer (deposit = partial payment).
-  const paymentsByCustomer = new Map<string, { paid: boolean; deposit: boolean; unpaid: boolean }>();
-  for (const inv of invoices ?? []) {
-    if (!inv.customer_id) continue;
-    const amountPaid =
-      inv.amount_paid != null
-        ? Number(inv.amount_paid)
-        : inv.amount_paid_cents != null
-          ? Number(inv.amount_paid_cents) / 100
-          : 0;
-    const signal = invoicePaymentSignal({
-      status: inv.status,
-      paymentState: inv.payment_state,
-      amountPaid,
-    });
-    const current = paymentsByCustomer.get(inv.customer_id) ?? { paid: false, deposit: false, unpaid: false };
-    paymentsByCustomer.set(inv.customer_id, {
-      paid: current.paid || signal.paid,
-      deposit: current.deposit || signal.deposit,
-      unpaid: current.unpaid || signal.unpaid,
-    });
-  }
-
-  const stageByCustomer = new Map<string, LifecycleStatus>();
-  function getCustomerStage(customerId: string): LifecycleStatus {
-    const cached = stageByCustomer.get(customerId);
-    if (cached) return cached;
-
-    const customer = customerMap.get(customerId);
-    const customerJobs = jobsByCustomer.get(customerId) ?? [];
-    const payments = paymentsByCustomer.get(customerId);
-
-    const stage = deriveLifecycleStatus({
-      hasUnpaidInvoice: payments?.unpaid ?? false,
-      hasPaidInvoice: payments?.paid ?? false,
-      hasDepositPaid: payments?.deposit ?? false,
-      jobs: customerJobs.map((j) => ({
-        status: j.status ?? "",
-        jobType: j.job_type,
-        date: j.scheduled_date,
-        hasCrew:
-          Boolean(String(j.crew_name ?? "").trim()) ||
-          (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0),
-      })),
-      installStatus: customer?.install_status ?? null,
-    });
-
-    stageByCustomer.set(customerId, stage);
-    return stage;
-  }
+  const getCustomerStage = buildStageResolver({
+    customers: customers ?? [],
+    jobs: jobs ?? [],
+    invoices: invoices ?? [],
+  });
 
   const customerName = (c: any) =>
     c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();

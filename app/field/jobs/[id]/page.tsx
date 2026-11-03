@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Navigation, Phone } from "lucide-react";
+import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
 
 import { getAccessibleJob, getAssignedJobs, getFieldContext, getOpenTimeEntry, isOpenStatus } from "@/lib/field";
 import { JobActionBar } from "@/components/field/job-action-bar";
@@ -10,9 +10,9 @@ import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel } fro
 
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, employee, admin } = await getFieldContext();
+  const { org, employee, admin, canManageWorkOrders } = await getFieldContext();
 
-  const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id);
+  const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, canManageWorkOrders);
   if (!access) notFound();
   const { job, assigned } = access;
 
@@ -66,13 +66,24 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-col gap-5 px-4 pb-44 pt-4">
-        <Link
-          href="/field"
-          className="-ml-2 flex min-h-11 w-fit items-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          My jobs
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href={assigned || !canManageWorkOrders ? "/field" : "/field/homes"}
+            className="-ml-2 flex min-h-11 w-fit items-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {assigned || !canManageWorkOrders ? "My jobs" : "Homes"}
+          </Link>
+          {canManageWorkOrders && job.status !== "completed" && job.status !== "cancelled" && (
+            <Link
+              href={`/field/jobs/${job.id}/edit`}
+              className="-mr-2 flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-primary"
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+              Update work order
+            </Link>
+          )}
+        </div>
 
         <header className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
@@ -160,7 +171,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
         />
       ) : (
         <p className="px-4 pb-8 text-center text-sm text-muted-foreground">
-          Viewing as office. Only assigned crew can start or complete this job.
+          You&apos;re not on this job&apos;s crew. Only assigned crew can start or complete it.
         </p>
       )}
     </div>

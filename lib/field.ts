@@ -5,7 +5,12 @@ import { getCurrentOrg } from "@/lib/org";
 export interface FieldEmployee {
   id: string;
   name: string;
+  locationId: string | null;
+  /** Crew leads (or anyone granted work-order access) can see every home and manage work orders. */
+  canManageWorkOrders: boolean;
 }
+
+export const OFFICE_ROLES = ["owner", "admin", "manager"];
 
 export interface FieldJob {
   id: string;
@@ -42,7 +47,7 @@ export async function getFieldContext() {
   const admin = createAdminClient();
   const { data: employee } = await admin
     .from("employees")
-    .select("id, full_name, first_name, last_name, email")
+    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id")
     .eq("org_id", org.orgId)
     .eq("user_id", org.userId)
     .maybeSingle();
@@ -55,10 +60,17 @@ export async function getFieldContext() {
           `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() ||
           employee.email ||
           "Crew member",
+        locationId: employee.location_id ?? null,
+        canManageWorkOrders:
+          employee.role === "crew_lead" ||
+          employee.can_access_work_orders === true ||
+          /\blead\b/i.test(employee.position ?? ""),
       }
     : null;
 
-  return { org, employee: fieldEmployee, admin };
+  const canManageWorkOrders = OFFICE_ROLES.includes(org.role) || Boolean(fieldEmployee?.canManageWorkOrders);
+
+  return { org, employee: fieldEmployee, admin, canManageWorkOrders };
 }
 
 type JobRow = Record<string, any>;
@@ -119,6 +131,7 @@ export async function getAccessibleJob(
   employeeId: string | null,
   role: string,
   jobId: string,
+  canManageWorkOrders = false,
 ) {
   const admin = createAdminClient();
   const { data } = await admin
@@ -130,7 +143,7 @@ export async function getAccessibleJob(
   if (!data) return null;
 
   const assigned = employeeId != null && (data.assigned_employees ?? []).includes(employeeId);
-  const office = ["owner", "admin", "manager"].includes(role);
+  const office = OFFICE_ROLES.includes(role) || canManageWorkOrders;
   if (!assigned && !office) return null;
 
   return { job: toFieldJob(data), assigned, raw: data };
@@ -170,17 +183,23 @@ export async function getAssignedMapStops(jobs: FieldJob[]): Promise<FieldMapSto
   if (customerIds.length === 0) return [];
 
   const admin = createAdminClient();
-  const { data: properties } = await admin
-    .from("properties")
-    .select("id, customer_id, is_primary, lat, lng")
-    .in("customer_id", customerIds)
-    .not("lat", "is", null)
-    .not("lng", "is", null);
+  const [{ data: properties }, { data: customers }] = await Promise.all([
+    admin
+      .from("customer_properties")
+      .select("id, customer_id, is_primary, lat, lng")
+      .in("customer_id", customerIds)
+      .not("lat", "is", null)
+      .not("lng", "is", null),
+    admin.from("customers").select("id, lat, lng").in("id", customerIds).not("lat", "is", null).not("lng", "is", null),
+  ]);
 
   const byId = new Map((properties ?? []).map((p) => [p.id, p]));
   const primaryByCustomer = new Map<string, { lat: number; lng: number }>();
+  for (const c of customers ?? []) primaryByCustomer.set(c.id, c);
+  const seenProperty = new Set<string>();
   for (const p of properties ?? []) {
-    if (p.is_primary || !primaryByCustomer.has(p.customer_id)) primaryByCustomer.set(p.customer_id, p);
+    if (p.is_primary || !seenProperty.has(p.customer_id)) primaryByCustomer.set(p.customer_id, p);
+    seenProperty.add(p.customer_id);
   }
 
   return jobs.flatMap((job) => {
