@@ -103,12 +103,6 @@ export default async function MappingPage() {
     });
   }
 
-  // Removal jobs mark the end of the season; everything else counts as install work.
-  const isRemovalJob = (jobType: string | null) => {
-    const t = (jobType ?? "").toLowerCase();
-    return t.includes("remov") || t.includes("takedown") || t.includes("take down") || t.includes("take_down");
-  };
-
   const stageByCustomer = new Map<string, LifecycleStatus>();
   function getCustomerStage(customerId: string): LifecycleStatus {
     const cached = stageByCustomer.get(customerId);
@@ -118,27 +112,19 @@ export default async function MappingPage() {
     const customerJobs = jobsByCustomer.get(customerId) ?? [];
     const payments = paymentsByCustomer.get(customerId);
 
-    // A completed removal job ends the season unless a team member set a stage.
-    const removalJobs = customerJobs.filter((j) => isRemovalJob(j.job_type));
-    const completedRemoval = removalJobs.some((j) => (j.status ?? "").toLowerCase() === "completed");
-    const openRemoval = removalJobs.some((j) =>
-      ["scheduled", "in_progress", "in progress"].includes((j.status ?? "").toLowerCase()),
-    );
-    const derivedSeasonStage = completedRemoval ? "removed" : openRemoval ? "pending_removal" : null;
-
     const stage = deriveLifecycleStatus({
       hasUnpaidInvoice: payments?.unpaid ?? false,
       hasPaidInvoice: payments?.paid ?? false,
       hasDepositPaid: payments?.deposit ?? false,
-      jobs: customerJobs
-        .filter((j) => !isRemovalJob(j.job_type))
-        .map((j) => ({
-          status: j.status ?? "",
-          hasCrew:
-            Boolean(String(j.crew_name ?? "").trim()) ||
-            (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0),
-        })),
-      installStatus: customer?.install_status ?? derivedSeasonStage,
+      jobs: customerJobs.map((j) => ({
+        status: j.status ?? "",
+        jobType: j.job_type,
+        date: j.scheduled_date,
+        hasCrew:
+          Boolean(String(j.crew_name ?? "").trim()) ||
+          (Array.isArray(j.assigned_employees) && j.assigned_employees.length > 0),
+      })),
+      installStatus: customer?.install_status ?? null,
     });
 
     stageByCustomer.set(customerId, stage);

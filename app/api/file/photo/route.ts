@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { get } from '@vercel/blob';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,6 +31,23 @@ export async function GET(request: NextRequest) {
     ].some((prefix) => pathname.startsWith(prefix));
     if (!allowedPrefix) {
       return NextResponse.json({ error: 'Invalid pathname' }, { status: 403 });
+    }
+
+    // Only serve photos that belong to the signed-in user's business. Row level
+    // security on the photo tables scopes these lookups to the user's org.
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const candidates = Array.from(new Set([rawPath, pathname]));
+    const [{ data: propertyPhoto }, { data: customerPhoto }] = await Promise.all([
+      supabase.from('property_photos').select('id').in('photo_url', candidates).limit(1).maybeSingle(),
+      supabase.from('customer_photos').select('id').in('photo_url', candidates).limit(1).maybeSingle(),
+    ]);
+    if (!propertyPhoto && !customerPhoto) {
+      return new NextResponse('Not found', { status: 404 });
     }
 
     const result = await get(pathname, {

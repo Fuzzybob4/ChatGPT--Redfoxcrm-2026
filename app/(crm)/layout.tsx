@@ -11,6 +11,8 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
   const org = await getCurrentOrg();
   // Brand-new business with no organization yet → send to onboarding.
   if (!org) redirect("/onboarding");
+  // Field crew use the mobile job app, not the office CRM.
+  if (org.role === "crew") redirect("/field");
 
   return (
     <OrgProvider org={org}>

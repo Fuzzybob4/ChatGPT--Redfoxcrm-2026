@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
+import { sendEmployeeLoginInvite } from "@/lib/crew-accounts";
 
 export async function inviteEmployee(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -14,46 +15,88 @@ export async function inviteEmployee(formData: FormData) {
     return { error: "Email and role are required." };
   }
 
-  const org = await getCurrentOrg();
-  if (!org) return { error: "Organization not found." };
+  const org = await requireOffice();
+  if (!org) return { error: "Only owners, admins, and managers can invite employees." };
 
   const adminClient = createAdminClient();
 
-  // Create the employee record (no name yet — filled on profile setup)
-  const { data: empRow, error: insertError } = await adminClient
+  // Reuse the employee record if one already exists for this email.
+  const { data: existing } = await adminClient
     .from("employees")
-    .insert({
-      org_id: org.orgId,
-      first_name: "",
-      last_name: "",
-      full_name: "",
-      email,
-      role,
-      position: position || role,
-      is_active: false, // becomes active after profile setup
-      can_access_work_orders: true,
-      can_access_mapping: false,
-      invited_at: new Date().toISOString(),
-      profile_completed: false,
-    })
-    .select("id")
-    .single();
+    .select("id, user_id")
+    .eq("org_id", org.orgId)
+    .eq("email", email)
+    .maybeSingle();
 
-  if (insertError) return { error: insertError.message };
+  if (existing?.user_id) {
+    return { error: "This employee already has a login. They can sign in with this email." };
+  }
 
-  // Send Supabase invite email so they can set their password
-  const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?next=/crew-setup?employee_id=${empRow.id}`,
-  });
+  let employeeId = existing?.id as string | undefined;
+  let created = false;
+  if (!employeeId) {
+    // Name and legal details are filled in by the employee during setup.
+    const { data: empRow, error: insertError } = await adminClient
+      .from("employees")
+      .insert({
+        org_id: org.orgId,
+        first_name: "",
+        last_name: "",
+        full_name: "",
+        email,
+        role,
+        position: position || role,
+        is_active: false,
+        can_access_work_orders: true,
+        can_access_mapping: false,
+        invited_at: new Date().toISOString(),
+        profile_completed: false,
+      })
+      .select("id")
+      .single();
+    if (insertError || !empRow) return { error: insertError?.message ?? "Could not create employee." };
+    employeeId = empRow.id;
+    created = true;
+  }
 
-  if (inviteError) {
-    // Roll back the employee row if invite failed
-    await adminClient.from("employees").delete().eq("id", empRow.id);
-    return { error: "Failed to send invite email. Please try again." };
+  const result = await sendEmployeeLoginInvite(employeeId!, email);
+  if ("error" in result) {
+    if (created) await adminClient.from("employees").delete().eq("id", employeeId!);
+    return { error: result.error };
   }
 
   revalidatePath("/crew");
-  return { success: true };
+  return { success: true, existingAccount: result.existingAccount };
+}
+
+/** Send (or resend) a login invite to an employee who was added manually. */
+export async function sendLoginInvite(employeeId: string) {
+  const org = await requireOffice();
+  if (!org) return { error: "Only owners, admins, and managers can invite employees." };
+
+  const adminClient = createAdminClient();
+  const { data: employee } = await adminClient
+    .from("employees")
+    .select("id, email, user_id")
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+
+  if (!employee) return { error: "Employee not found." };
+  if (employee.user_id) return { error: "This employee already has a login." };
+  if (!employee.email) return { error: "Add an email address for this employee first." };
+
+  const result = await sendEmployeeLoginInvite(employee.id, employee.email.trim().toLowerCase());
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath("/crew");
+  return { success: true, existingAccount: result.existingAccount };
+}
+
+async function requireOffice() {
+  const org = await getCurrentOrg();
+  if (!org || !["owner", "admin", "manager"].includes(org.role)) return null;
+  return org;
 }
 
 export async function addEmployee(formData: FormData) {

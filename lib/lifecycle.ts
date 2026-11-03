@@ -111,9 +111,20 @@ export function isManualStage(value: unknown): value is ManualStage {
 export interface LifecycleJobSignal {
   status: string;
   hasCrew: boolean;
+  /** Raw job type, e.g. "install", "service", "removal". */
+  jobType?: string | null;
+  /** Scheduled date (YYYY-MM-DD) used to separate one season from the next. */
+  date?: string | null;
 }
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+export function isRemovalJobType(jobType: string | null | undefined): boolean {
+  const t = (jobType ?? "").toLowerCase();
+  return t.includes("remov") || t.includes("takedown") || t.includes("take down") || t.includes("take_down");
+}
+
+const OPEN_JOB_STATUSES = ["scheduled", "en_route", "in_progress"];
 
 /**
  * Derive the current pipeline stage from a customer's aggregated invoice +
@@ -139,11 +150,38 @@ export function deriveLifecycleStatus(input: {
   if (raw === "removed") return "removed";
   if (raw === "pending_removal") return "pending_removal";
 
-  const anyCompleted = jobs.some((j) => norm(j.status) === "completed");
-  if (anyCompleted || raw === "installed") return "installed";
+  const removalJobs = jobs.filter((j) => isRemovalJobType(j.jobType));
+  const installJobs = jobs.filter((j) => !isRemovalJobType(j.jobType));
 
-  const anyScheduledWithCrew = jobs.some(
-    (j) => ["scheduled", "in_progress"].includes(norm(j.status)) && j.hasCrew,
+  // A completed removal ends the season — unless a newer install job exists,
+  // which means the customer has started a new season.
+  const lastRemovalDate = removalJobs
+    .filter((j) => norm(j.status) === "completed")
+    .map((j) => j.date ?? "")
+    .sort()
+    .pop();
+  if (lastRemovalDate !== undefined) {
+    const newSeasonStarted = installJobs.some((j) => (j.date ?? "") > lastRemovalDate);
+    if (!newSeasonStarted) return "removed";
+  }
+
+  const currentInstallJobs =
+    lastRemovalDate !== undefined
+      ? installJobs.filter((j) => (j.date ?? "") > lastRemovalDate)
+      : installJobs;
+
+  const installCompleted =
+    currentInstallJobs.some((j) => norm(j.status) === "completed") || raw === "installed";
+
+  if (installCompleted) {
+    const removalOpen = removalJobs.some(
+      (j) => OPEN_JOB_STATUSES.includes(norm(j.status)) && (j.date ?? "") >= (lastRemovalDate ?? ""),
+    );
+    return removalOpen ? "pending_removal" : "installed";
+  }
+
+  const anyScheduledWithCrew = currentInstallJobs.some(
+    (j) => OPEN_JOB_STATUSES.includes(norm(j.status)) && j.hasCrew,
   );
   if (anyScheduledWithCrew) return "scheduled";
 

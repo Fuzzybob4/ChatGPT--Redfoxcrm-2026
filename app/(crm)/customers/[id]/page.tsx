@@ -72,7 +72,9 @@ export default function CustomerDetailPage({ params }: Props) {
     hasDepositPaid: paymentSignals.some((s) => s.deposit),
     jobs: jobs.map((j) => ({
       status: j.status,
-      hasCrew: Boolean(j.technicianName?.trim()),
+      jobType: j.jobType,
+      date: j.scheduledDate,
+      hasCrew: Boolean(j.technicianName?.trim()) || (j.assignedEmployees?.length ?? 0) > 0,
     })),
     installStatus: customer.installStatus,
   });
