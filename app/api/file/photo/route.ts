@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { get } from '@vercel/blob';
+import { SUPABASE_PREFIX, downloadPhoto, isSupabasePhoto } from '@/lib/photo-storage';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     // Support both current and legacy upload prefixes. Existing rows use
     // customer-photos/property-photos; newer uploads use customers/properties.
     const allowedPrefix = [
+      SUPABASE_PREFIX,
       'customers/',
       'properties/',
       'customer-photos/',
@@ -48,6 +50,18 @@ export async function GET(request: NextRequest) {
     ]);
     if (!propertyPhoto && !customerPhoto) {
       return new NextResponse('Not found', { status: 404 });
+    }
+
+    if (isSupabasePhoto(pathname)) {
+      const file = await downloadPhoto(pathname);
+      if (!file) return new NextResponse('Not found', { status: 404 });
+      return new NextResponse(file.stream(), {
+        headers: {
+          'Content-Type': file.type || 'image/jpeg',
+          // Stored paths are unique per upload, so the bytes never change.
+          'Cache-Control': 'private, max-age=31536000, immutable',
+        },
+      });
     }
 
     const result = await get(pathname, {

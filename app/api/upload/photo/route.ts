@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { safeFileName, uploadPhoto } from '@/lib/photo-storage';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { uploadErrorResponse } from '@/lib/upload-error';
@@ -45,14 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
-    const timestamp = Date.now();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80) || 'photo.jpg';
-    const filename = `customers/${customerId}/photos/${timestamp}-${safeName}`;
-
-    // Upload to Blob with private access
-    const blob = await put(filename, file, {
-      access: 'private',
-    });
+    const photoUrl = await uploadPhoto(
+      `customers/${customerId}/${Date.now()}-${safeFileName(file.name)}`,
+      file,
+    );
 
     // Save photo metadata to database
     const { data: photoData, error: insertError } = await supabase
@@ -60,7 +56,7 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_id: customerId,
         org_id: customer.org_id,
-        photo_url: blob.pathname,
+        photo_url: photoUrl,
         file_size: file.size,
         photo_type: photoType,
         description: description,
@@ -79,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     // Return the pathname (not the URL since it's private)
     return NextResponse.json({
-      pathname: blob.pathname,
+      pathname: photoUrl,
       filename: file.name,
       photoId: photoData.id,
       uploadedAt: new Date().toISOString(),
