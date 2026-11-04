@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { type NextRequest, NextResponse } from "next/server";
 import { getAccessibleJob, getFieldContext } from "@/lib/field";
+import { uploadErrorResponse } from "@/lib/upload-error";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -67,6 +68,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Field photo upload failed:", error);
-    return NextResponse.json({ error: "Photo upload failed." }, { status: 500 });
+    return uploadErrorResponse(error);
   }
 }
