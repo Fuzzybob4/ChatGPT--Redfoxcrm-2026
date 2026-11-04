@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Upload, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { compressImage } from "@/lib/compress-image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -31,7 +32,7 @@ export function PropertyPhotoUploader({
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", await compressImage(file));
       formData.append("propertyId", propertyId);
       formData.append("customerId", customerId);
 
@@ -91,7 +92,7 @@ export function PropertyPhotoUploader({
               <p className="text-sm font-medium text-foreground">
                 {isUploading ? "Uploading..." : "Click to upload photo"}
               </p>
-              <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB</p>
+              <p className="text-xs text-muted-foreground">PNG, JPG, or HEIC · resized automatically</p>
             </div>
           </div>
           <input

@@ -1,6 +1,7 @@
-import { put } from "@vercel/blob";
+import { uploadPhoto } from "@/lib/photo-storage";
 import { type NextRequest, NextResponse } from "next/server";
 import { getAccessibleJob, getFieldContext } from "@/lib/field";
+import { uploadErrorResponse } from "@/lib/upload-error";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -33,15 +34,13 @@ export async function POST(request: NextRequest) {
     const uploadedBy = org.userId;
 
     if (job.propertyId) {
-      const blob = await put(`properties/${job.propertyId}/photos/${Date.now()}-${safeName}`, file, {
-        access: "private",
-      });
+      const photoUrl = await uploadPhoto(`properties/${job.propertyId}/${Date.now()}-${safeName}`, file);
       const { error } = await admin.from("property_photos").insert({
         property_id: job.propertyId,
         customer_id: job.customerId,
         org_id: org.orgId,
         location_id: raw.location_id ?? null,
-        photo_url: blob.pathname,
+        photo_url: photoUrl,
         file_size: file.size,
         photo_type: file.type,
         description,
@@ -49,13 +48,11 @@ export async function POST(request: NextRequest) {
       });
       if (error) return NextResponse.json({ error: "Could not save the photo." }, { status: 500 });
     } else {
-      const blob = await put(`customers/${job.customerId}/photos/${Date.now()}-${safeName}`, file, {
-        access: "private",
-      });
+      const photoUrl = await uploadPhoto(`customers/${job.customerId}/${Date.now()}-${safeName}`, file);
       const { error } = await admin.from("customer_photos").insert({
         customer_id: job.customerId,
         org_id: org.orgId,
-        photo_url: blob.pathname,
+        photo_url: photoUrl,
         file_size: file.size,
         photo_type: "Installation",
         description,
@@ -67,6 +64,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Field photo upload failed:", error);
-    return NextResponse.json({ error: "Photo upload failed." }, { status: 500 });
+    return uploadErrorResponse(error);
   }
 }

@@ -1,4 +1,4 @@
-import { del } from '@vercel/blob';
+import { deletePhoto } from '@/lib/photo-storage';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -32,8 +32,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Delete from Blob using the pathname
-    await del(pathname);
+    await deletePhoto(pathname);
 
     return NextResponse.json({ success: true });
   } catch (error) {

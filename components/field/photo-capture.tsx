@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2 } from "lucide-react";
+import { compressImage } from "@/lib/compress-image";
 
 export function PhotoCapture({ jobId }: { jobId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -17,7 +18,7 @@ export function PhotoCapture({ jobId }: { jobId: string }) {
     let failed = 0;
     for (const file of Array.from(files)) {
       const body = new FormData();
-      body.append("file", file);
+      body.append("file", await compressImage(file));
       body.append("jobId", jobId);
       const res = await fetch("/api/field/photo", { method: "POST", body });
       if (!res.ok) failed += 1;

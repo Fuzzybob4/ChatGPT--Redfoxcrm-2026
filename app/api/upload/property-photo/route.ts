@@ -1,6 +1,7 @@
-import { put } from '@vercel/blob';
+import { safeFileName, uploadPhoto } from '@/lib/photo-storage';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { uploadErrorResponse } from '@/lib/upload-error';
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,14 +47,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unable to resolve organization for property' }, { status: 400 });
     }
 
-    // Generate a unique filename with property ID and timestamp
-    const timestamp = Date.now();
-    const filename = `properties/${propertyId}/photos/${timestamp}-${file.name}`;
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'Only images can be uploaded' }, { status: 400 });
+    }
 
-    // Upload to Blob with private access
-    const blob = await put(filename, file, {
-      access: 'private',
-    });
+    const photoUrl = await uploadPhoto(
+      `properties/${propertyId}/${Date.now()}-${safeFileName(file.name)}`,
+      file,
+    );
 
     // Save photo metadata to database
     const { data: photoData, error: insertError } = await supabase
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         customer_id: customerId,
         org_id: orgId,
         location_id: property.location_id,
-        photo_url: blob.pathname,
+        photo_url: photoUrl,
         file_size: file.size,
         photo_type: file.type,
         description: '',
@@ -81,16 +82,13 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      pathname: blob.pathname,
+      pathname: photoUrl,
       filename: file.name,
       photoId: photoData.id,
       uploadedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error('Photo upload error:', error);
-    return NextResponse.json(
-      { error: 'Photo upload failed' },
-      { status: 500 }
-    );
+    return uploadErrorResponse(error);
   }
 }
