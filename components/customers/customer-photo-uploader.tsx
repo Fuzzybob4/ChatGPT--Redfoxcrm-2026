@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { compressImage } from '@/lib/compress-image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,8 +32,9 @@ export function CustomerPhotoUploader({
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB');
+    // Photos are shrunk before upload, so large originals are fine.
+    if (file.size > 30 * 1024 * 1024) {
+      setError('File size must be less than 30MB');
       return;
     }
 
@@ -52,7 +54,7 @@ export function CustomerPhotoUploader({
 
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append('file', await compressImage(selectedFile));
       formData.append('customerId', customerId);
       formData.append('photoType', photoType);
       formData.append('description', description);
@@ -146,7 +148,7 @@ export function CustomerPhotoUploader({
                 Drop image here or click to upload
               </div>
               <div className="text-xs text-muted-foreground">
-                PNG, JPG, GIF up to 10MB
+                PNG, JPG, or HEIC · resized automatically
               </div>
             </div>
           )}
