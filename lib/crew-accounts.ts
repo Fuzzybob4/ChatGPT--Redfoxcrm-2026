@@ -111,6 +111,16 @@ export async function sendEmployeeLoginInvite(
   if (error) {
     const alreadyRegistered = /already (been )?registered|already exists/i.test(error.message);
     if (alreadyRegistered) return { success: true, existingAccount: true };
+    console.error("[crew-invite] inviteUserByEmail failed:", error.message);
+    if (/rate limit/i.test(error.message)) {
+      return { error: "Too many emails sent recently. Wait a few minutes and try again." };
+    }
+    if (/smtp|send email|not authorized|unexpected_failure/i.test(error.message) || error.status === 500) {
+      return {
+        error:
+          "The email service rejected this invite. The sender address in your Supabase SMTP settings must use a verified domain (e.g. no-reply@redfoxcrm.com).",
+      };
+    }
     return { error: "Could not send the invite email. Please try again." };
   }
 
