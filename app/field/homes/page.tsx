@@ -7,6 +7,6 @@ export default async function FieldHomesPage() {
   const { org, employee, canManageWorkOrders } = await getFieldContext();
   if (!canManageWorkOrders) return <NotAllowed />;
 
-  const homes = await getLeadHomes(org.orgId, employee?.locationId ?? null);
+  const homes = await getLeadHomes(org.orgId, employee?.locationId ?? null, employee?.id ?? null);
   return <HomesView homes={homes} />;
 }

@@ -13,6 +13,7 @@ export interface HomeWorkOrder {
   scheduledDate: string;
   startTime: string | null;
   crewCount: number;
+  assignedToMe: boolean;
 }
 
 export interface FieldHome {
@@ -36,7 +37,11 @@ const OPEN = ["scheduled", "en_route", "in_progress"];
 
 const joinAddress = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(", ");
 
-export async function getLeadHomes(orgId: string, locationId: string | null): Promise<FieldHome[]> {
+export async function getLeadHomes(
+  orgId: string,
+  locationId: string | null,
+  employeeId: string | null = null,
+): Promise<FieldHome[]> {
   const admin = createAdminClient();
 
   let customerQuery = admin
@@ -83,6 +88,8 @@ export async function getLeadHomes(orgId: string, locationId: string | null): Pr
       scheduledDate: j.scheduled_date ?? "",
       startTime: j.start_time ?? null,
       crewCount: Array.isArray(j.assigned_employees) ? j.assigned_employees.length : 0,
+      assignedToMe:
+        employeeId != null && Array.isArray(j.assigned_employees) && j.assigned_employees.includes(employeeId),
     });
     openByCustomer.set(j.customer_id, list);
   }

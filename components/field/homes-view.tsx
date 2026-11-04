@@ -12,11 +12,21 @@ import { HomeCard } from "./home-card";
 
 const STAGES: LeadStage[] = ["pending_install", "pending_removal", "removed"];
 
-export function HomesView({ homes }: { homes: FieldHome[] }) {
+export function HomesView({
+  homes,
+  title = "Homes",
+  defaultView = "list",
+  canManage = true,
+}: {
+  homes: FieldHome[];
+  title?: string;
+  defaultView?: "list" | "map";
+  canManage?: boolean;
+}) {
   const [stage, setStage] = useState<LeadStage>(() =>
     homes.some((h) => h.stage === "pending_install") ? "pending_install" : (homes[0]?.stage ?? "pending_install"),
   );
-  const [view, setView] = useState<"list" | "map">("list");
+  const [view, setView] = useState<"list" | "map">(defaultView);
   const [query, setQuery] = useState("");
 
   const counts = useMemo(() => {
@@ -36,7 +46,7 @@ export function HomesView({ homes }: { homes: FieldHome[] }) {
     <div className="flex flex-1 flex-col gap-4 pt-5">
       <div className="flex items-start justify-between gap-3 px-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Homes</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
           <p className="text-sm text-muted-foreground text-pretty">{LIFECYCLE_META[stage].description}</p>
         </div>
         <div role="tablist" aria-label="View" className="flex shrink-0 rounded-lg border border-border bg-muted p-0.5">
@@ -105,7 +115,7 @@ export function HomesView({ homes }: { homes: FieldHome[] }) {
       )}
 
       {view === "map" ? (
-        <HomesMap homes={visible} />
+        <HomesMap homes={visible} canManage={canManage} />
       ) : visible.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           {query ? "No homes match that search." : `No homes are ${LIFECYCLE_META[stage].label.toLowerCase()} right now.`}
@@ -114,7 +124,7 @@ export function HomesView({ homes }: { homes: FieldHome[] }) {
         <ul className="flex flex-col gap-3 px-4 pb-6">
           {visible.map((home) => (
             <li key={home.customerId}>
-              <HomeCard home={home} />
+              <HomeCard home={home} canManage={canManage} />
             </li>
           ))}
         </ul>
