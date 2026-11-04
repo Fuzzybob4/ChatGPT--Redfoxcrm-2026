@@ -9,7 +9,7 @@ import type { FieldHome } from "@/lib/field-homes";
 import { LIFECYCLE_META } from "@/lib/lifecycle";
 import { HomeCard } from "./home-card";
 
-export function HomesMap({ homes }: { homes: FieldHome[] }) {
+export function HomesMap({ homes, canManage = true }: { homes: FieldHome[]; canManage?: boolean }) {
   const [selected, setSelected] = useState<FieldHome | null>(null);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const mapped = useMemo(() => homes.filter((h) => h.lat != null && h.lng != null), [homes]);
@@ -84,7 +84,7 @@ export function HomesMap({ homes }: { homes: FieldHome[] }) {
               maxWidth="320px"
             >
               <div className="w-72 p-1 font-sans">
-                <HomeCard home={selected} compact />
+                <HomeCard home={selected} compact canManage={canManage} />
               </div>
             </Popup>
           )}
