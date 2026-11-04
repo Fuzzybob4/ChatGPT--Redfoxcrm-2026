@@ -7,8 +7,8 @@ const toHHMM = (t: string | null) => (t ? t.slice(0, 5) : "");
 
 export default async function EditFieldWorkOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, employee, canManageWorkOrders } = await getFieldContext();
-  if (!canManageWorkOrders) return <NotAllowed />;
+  const { org, employee, canEditWorkOrders } = await getFieldContext();
+  if (!canEditWorkOrders) return <NotAllowed />;
 
   const [access, crew] = await Promise.all([
     getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, true),

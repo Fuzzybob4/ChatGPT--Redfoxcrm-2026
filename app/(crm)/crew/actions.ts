@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
-import { sendEmployeeLoginInvite } from "@/lib/crew-accounts";
+import { membershipRoleFor, sendEmployeeLoginInvite } from "@/lib/crew-accounts";
 
 export async function inviteEmployee(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -142,30 +142,173 @@ export async function addEmployee(formData: FormData) {
 
 export async function updateEmployeeAccess(
   employeeId: string,
-  field: "can_access_work_orders" | "can_access_mapping" | "is_active",
+  field: "can_access_work_orders" | "can_access_mapping",
   value: boolean
 ) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  if (field !== "can_access_work_orders" && field !== "can_access_mapping") {
+    return { error: "Unknown setting." };
+  }
+  const org = await requireOffice();
+  if (!org) return { error: "Only owners, admins, and managers can change crew access." };
+
+  const { error } = await createAdminClient()
     .from("employees")
     .update({ [field]: value })
-    .eq("id", employeeId);
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: "Couldn't update access. Please try again." };
 
   revalidatePath("/crew");
   return { success: true };
 }
 
-export async function removeEmployee(employeeId: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("employees")
-    .update({ is_active: false })
-    .eq("id", employeeId);
+const ROLE_VALUES = new Set([
+  "technician",
+  "crew_lead",
+  "installer",
+  "driver",
+  "manager",
+  "supervisor",
+  "sales",
+  "office",
+]);
 
-  if (error) return { error: error.message };
+export interface EmployeeUpdateInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  position: string;
+  crewName: string;
+  role: string;
+}
+
+export async function updateEmployee(employeeId: string, input: EmployeeUpdateInput) {
+  const org = await requireOffice();
+  if (!org) return { error: "Only owners, admins, and managers can edit crew members." };
+
+  const firstName = input.firstName.trim().slice(0, 80);
+  const lastName = input.lastName.trim().slice(0, 80);
+  const email = input.email.trim().toLowerCase().slice(0, 254);
+  const phone = input.phone.trim().slice(0, 40);
+  const position = input.position.trim().slice(0, 80);
+  const crewName = input.crewName.trim().slice(0, 80);
+  const role = input.role.trim();
+
+  if (!firstName || !lastName) return { error: "First and last name are required." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
+  if (!ROLE_VALUES.has(role)) return { error: "Pick a role." };
+
+  const admin = createAdminClient();
+  const { data: employee } = await admin
+    .from("employees")
+    .select("id, email, user_id")
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!employee) return { error: "Crew member not found." };
+
+  // A connected login is tied to its email, so it can't be changed from here.
+  if (employee.user_id && email !== (employee.email ?? "").toLowerCase()) {
+    return { error: "This person already signs in with their email, so it can't be changed here." };
+  }
+
+  if (email !== (employee.email ?? "").toLowerCase()) {
+    const { data: duplicate } = await admin
+      .from("employees")
+      .select("id")
+      .eq("org_id", org.orgId)
+      .eq("email", email)
+      .neq("id", employeeId)
+      .maybeSingle();
+    if (duplicate) return { error: "Another crew member already uses that email." };
+  }
+
+  const { error } = await admin
+    .from("employees")
+    .update({
+      first_name: firstName,
+      last_name: lastName,
+      full_name: `${firstName} ${lastName}`,
+      email,
+      phone: phone || null,
+      position: position || null,
+      crew_name: crewName || null,
+      role,
+    })
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId);
+  if (error) return { error: "Couldn't save changes. Please try again." };
+
+  // Keep their app access in step with the role (never touch an owner/admin).
+  if (employee.user_id) {
+    await admin
+      .from("user_memberships")
+      .update({ role: membershipRoleFor(role) })
+      .eq("user_id", employee.user_id)
+      .eq("org_id", org.orgId)
+      .in("role", ["manager", "crew"]);
+  }
 
   revalidatePath("/crew");
+  revalidatePath("/field", "layout");
+  return { success: true };
+}
+
+/**
+ * Remove someone from the business: they lose access immediately (their
+ * membership is deleted) and the employee record is kept, inactive, so past
+ * jobs and time entries still show who did the work.
+ */
+export async function removeEmployee(employeeId: string) {
+  const org = await requireOffice();
+  if (!org) return { error: "Only owners, admins, and managers can remove crew members." };
+
+  const admin = createAdminClient();
+  const { data: employee } = await admin
+    .from("employees")
+    .select("id, user_id, invite_accepted_at")
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!employee) return { error: "Crew member not found." };
+
+  if (employee.user_id) {
+    const { data: membership } = await admin
+      .from("user_memberships")
+      .select("role")
+      .eq("user_id", employee.user_id)
+      .eq("org_id", org.orgId)
+      .maybeSingle();
+    if (membership?.role === "owner") return { error: "The business owner can't be removed." };
+  }
+
+  // Setting invite_accepted_at on an inactive record stops the email from being
+  // re-linked to the business on a later sign-in.
+  const { error } = await admin
+    .from("employees")
+    .update({
+      is_active: false,
+      can_access_work_orders: false,
+      can_access_mapping: false,
+      invite_accepted_at: employee.invite_accepted_at ?? new Date().toISOString(),
+    })
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId);
+  if (error) return { error: "Couldn't remove this crew member. Please try again." };
+
+  if (employee.user_id) {
+    const { error: membershipError } = await admin
+      .from("user_memberships")
+      .delete()
+      .eq("user_id", employee.user_id)
+      .eq("org_id", org.orgId)
+      .neq("role", "owner");
+    if (membershipError) return { error: "Removed from the crew list, but their access couldn't be revoked. Please try again." };
+  }
+
+  revalidatePath("/crew");
+  revalidatePath("/jobs");
   return { success: true };
 }

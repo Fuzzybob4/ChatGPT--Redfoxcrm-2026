@@ -10,7 +10,7 @@ import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel } fro
 
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, employee, admin, canManageWorkOrders } = await getFieldContext();
+  const { org, employee, admin, canManageWorkOrders, canEditWorkOrders } = await getFieldContext();
 
   const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, canManageWorkOrders);
   if (!access) notFound();
@@ -74,7 +74,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
             <ArrowLeft className="size-4" aria-hidden="true" />
             {assigned || !canManageWorkOrders ? "My jobs" : "Homes"}
           </Link>
-          {canManageWorkOrders && job.status !== "completed" && job.status !== "cancelled" && (
+          {canEditWorkOrders && job.status !== "completed" && job.status !== "cancelled" && (
             <Link
               href={`/field/jobs/${job.id}/edit`}
               className="-mr-2 flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-primary"
