@@ -1,66 +1,116 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import type { EmailOtpType } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+
+/** Only allow same-site relative redirects. */
+function safeNext(next: string | null, fallback: string) {
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : fallback
+}
+
+function friendlyError(code: string | null, description: string | null) {
+  if (code === 'otp_expired' || /expired|invalid/i.test(description ?? '')) {
+    return 'This link has expired or was already used. Ask your manager to resend the invite from the Crew page, then open the newest email.'
+  }
+  return description?.replace(/\+/g, ' ') || 'We could not verify this link. Ask your manager to resend the invite.'
+}
 
 export default function AuthConfirmPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const ran = useRef(false)
+
+  const next = safeNext(searchParams.get('next'), '/admin/setup')
+  const isCrewLink = next.startsWith('/crew-setup')
 
   useEffect(() => {
-    const handleAuthCallback = async () => {
+    if (ran.current) return
+    ran.current = true
+
+    const verify = async () => {
+      const supabase = createClient()
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+
+      // Supabase reports failures (e.g. a link already opened by an email scanner) in the hash or query.
+      const errCode = hash.get('error_code') ?? searchParams.get('error_code')
+      const errDesc = hash.get('error_description') ?? searchParams.get('error_description')
+      if (errCode || hash.get('error') || searchParams.get('error')) {
+        setError(friendlyError(errCode, errDesc))
+        return
+      }
+
       try {
-        const supabase = createClient()
-        
-        // Check if there's a session after Supabase parsed the hash
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (sessionError) throw sessionError
-        
-        if (session) {
-          // Successfully authenticated — redirect to admin setup or next page
-          const next = searchParams.get('next') ?? '/admin/setup'
-          router.push(next)
-        } else {
-          setError('No session found. The link may have expired.')
-          setLoading(false)
+        const accessToken = hash.get('access_token')
+        const refreshToken = hash.get('refresh_token')
+        const code = searchParams.get('code')
+        const tokenHash = searchParams.get('token_hash')
+        const type = searchParams.get('type') as EmailOtpType | null
+
+        if (accessToken && refreshToken) {
+          // Invite and magic links from Supabase deliver tokens in the URL fragment.
+          // The PKCE browser client won't read these automatically, so set the session explicitly.
+          const { error: e } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          if (e) throw e
+        } else if (code) {
+          const { error: e } = await supabase.auth.exchangeCodeForSession(code)
+          if (e) throw e
+        } else if (tokenHash && type) {
+          const { error: e } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+          if (e) throw e
         }
+
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          setError(friendlyError('otp_expired', null))
+          return
+        }
+
+        // Drop tokens from the address bar before moving on.
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        router.replace(next)
       } catch (err) {
-        console.error('[v0] Auth confirm error:', err)
-        setError(err instanceof Error ? err.message : 'An error occurred during authentication')
-        setLoading(false)
+        console.error('Auth confirm error:', err)
+        setError(friendlyError(null, err instanceof Error ? err.message : null))
       }
     }
 
-    handleAuthCallback()
-  }, [router, searchParams])
+    verify()
+  }, [router, searchParams, next])
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Authentication Error</h1>
-          <p className="text-muted-foreground mb-6">{error}</p>
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+          <h1 className="text-balance text-2xl font-bold text-foreground">{"We couldn't open this link"}</h1>
+          <p className="text-pretty leading-relaxed text-muted-foreground">{error}</p>
           <a
-            href="/admin"
-            className="inline-block bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded transition"
+            href={isCrewLink ? '/login' : '/admin'}
+            className="inline-flex min-h-11 items-center rounded-lg bg-primary px-6 font-medium text-primary-foreground transition hover:bg-primary/90"
           >
-            Return to Admin Login
+            {isCrewLink ? 'Go to sign in' : 'Return to Admin Login'}
           </a>
+          {isCrewLink && (
+            <p className="text-sm text-muted-foreground">
+              Already set a password? Sign in with your email and password.
+            </p>
+          )}
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="max-w-md w-full text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-        <p className="text-muted-foreground">Verifying your identity...</p>
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="flex flex-col items-center gap-4 text-center" role="status">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-muted border-t-primary" aria-hidden="true" />
+        <p className="text-muted-foreground">Verifying your invite...</p>
       </div>
-    </div>
+    </main>
   )
 }
