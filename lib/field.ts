@@ -70,7 +70,10 @@ export async function getFieldContext() {
 
   const canManageWorkOrders = OFFICE_ROLES.includes(org.role) || Boolean(fieldEmployee?.canManageWorkOrders);
 
-  return { org, employee: fieldEmployee, admin, canManageWorkOrders };
+  /** Editing or cancelling an existing work order is reserved for the owner and office managers. */
+  const canEditWorkOrders = OFFICE_ROLES.includes(org.role);
+
+  return { org, employee: fieldEmployee, admin, canManageWorkOrders, canEditWorkOrders };
 }
 
 type JobRow = Record<string, any>;

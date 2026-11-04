@@ -24,7 +24,7 @@ export function HomeCard({ home, compact = false }: { home: FieldHome; compact?:
           {home.openWorkOrders.map((wo) => (
             <li key={wo.id}>
               <Link
-                href={`/field/jobs/${wo.id}/edit`}
+                href={`/field/jobs/${wo.id}`}
                 className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-muted px-3 text-sm"
               >
                 <span className="min-w-0 truncate text-foreground">
@@ -36,7 +36,7 @@ export function HomeCard({ home, compact = false }: { home: FieldHome; compact?:
                     wo.crewCount === 0 ? "text-primary" : "text-muted-foreground",
                   )}
                 >
-                  {wo.crewCount === 0 ? "No crew · Update" : "Update"}
+                  {wo.crewCount === 0 ? "No crew · View" : "View"}
                 </span>
               </Link>
             </li>

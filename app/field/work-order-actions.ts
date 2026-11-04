@@ -25,6 +25,14 @@ async function requireManager() {
   return { ok: true as const, ...ctx };
 }
 
+async function requireOffice() {
+  const ctx = await getFieldContext();
+  if (!ctx.canEditWorkOrders) {
+    return { ok: false as const, error: "Only the owner or a manager can change or cancel a work order." };
+  }
+  return { ok: true as const, ...ctx };
+}
+
 async function validate(input: WorkOrderInput, orgId: string, admin: Awaited<ReturnType<typeof getFieldContext>>["admin"]) {
   if (!(input.jobType in TYPE_LABEL)) return "Pick a work order type.";
   if (!DATE_RE.test(input.scheduledDate)) return "Pick a date.";
@@ -98,7 +106,7 @@ export async function createFieldWorkOrder(customerId: string, input: WorkOrderI
 }
 
 export async function updateFieldWorkOrder(jobId: string, input: WorkOrderInput): Promise<Result> {
-  const ctx = await requireManager();
+  const ctx = await requireOffice();
   if (!ctx.ok) return { error: ctx.error };
   const { org, admin } = ctx;
 
@@ -129,7 +137,7 @@ export async function updateFieldWorkOrder(jobId: string, input: WorkOrderInput)
 }
 
 export async function cancelFieldWorkOrder(jobId: string): Promise<Result> {
-  const ctx = await requireManager();
+  const ctx = await requireOffice();
   if (!ctx.ok) return { error: ctx.error };
   const { org, admin } = ctx;
 
