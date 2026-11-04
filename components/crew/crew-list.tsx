@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Mail, HardHat, Map, UserX } from "lucide-react";
+import { Plus, Mail, HardHat, Map } from "lucide-react";
+import { CrewMemberActions, CREW_ROLES } from "@/components/crew/crew-member-actions";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,12 +37,14 @@ import {
   inviteEmployee,
   sendLoginInvite,
   updateEmployeeAccess,
-  removeEmployee,
 } from "@/app/(crm)/crew/actions";
 
 export interface CrewMember {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
+  role: string;
   email: string;
   phone: string;
   position: string;
@@ -84,17 +87,6 @@ function AccessToggle({
   );
 }
 
-const CREW_ROLES = [
-  { value: "technician", label: "Technician" },
-  { value: "crew_lead", label: "Crew Lead" },
-  { value: "installer", label: "Installer" },
-  { value: "driver", label: "Driver" },
-  { value: "manager", label: "Manager" },
-  { value: "supervisor", label: "Supervisor" },
-  { value: "sales", label: "Sales" },
-  { value: "office", label: "Office Staff" },
-];
-
 export function CrewList({ members }: { members: CrewMember[] }) {
   const [open, setOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -136,12 +128,6 @@ export function CrewList({ members }: { members: CrewMember[] }) {
           isError: false,
         });
       }
-    });
-  }
-
-  function handleRemove(id: string) {
-    startTransition(async () => {
-      await removeEmployee(id);
     });
   }
 
@@ -412,17 +398,8 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                     />
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={isPending}
-                    onClick={() => handleRemove(m.id)}
-                    aria-label={`Deactivate ${m.name}`}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <UserX className="w-4 h-4" />
-                  </Button>
+                <TableCell className="px-1">
+                  <CrewMemberActions member={m} />
                 </TableCell>
               </TableRow>
             ))}
