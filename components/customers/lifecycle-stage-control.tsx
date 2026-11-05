@@ -21,7 +21,7 @@ import {
 } from "@/lib/lifecycle";
 import { cn } from "@/lib/utils";
 
-const SEASONAL_STAGES = ["installed", "pending_removal", "removed"] as const;
+const SEASONAL_STAGES = ["pending_install", "installed", "pending_removal", "removed"] as const;
 
 interface Props {
   customerId: string;

@@ -45,7 +45,7 @@ export const LIFECYCLE_META: Record<LifecycleStatus, LifecycleMeta> = {
   pending_install: {
     label: "Pending Install",
     color: "#f59e0b",
-    description: "Deposit paid — awaiting installation",
+    description: "Approved — awaiting installation",
   },
   scheduled: {
     label: "Scheduled",
@@ -97,6 +97,7 @@ export type ManualDisposition = (typeof MANUAL_DISPOSITIONS)[number];
 // Values a team member may set manually. `null` returns the customer to
 // fully automatic stage tracking.
 export const MANUAL_STAGE_OPTIONS = [
+  "pending_install",
   "installed",
   "pending_removal",
   "removed",
@@ -162,7 +163,8 @@ export function deriveLifecycleStatus(input: {
     .pop();
   if (lastRemovalDate !== undefined) {
     const newSeasonStarted = installJobs.some((j) => (j.date ?? "") > lastRemovalDate);
-    if (!newSeasonStarted) return "removed";
+    // A manual "pending install" on a removed customer signs them up for a new season.
+    if (!newSeasonStarted && raw !== "pending_install") return "removed";
   }
 
   const currentInstallJobs =
@@ -186,7 +188,8 @@ export function deriveLifecycleStatus(input: {
   if (anyScheduledWithCrew) return "scheduled";
 
   // A deposit or full payment means the customer is committed and waiting on us.
-  if (hasPaidInvoice || hasDepositPaid) return "pending_install";
+  // Manual "pending install" holds until a crew is scheduled or the install completes.
+  if (hasPaidInvoice || hasDepositPaid || raw === "pending_install") return "pending_install";
   if (hasUnpaidInvoice) return "pending_payment";
 
   return "lead";
