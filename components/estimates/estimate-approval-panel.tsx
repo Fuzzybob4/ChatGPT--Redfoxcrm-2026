@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { CheckCircle2, Copy, Eye, Link2, MessageSquare, Send, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Eye, Link2, Mail, MessageSquare, Send, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  emailEstimateToCustomer,
   getEstimateApprovalInfo,
   markEstimateAccepted,
   shareEstimate,
@@ -21,6 +22,7 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
   const [deposit, setDeposit] = useState("50");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -50,6 +52,16 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
       await navigator.clipboard?.writeText(link).catch(() => undefined);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      onChanged?.();
+    });
+  }
+
+  function emailIt() {
+    setNotice(null);
+    run(async () => {
+      const { to } = await emailEstimateToCustomer(estimateId, Number(deposit));
+      setInfo(await getEstimateApprovalInfo(estimateId));
+      setNotice(`Emailed to ${to}.`);
       onChanged?.();
     });
   }
@@ -114,7 +126,7 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
           </div>
         )}
 
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label htmlFor="deposit" className="text-xs">Deposit at approval</Label>
             <div className="flex items-center gap-1">
@@ -130,7 +142,12 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
               <span className="text-sm text-muted-foreground">%</span>
             </div>
           </div>
-          <Button onClick={createLink} disabled={pending} className="gap-2">
+          {info.customerEmail && (
+            <Button onClick={emailIt} disabled={pending} className="gap-2">
+              <Mail className="size-4" /> Email to customer
+            </Button>
+          )}
+          <Button onClick={createLink} disabled={pending} variant={info.customerEmail ? "outline" : "default"} className="gap-2">
             {copied ? <CheckCircle2 className="size-4" /> : <Link2 className="size-4" />}
             {copied ? "Link copied" : info.link ? "Update & copy link" : "Create & copy link"}
           </Button>
@@ -170,6 +187,7 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
             Customer said yes by phone? Mark as accepted
           </Button>
         </div>
+        {notice && <p className="text-sm text-emerald-700">{notice}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>

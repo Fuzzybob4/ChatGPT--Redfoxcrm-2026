@@ -1,132 +1,88 @@
-import { NextResponse } from 'next/server';
-import { getPendingEmailReminders, markReminderAsSent, markReminderAsFailed } from '@/app/(crm)/invoices/billing-actions';
-import { getOrCreatePortalToken } from '@/app/(crm)/customers/portal-actions';
-import { sendEmail } from '@/lib/email/resend';
-import { renderInvoiceReminderEmail } from '@/lib/email-templates/invoice-reminders-html';
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isEmailConfigured } from "@/lib/email/resend";
+import { sendInvoiceEmail, type TransactionalKind } from "@/lib/email/transactional";
 
-function getPortalBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-  );
+export const maxDuration = 300;
+
+/**
+ * Daily friendly payment reminders.
+ *
+ * For each business with reminders on (organizations.invoice_reminders_enabled),
+ * unpaid invoices sent on or after REMINDERS_START get:
+ *   - due_soon   3 days before the due date
+ *   - overdue_1  1 day after the due date
+ *   - overdue_2  8 days after
+ *   - overdue_3  15 days after (last one)
+ * Each kind goes out at most once per invoice (unique index on the log).
+ * Customers who opted out, or with no email, are skipped.
+ */
+const REMINDERS_START = "2026-11-08";
+const DAY = 24 * 60 * 60 * 1000;
+
+function dueKind(dueDate: string, now: Date): TransactionalKind | null {
+  const due = new Date(`${dueDate}T12:00:00`).getTime();
+  const days = Math.floor((now.getTime() - due) / DAY);
+  if (days >= -3 && days < 0) return "due_soon";
+  if (days >= 15) return "overdue_3";
+  if (days >= 8) return "overdue_2";
+  if (days >= 1) return "overdue_1";
+  return null;
 }
 
 export async function GET(request: Request) {
-  // Verify this is a valid cron request
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!process.env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isEmailConfigured()) {
+    return NextResponse.json({ skipped: "RESEND_API_KEY is not set" });
   }
 
-  try {
-    const reminders = await getPendingEmailReminders();
-    const results = { sent: 0, failed: 0, errors: [] as string[] };
+  const db = createAdminClient();
+  const now = new Date();
+  const started = Date.now();
 
-    for (const reminder of reminders) {
-      try {
-        // Get email template based on reminder type
-        let emailSubject = '';
-        let daysPastDue = 0;
+  const { data: orgs } = await db.from("organizations").select("id").eq("invoice_reminders_enabled", true);
+  const orgIds = (orgs ?? []).map((o) => o.id);
+  if (orgIds.length === 0) return NextResponse.json({ sent: 0 });
 
-        // Generate (or reuse) this customer's portal link so the reminder
-        // email can send them straight to their invoice, where they can also
-        // add any optional extras the business has enabled.
-        let paymentLink: string | undefined;
-        try {
-          const portalToken = await getOrCreatePortalToken(reminder.customer_id);
-          paymentLink = `${getPortalBaseUrl()}/customer-portal/${portalToken}`;
-        } catch (linkError) {
-          console.error('[v0] Failed to generate portal link for reminder:', linkError);
-        }
+  const { data: invoices, error } = await db
+    .from("invoices")
+    .select("id, org_id, due_date, total_amount, amount_paid, status")
+    .in("org_id", orgIds)
+    .in("status", ["sent", "viewed", "overdue"])
+    .not("due_date", "is", null)
+    .gte("sent_at", REMINDERS_START)
+    .limit(2000);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-        const invoiceData = {
-          customerName: reminder.customers?.name || 'Valued Customer',
-          invoiceNumber: reminder.invoices?.invoice_number || 'Unknown',
-          invoiceAmount: `$${reminder.invoices?.total_amount || 0}`,
-          dueDate: reminder.invoices?.due_date 
-            ? new Date(reminder.invoices.due_date).toLocaleDateString()
-            : 'TBD',
-          companyName: reminder.organizations?.name || 'Our Company',
-          companyEmail: reminder.organizations?.email || 'billing@company.com',
-          paymentLink,
-        };
+  const candidates = (invoices ?? [])
+    .map((i) => ({ ...i, kind: dueKind(i.due_date as string, now) }))
+    .filter((i) => i.kind && Number(i.total_amount ?? 0) - Number(i.amount_paid ?? 0) > 0.005);
 
-        switch (reminder.reminder_type) {
-          case 'invoice_sent':
-            emailSubject = `Invoice ${invoiceData.invoiceNumber} - Payment Due`;
-            break;
-          case 'payment_reminder':
-            emailSubject = `Reminder: Invoice ${invoiceData.invoiceNumber} Payment Due Soon`;
-            break;
-          case 'overdue_notice':
-            daysPastDue = Math.floor(
-              (new Date().getTime() - new Date(reminder.invoices?.due_date || new Date()).getTime()) / 
-              (1000 * 60 * 60 * 24)
-            );
-            emailSubject = `URGENT: Invoice ${invoiceData.invoiceNumber} is Overdue`;
-            break;
-        }
+  const ids = candidates.map((c) => c.id);
+  const { data: already } = ids.length
+    ? await db.from("invoice_reminder_log").select("invoice_id, kind").in("invoice_id", ids).eq("status", "sent")
+    : { data: [] as Array<{ invoice_id: string; kind: string }> };
+  const done = new Set((already ?? []).map((r) => `${r.invoice_id}:${r.kind}`));
 
-        if (!emailSubject) {
-          throw new Error(`Unknown reminder type: ${reminder.reminder_type}`);
-        }
-
-        // Render and send email
-        const html = renderInvoiceReminderEmail({
-          type: reminder.reminder_type,
-          data: invoiceData,
-          daysPastDue,
-        });
-        
-        await sendEmail({
-          to: reminder.email_address,
-          subject: emailSubject,
-          html,
-        });
-
-        // Mark as sent
-        await markReminderAsSent(reminder.id);
-        results.sent++;
-        console.log(`[v0] Sent ${reminder.reminder_type} reminder to ${reminder.email_address}`);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        results.failed++;
-        results.errors.push(`Reminder ${reminder.id}: ${errorMessage}`);
-        
-        try {
-          await markReminderAsFailed(reminder.id, errorMessage);
-        } catch (markError) {
-          console.error('[v0] Failed to mark reminder as failed:', markError);
-        }
-        
-        console.error(`[v0] Failed to send reminder ${reminder.id}:`, error);
+  const results = { sent: 0, skipped: 0, failed: 0 };
+  for (const inv of candidates) {
+    if (Date.now() - started > 240_000) break;
+    const key = `${inv.id}:${inv.kind}`;
+    if (done.has(key)) { results.skipped++; continue; }
+    try {
+      await sendInvoiceEmail(db, inv.org_id, inv.id, inv.kind as Exclude<TransactionalKind, "estimate_sent">);
+      results.sent++;
+      if (inv.kind?.startsWith("overdue") && inv.status !== "overdue") {
+        await db.from("invoices").update({ status: "overdue" }).eq("id", inv.id).eq("org_id", inv.org_id);
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("no email") || message.includes("turned off")) results.skipped++;
+      else results.failed++;
     }
-
-    return NextResponse.json({
-      success: true,
-      message: `Processed ${reminders.length} pending reminders`,
-      results,
-    });
-  } catch (error) {
-    console.error('[v0] Error in send-invoice-reminders cron job:', error);
-    return NextResponse.json(
-      {
-        error: 'Failed to process reminders',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  // Allow manual trigger from admin panel
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Delegate to GET handler
-  return GET(request);
+  return NextResponse.json(results);
 }

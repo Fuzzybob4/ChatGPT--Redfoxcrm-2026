@@ -110,3 +110,15 @@ export async function markEstimateAccepted(estimateId: string): Promise<{ invoic
   revalidatePath("/invoices");
   return result;
 }
+
+/** Emails the approval link (creating it first if needed). */
+export async function emailEstimateToCustomer(
+  estimateId: string,
+  depositPercent: number,
+): Promise<{ to: string; link: string }> {
+  const { link } = await shareEstimate(estimateId, depositPercent);
+  const { db, estimate } = await loadOwned(estimateId);
+  const { sendEstimateEmail } = await import("@/lib/email/transactional");
+  const { to } = await sendEstimateEmail(db, estimate.org_id, estimate as any, link);
+  return { to, link };
+}

@@ -31,7 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
-import { saveBusinessProfile } from "@/app/(crm)/settings/actions";
+import { saveBusinessProfile, setInvoiceRemindersEnabled } from "@/app/(crm)/settings/actions";
 import { HubspotIntegration, type HubspotStatus } from "@/components/settings/hubspot-integration";
 
 // Display shape derived from the shared pricing source of truth.
@@ -119,6 +119,7 @@ interface OrganizationSettings {
   stripe_charges_enabled?: boolean | null;
   card_brand?: string | null;
   card_last4?: string | null;
+  invoice_reminders_enabled?: boolean | null;
 }
 
 export interface SettingsContentProps {
@@ -145,6 +146,18 @@ export function SettingsContent({
     new Set<string>(orgData?.active_addons ?? []),
   );
   const [saved, setSaved] = useState(false);
+  const [remindersOn, setRemindersOn] = useState<boolean>(orgData?.invoice_reminders_enabled ?? true);
+  const [remindersError, setRemindersError] = useState<string | null>(null);
+
+  async function toggleReminders(next: boolean) {
+    setRemindersOn(next);
+    setRemindersError(null);
+    const res = await setInvoiceRemindersEnabled(next);
+    if (!res.success) {
+      setRemindersOn(!next);
+      setRemindersError(res.error || "Could not save");
+    }
+  }
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingBusiness, setSavingBusiness] = useState(false);
   const [businessForm, setBusinessForm] = useState({
@@ -348,6 +361,25 @@ export function SettingsContent({
                 </div>
                 <p className="text-xs text-muted-foreground">Document defaults are not enabled for the pilot. Titles, agreements, and notes can still be set on each estimate or invoice.</p>
               </CardContent>
+            </Card>
+
+            {/* Payment reminders */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Bell className="size-4 text-primary" />
+                  Automatic payment reminders
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Friendly emails for unpaid invoices: 3 days before the due date, then 1, 8 and 15 days after.
+                  They come from your business name and replies go to your business email. Customers can opt out.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between gap-4">
+                <p className="text-sm">{remindersOn ? "Reminders are on" : "Reminders are off"}</p>
+                <Switch checked={remindersOn} onCheckedChange={(v) => void toggleReminders(Boolean(v))} aria-label="Automatic payment reminders" />
+              </CardContent>
+              {remindersError && <p className="px-6 pb-4 text-xs text-destructive">{remindersError}</p>}
             </Card>
           </TabsContent>
 

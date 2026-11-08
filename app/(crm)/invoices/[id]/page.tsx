@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useTransition } from "react";
+import { use, useState, useTransition } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, Printer, Download } from "lucide-react";
@@ -19,7 +19,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
-import { updateInvoiceStatus } from "../actions";
+import { sendInvoiceToCustomer } from "../actions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -30,13 +30,25 @@ export default function InvoiceDetailPage({ params }: Props) {
   const { loading, invoices, getCustomerById, refresh } = useData();
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
+  const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  function handleStatusUpdate(status: "sent" | "paid") {
+  function handleSend() {
+    setSendNote(null);
     startTransition(async () => {
-      await updateInvoiceStatus(id, status);
+      try {
+        const res = await sendInvoiceToCustomer(id);
+        setSendNote(
+          res.emailedTo
+            ? { ok: true, text: `Emailed to ${res.emailedTo}.` }
+            : { ok: false, text: `Marked as sent, but not emailed: ${res.emailError}` },
+        );
+      } catch (err) {
+        setSendNote({ ok: false, text: err instanceof Error ? err.message : "Could not send" });
+      }
       await refresh();
     });
   }
+
 
   if (loading) {
     return (
@@ -67,9 +79,15 @@ export default function InvoiceDetailPage({ params }: Props) {
               Back
             </Button>
             {invoice.status === "Draft" && (
-              <Button size="sm" disabled={pending} onClick={() => handleStatusUpdate("sent")}>
+              <Button size="sm" disabled={pending} onClick={handleSend}>
                 <Send className="size-3.5" data-icon="inline-start" />
                 {pending ? "Sending..." : "Send Invoice"}
+              </Button>
+            )}
+            {(invoice.status === "Sent" || invoice.status === "Overdue") && (
+              <Button size="sm" variant="outline" disabled={pending} onClick={handleSend}>
+                <Send className="size-3.5" data-icon="inline-start" />
+                {pending ? "Sending..." : "Email again"}
               </Button>
             )}
             {(invoice.status === "Sent" || invoice.status === "Overdue") && (
@@ -86,6 +104,15 @@ export default function InvoiceDetailPage({ params }: Props) {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-2xl mx-auto">
+          {sendNote && (
+            <p
+              className={`mb-3 rounded-md border px-3 py-2 text-sm ${
+                sendNote.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {sendNote.text}
+            </p>
+          )}
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between gap-4">

@@ -231,6 +231,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   }
 
   console.log(`[stripe-webhook] Invoice ${invoiceId} payment recorded (${amountPaid})`);
+
+  // Best effort: email the customer a receipt. Never fail the webhook over it.
+  try {
+    const { isEmailConfigured } = await import("@/lib/email/resend");
+    if (isEmailConfigured()) {
+      const { sendInvoiceEmail } = await import("@/lib/email/transactional");
+      await sendInvoiceEmail(supabase, orgId, invoiceId, "payment_receipt");
+    }
+  } catch (receiptErr) {
+    console.error(`[stripe-webhook] Receipt email failed for invoice ${invoiceId}:`, receiptErr);
+  }
   return null;
 }
 

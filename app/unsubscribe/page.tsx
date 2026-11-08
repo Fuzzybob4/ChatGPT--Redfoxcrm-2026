@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,9 @@ export default async function UnsubscribePage({
 
   if (email && org) {
     try {
-      const supabase = await createClient();
+      // Visitors here are signed out, so use the server client; the update is
+      // limited to this email within this one business.
+      const supabase = createAdminClient();
       const { error } = await supabase
         .from("customers")
         .update({

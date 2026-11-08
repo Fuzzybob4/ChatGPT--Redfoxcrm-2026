@@ -19,18 +19,51 @@ export function getResendClient(): Resend {
   return new Resend(key);
 }
 
+/** True once RESEND_API_KEY is set in Vercel. */
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+/**
+ * Address every business sends from. Customers see the business's own name
+ * ("Lone Star Lighting Displays <billing@mail.redfoxcrm.com>") and replies go
+ * to the business's email via reply_to.
+ */
+export function defaultFromAddress(): string {
+  return process.env.RESEND_FROM_EMAIL || "billing@mail.redfoxcrm.com";
+}
+
+function cleanDisplayName(name: string): string {
+  return name.replace(/["<>\r\n]/g, "").trim().slice(0, 80) || "Red Fox CRM";
+}
+
 export async function sendEmail({
   to,
   subject,
   html,
-  from = "RedFox CRM <onboarding@resend.dev>",
+  from,
+  fromName,
+  replyTo,
 }: {
   to: string;
   subject: string;
   html: string;
+  /** Full "Name <address>" override. */
   from?: string;
+  /** Display name shown to the customer, usually the business name. */
+  fromName?: string;
+  replyTo?: string | null;
 }) {
-  return getResendClient().emails.send({ from, to, subject, html });
+  const sender = from ?? `${cleanDisplayName(fromName ?? "Red Fox CRM")} <${defaultFromAddress()}>`;
+  const result = await getResendClient().emails.send({
+    from: sender,
+    to,
+    subject,
+    html,
+    ...(replyTo ? { replyTo } : {}),
+  });
+  if (result.error) throw new Error(result.error.message);
+  return result;
 }
 
 // ── Plan quota limits ─────────────────────────────────────────────────────────

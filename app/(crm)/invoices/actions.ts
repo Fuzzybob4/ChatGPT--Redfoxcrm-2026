@@ -364,3 +364,54 @@ export async function updateInvoiceStatus(
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
 }
+
+/**
+ * "Send Invoice": marks the invoice sent and emails it to the customer with a
+ * pay link. If email isn't set up yet (or the customer has no email), the
+ * invoice is still marked sent and the reason is returned for the UI.
+ */
+export async function sendInvoiceToCustomer(
+  invoiceId: string,
+): Promise<{ marked: boolean; emailedTo: string | null; emailError: string | null }> {
+  const parsed = uuidSchema.safeParse(invoiceId);
+  if (!parsed.success) throw new Error("Invalid invoice");
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { sendInvoiceEmail } = await import("@/lib/email/transactional");
+  const db = createAdminClient();
+
+  const { data: current } = await db
+    .from("invoices")
+    .select("status, sent_at")
+    .eq("id", invoiceId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!current) throw new Error("Invoice not found");
+
+  if (current.status === "draft" || !current.sent_at) {
+    const { error } = await db
+      .from("invoices")
+      .update({
+        status: current.status === "draft" ? "sent" : current.status,
+        sent_at: current.sent_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", invoiceId)
+      .eq("org_id", org.orgId);
+    if (error) throw new Error(error.message);
+  }
+
+  let emailedTo: string | null = null;
+  let emailError: string | null = null;
+  try {
+    emailedTo = (await sendInvoiceEmail(db, org.orgId, invoiceId, "invoice_sent")).to;
+  } catch (err) {
+    emailError = err instanceof Error ? err.message : "Email could not be sent";
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  return { marked: true, emailedTo, emailError };
+}

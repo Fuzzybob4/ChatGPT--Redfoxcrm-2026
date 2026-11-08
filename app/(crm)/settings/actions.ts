@@ -50,3 +50,20 @@ export async function saveBusinessProfile(input: BusinessProfileInput) {
   revalidatePath("/", "layout");
   return { success: true };
 }
+
+/** Turns automatic payment reminder emails on or off for the business. */
+export async function setInvoiceRemindersEnabled(enabled: boolean) {
+  const org = await getCurrentOrg();
+  if (!org) return { success: false, error: "Not authenticated" };
+  if (!["owner", "admin"].includes((org.role || "").toLowerCase())) {
+    return { success: false, error: "Only owners and admins can change this" };
+  }
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { error } = await createAdminClient()
+    .from("organizations")
+    .update({ invoice_reminders_enabled: Boolean(enabled) })
+    .eq("id", org.orgId);
+  if (error) return { success: false, error: "Could not save" };
+  revalidatePath("/settings");
+  return { success: true };
+}
