@@ -73,11 +73,11 @@ export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPorta
     }
   }
 
-  async function payInvoice(invoiceId: string) {
-    setPendingPaymentId(invoiceId);
+  async function payInvoice(invoiceId: string, payDeposit = false) {
+    setPendingPaymentId(payDeposit ? `${invoiceId}:deposit` : invoiceId);
     setErrorByInvoice((prev) => ({ ...prev, [invoiceId]: '' }));
     try {
-      const { url } = await createPortalInvoiceCheckout(token, invoiceId);
+      const { url } = await createPortalInvoiceCheckout(token, invoiceId, { payDeposit });
       window.location.assign(url);
     } catch (err) {
       setErrorByInvoice((prev) => ({
@@ -249,9 +249,22 @@ export function CustomerPortalInvoices({ token, initialInvoices }: CustomerPorta
                   <span>Total</span>
                   <span>{formatCurrency(invoice.grandTotal)}</span>
                 </div>
-                {invoice.status !== 'paid' && (
+                {invoice.status !== 'paid' && invoice.depositAmount > invoice.amountPaid && (
                   <Button
                     className="mt-4 w-full"
+                    disabled={pendingPaymentId === `${invoice.id}:deposit`}
+                    onClick={() => payInvoice(invoice.id, true)}
+                  >
+                    <CreditCard className="mr-2 size-4" />
+                    {pendingPaymentId === `${invoice.id}:deposit`
+                      ? 'Opening secure checkout…'
+                      : `Pay deposit ${formatCurrency(invoice.depositAmount - invoice.amountPaid)}`}
+                  </Button>
+                )}
+                {invoice.status !== 'paid' && (
+                  <Button
+                    variant={invoice.depositAmount > invoice.amountPaid ? 'outline' : 'default'}
+                    className="mt-2 w-full"
                     disabled={pendingPaymentId === invoice.id}
                     onClick={() => payInvoice(invoice.id)}
                   >

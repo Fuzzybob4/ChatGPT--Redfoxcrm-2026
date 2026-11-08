@@ -152,13 +152,14 @@ export async function getPortalInvoices(token: string): Promise<PortalInvoice[]>
 export async function createPortalInvoiceCheckout(
   token: string,
   invoiceId: string,
+  options: { payDeposit?: boolean } = {},
 ): Promise<{ url: string }> {
   const customer = await requireCustomerFromToken(token);
   const admin = createAdminClient();
 
   const { data: invoice, error: invoiceError } = await admin
     .from('invoices')
-    .select('id, org_id, customer_id, invoice_number, title, status, total_amount, amount_paid')
+    .select('id, org_id, customer_id, invoice_number, title, status, total_amount, amount_paid, deposit_amount')
     .eq('id', invoiceId)
     .eq('org_id', customer.org_id)
     .eq('customer_id', customer.id)
@@ -181,8 +182,14 @@ export async function createPortalInvoiceCheckout(
   }, 0);
   const orderTotalCents = Math.round((Number(invoice.total_amount) + addonsTotal) * 100);
   const amountPaidCents = Math.round(Number(invoice.amount_paid ?? 0) * 100);
-  const amountDueCents = orderTotalCents - amountPaidCents;
-  if (amountDueCents <= 0) throw new Error('This invoice has no remaining balance');
+  const balanceCents = orderTotalCents - amountPaidCents;
+  if (balanceCents <= 0) throw new Error('This invoice has no remaining balance');
+  // Optionally collect just the remaining deposit (e.g. right after an estimate is approved).
+  const depositCents = Math.round(Number(invoice.deposit_amount ?? 0) * 100);
+  const depositDueCents = Math.max(depositCents - amountPaidCents, 0);
+  const amountDueCents =
+    options.payDeposit && depositDueCents > 0 ? Math.min(depositDueCents, balanceCents) : balanceCents;
+  const isDepositPayment = amountDueCents < balanceCents;
 
   const { data: org, error: orgError } = await admin
     .from('organizations')
@@ -211,7 +218,9 @@ export async function createPortalInvoiceCheckout(
             currency: 'usd',
             product_data: {
               name: `${org.name} — ${invoice.title}`,
-              description: `Invoice ${invoice.invoice_number}`,
+              description: isDepositPayment
+                ? `Deposit for invoice ${invoice.invoice_number}`
+                : `Invoice ${invoice.invoice_number}`,
             },
             unit_amount: amountDueCents,
           },

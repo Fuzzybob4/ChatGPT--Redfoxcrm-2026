@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { ArrowLeft, Download, Mail, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Download, Mail } from 'lucide-react';
+import { EstimateApprovalPanel } from '@/components/estimates/estimate-approval-panel';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   Draft: { label: 'Draft', color: 'bg-gray-100 text-gray-800' },
@@ -22,7 +23,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export default function EstimateDetailPage() {
   const { id } = useParams() as { id: string };
-  const { loading, getEstimateById, getCustomerById } = useData();
+  const { loading, getEstimateById, getCustomerById, refresh } = useData();
   const estimate = getEstimateById(id);
 
   if (loading) {
@@ -65,11 +66,15 @@ export default function EstimateDetailPage() {
               Back
             </Button>
 
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('estimate-approval')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               <Mail className="w-4 h-4 mr-2" />
               Send
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Download className="w-4 h-4 mr-2" />
               PDF
             </Button>
@@ -191,19 +196,10 @@ export default function EstimateDetailPage() {
             </Card>
           )}
 
-          {/* Actions */}
-          {estimate.status === 'Sent' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                <p className="font-semibold text-blue-900">Accept Estimate</p>
-              </div>
-              <p className="text-sm text-blue-800">
-                Once the customer accepts this estimate, it will be converted to a job and invoice.
-              </p>
-              <Button className="bg-blue-600 hover:bg-blue-700">Mark as Accepted</Button>
-            </div>
-          )}
+          {/* Online approval */}
+          <div id="estimate-approval" className="print:hidden">
+            <EstimateApprovalPanel estimateId={estimate.id} onChanged={() => void refresh()} />
+          </div>
         </div>
       </div>
     </div>

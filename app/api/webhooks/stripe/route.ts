@@ -215,7 +215,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
     .from("invoices")
     .update({
       status: isFullyPaid ? "paid" : "sent",
-      payment_state: isFullyPaid ? "paid" : "partial",
+      payment_state: isFullyPaid ? "paid" : "partially_paid",
       amount_paid: newAmountPaidCents / 100,
       amount_paid_cents: newAmountPaidCents,
       balance_due: Math.max(orderTotalCents - newAmountPaidCents, 0) / 100,
