@@ -248,15 +248,17 @@ export async function geocodeMissingCustomers(
     .select("city, state")
     .eq("org_id", orgId)
     .maybeSingle();
-  const { data: sample } = await supabase
+  type SampleRow = { state: string | null; lat: number | null; lng: number | null };
+  const { data: sampleData } = await supabase
     .from("customers")
     .select("state, lat, lng")
     .eq("org_id", orgId)
     .not("state", "is", null)
     .limit(1000);
+  const sample: SampleRow[] = (sampleData ?? []) as SampleRow[];
   const STATE_ALIASES: Record<string, string> = { TEXAS: "TX", TEX: "TX" };
   const stateCounts = new Map<string, number>();
-  for (const r of sample ?? []) {
+  for (const r of sample) {
     const raw = String(r.state ?? "").trim().toUpperCase().replace(/[^A-Z ]/g, "");
     const st = STATE_ALIASES[raw] ?? (raw.length === 2 ? raw : "");
     if (st) stateCounts.set(st, (stateCounts.get(st) ?? 0) + 1);
@@ -264,10 +266,10 @@ export async function geocodeMissingCustomers(
   const topState = [...stateCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
   const fallbackState = String(profile?.state ?? "").trim() || topState;
   const fallbackRegion = [profile?.city, fallbackState].filter(Boolean).join(", ");
-  const coords = (sample ?? []).filter((r) => r.lat != null && r.lng != null);
+  const coords = sample.filter((r: SampleRow) => r.lat != null && r.lng != null);
   const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
   const proximity = coords.length >= 10
-    ? `${median(coords.map((r) => Number(r.lng))).toFixed(4)},${median(coords.map((r) => Number(r.lat))).toFixed(4)}`
+    ? `${median(coords.map((r: SampleRow) => Number(r.lng))).toFixed(4)},${median(coords.map((r: SampleRow) => Number(r.lat))).toFixed(4)}`
     : null;
 
   const targets: Array<{ id: string; address: string; city: string | null; state: string | null; zip_code: string | null }> = [];
