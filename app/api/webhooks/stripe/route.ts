@@ -4,10 +4,16 @@ import Stripe from "stripe";
 import { stripe } from "@/lib/stripe/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// Stripe signs platform events (Red Fox subscriptions) and connected-account
+// events (customers paying a business's invoice) with different endpoint
+// secrets. Accept either one.
+const webhookSecrets = [
+  process.env.STRIPE_WEBHOOK_SECRET,
+  process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+].filter((s): s is string => Boolean(s));
 
 export async function POST(req: Request) {
-  if (!webhookSecret) {
+  if (webhookSecrets.length === 0) {
     console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set");
     return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
   }
@@ -20,13 +26,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
   }
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[stripe-webhook] Signature verification failed:", message);
-    return NextResponse.json({ error: `Webhook signature invalid: ${message}` }, { status: 400 });
+  let event: Stripe.Event | null = null;
+  let lastError = "Unknown error";
+  for (const secret of webhookSecrets) {
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, secret);
+      break;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err.message : "Unknown error";
+    }
+  }
+  if (!event) {
+    console.error("[stripe-webhook] Signature verification failed:", lastError);
+    return NextResponse.json({ error: "Webhook signature invalid" }, { status: 400 });
   }
 
   const claim = await claimWebhookEvent(event);
