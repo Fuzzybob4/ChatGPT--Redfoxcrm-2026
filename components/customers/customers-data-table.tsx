@@ -81,11 +81,21 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
   const [currentPage, setCurrentPage] = useState(1);
   const [isMerging, setIsMerging] = useState(false);
   const [pageSize, setPageSize] = useState(25);
+  const [addressFilter, setAddressFilter] = useState<"all" | "has" | "none">("all");
+
+  const hasAddress = (c: Customer) => Boolean(((c as any).address ?? "").trim());
+  const addressCounts = useMemo(() => {
+    let has = 0;
+    for (const c of customers) if (hasAddress(c)) has++;
+    return { all: customers.length, has, none: customers.length - has };
+  }, [customers]);
 
   // Filter customers
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return customers.filter((c) => {
+      if (addressFilter === "has" && !hasAddress(c)) return false;
+      if (addressFilter === "none" && hasAddress(c)) return false;
       if (!q) return true;
       const tags: string[] = (c as any).tags ?? [];
       return (
@@ -95,7 +105,7 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
         tags.some((t) => t.toLowerCase().includes(q))
       );
     });
-  }, [customers, searchQuery]);
+  }, [customers, searchQuery, addressFilter]);
 
   // Sort customers
   const sorted = useMemo(() => {
@@ -204,6 +214,34 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
     <div className="space-y-4">
       {/* Controls Row */}
       <div className="flex flex-col gap-3">
+        {/* Address quick filters */}
+        <div className="flex items-center gap-2 overflow-x-auto" role="tablist" aria-label="Filter by address">
+          {([
+            { id: "all", label: "All" },
+            { id: "has", label: "Has address" },
+            { id: "none", label: "No address" },
+          ] as const).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="tab"
+              aria-selected={addressFilter === f.id}
+              onClick={() => {
+                setAddressFilter(f.id);
+                setCurrentPage(1);
+              }}
+              className={
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+                (addressFilter === f.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted")
+              }
+            >
+              {f.label}
+              <span className="tabular-nums opacity-80">{addressCounts[f.id].toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">

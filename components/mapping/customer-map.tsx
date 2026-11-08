@@ -30,15 +30,18 @@ export interface MapPin {
   lng: number;
   isPrimary: boolean;
   stage: LifecycleStatus;
+  /** Booked in a past season but not booked yet this season. */
+  pastCustomer?: boolean;
   troubleCallCount?: number;
   troubleCallUrgency?: string | null;
   troubleCallTitle?: string | null;
 }
 
-type MapView = "all" | "trouble_calls" | LifecycleStatus;
+type MapView = "all" | "trouble_calls" | "past_customers" | LifecycleStatus;
 
 const TROUBLE_COLOR = "#ff2d55";
 const ALL_COLOR = "#111827";
+const PAST_COLOR = "#7c3aed";
 
 function hasTrouble(p: MapPin): boolean {
   return (p.troubleCallCount ?? 0) > 0;
@@ -47,6 +50,7 @@ function hasTrouble(p: MapPin): boolean {
 function matchesView(p: MapPin, view: MapView): boolean {
   if (view === "all") return true;
   if (view === "trouble_calls") return hasTrouble(p);
+  if (view === "past_customers") return Boolean(p.pastCustomer);
   return p.stage === view;
 }
 
@@ -83,11 +87,13 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
       count: counts[stage] ?? 0,
     }));
     const troubleCount = pins.filter(hasTrouble).length;
+    const pastCount = pins.filter((p) => p.pastCustomer).length;
     return [
       { id: "all" as MapView, label: "All", color: ALL_COLOR, count: pins.length },
       ...(troubleCount > 0
         ? [{ id: "trouble_calls" as MapView, label: "Trouble Calls", color: TROUBLE_COLOR, count: troubleCount }]
         : []),
+      { id: "past_customers" as MapView, label: "Past Customers", color: PAST_COLOR, count: pastCount },
       ...stageViews,
     ];
   }, [pins, counts]);
@@ -108,7 +114,12 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
     });
   }, [pins, view, search, cityFilter]);
 
-  const activeStageMeta = view !== "all" && view !== "trouble_calls" ? LIFECYCLE_META[view] : null;
+  const activeStageMeta =
+    view === "past_customers"
+      ? { description: "Booked with you before but not booked yet this season — your rebooking list." }
+      : view !== "all" && view !== "trouble_calls"
+        ? LIFECYCLE_META[view]
+        : null;
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   if (!token) {
@@ -223,7 +234,7 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
         >
           <NavigationControl position="top-right" />
           {filtered.map((p) => {
-            const color = hasTrouble(p) ? TROUBLE_COLOR : LIFECYCLE_META[p.stage].color;
+            const color = hasTrouble(p) ? TROUBLE_COLOR : view === "past_customers" ? PAST_COLOR : LIFECYCLE_META[p.stage].color;
             return (
               <Marker
                 key={p.id}
@@ -292,9 +303,27 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                   {LIFECYCLE_META[selected.stage].label}
                 </span>
                 <p className="text-xs text-gray-600">{selected.address}</p>
+                {selected.pastCustomer && (
+                  <span
+                    className="inline-flex w-fit items-center rounded px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                    style={{ backgroundColor: PAST_COLOR }}
+                  >
+                    Past customer · not rebooked
+                  </span>
+                )}
                 {selected.phone && (
-                  <a href={`tel:${selected.phone}`} className="text-xs text-gray-600 hover:underline">
-                    {selected.phone}
+                  <div className="flex items-center gap-3 text-xs">
+                    <a href={`tel:${selected.phone}`} className="text-gray-600 hover:underline">
+                      {selected.phone}
+                    </a>
+                    <a href={`sms:${selected.phone}`} className="font-medium text-gray-700 hover:underline">
+                      Text
+                    </a>
+                  </div>
+                )}
+                {selected.email && (
+                  <a href={`mailto:${selected.email}`} className="text-xs text-gray-600 hover:underline">
+                    {selected.email}
                   </a>
                 )}
                 {hasTrouble(selected) && (

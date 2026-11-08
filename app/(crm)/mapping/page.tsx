@@ -19,7 +19,7 @@ export default async function MappingPage() {
   for (let from = 0; ; from += 1000) {
     let customerQuery = supabase
       .from("customers")
-      .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng")
+      .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng, tags")
       .order("id")
       .range(from, from + 999);
     if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
@@ -84,6 +84,26 @@ export default async function MappingPage() {
     invoices: invoices ?? [],
   });
 
+  // "Past customers": anyone who has booked before (completed job, paid
+  // invoice, HubSpot "customer" stage, or tagged past-customer by the team)
+  // but isn't booked for the current season yet — the rebooking list.
+  const BOOKED_STAGES = new Set(["pending_install", "scheduled", "installed", "pending_removal"]);
+  const bookedBefore = new Set<string>();
+  for (const c of customers) {
+    const tags: string[] = c.tags ?? [];
+    if (tags.includes("hs-customer") || tags.includes("past-customer")) bookedBefore.add(c.id);
+  }
+  for (const inv of invoices ?? []) {
+    const status = String(inv.status ?? "").toLowerCase();
+    const paymentState = String(inv.payment_state ?? "").toLowerCase();
+    if (inv.customer_id && (status === "paid" || paymentState === "paid")) bookedBefore.add(inv.customer_id);
+  }
+  for (const j of jobs ?? []) {
+    if (j.customer_id && String(j.status ?? "").toLowerCase() === "completed") bookedBefore.add(j.customer_id);
+  }
+  const isPastCustomer = (customerId: string) =>
+    bookedBefore.has(customerId) && !BOOKED_STAGES.has(getCustomerStage(customerId));
+
   const customerName = (c: any) =>
     c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
 
@@ -114,6 +134,7 @@ export default async function MappingPage() {
       lng: p.lng as number,
       isPrimary: !!p.is_primary,
       stage: getCustomerStage(p.customer_id),
+      pastCustomer: isPastCustomer(p.customer_id),
       troubleCallCount: troubleByCustomer.get(p.customer_id)?.count ?? 0,
       troubleCallUrgency: troubleByCustomer.get(p.customer_id)?.urgency ?? null,
       troubleCallTitle: troubleByCustomer.get(p.customer_id)?.title ?? null,
@@ -139,6 +160,7 @@ export default async function MappingPage() {
       lng: c.lng as number,
       isPrimary: true,
       stage: getCustomerStage(c.id),
+      pastCustomer: isPastCustomer(c.id),
       troubleCallCount: troubleByCustomer.get(c.id)?.count ?? 0,
       troubleCallUrgency: troubleByCustomer.get(c.id)?.urgency ?? null,
       troubleCallTitle: troubleByCustomer.get(c.id)?.title ?? null,
