@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { computeQuote, type QuoteSettings } from "@/lib/quotes/pricing";
 import type { MeasureResult } from "@/lib/quotes/measure";
 import { satelliteUrl } from "@/lib/quotes/satellite";
+import { RooflineTracer } from "@/components/quotes/roofline-tracer";
 import { lookupAddress, submitInstantQuote } from "./actions";
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -165,7 +166,17 @@ export function InstantQuoteClient({
               <CardDescription className="text-xs">{measure.formattedAddress}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {mapboxToken && (
+              {mapboxToken && measure.source !== "satellite" && (
+                <RooflineTracer
+                  key={`${measure.lat},${measure.lng}`}
+                  token={mapboxToken}
+                  lat={measure.lat}
+                  lng={measure.lng}
+                  compact
+                  onFeetChange={(ft) => { if (ft > 0) setFeet(Math.round(ft / 5) * 5); }}
+                />
+              )}
+              {mapboxToken && measure.source === "satellite" && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={satelliteUrl(mapboxToken, measure)}
@@ -176,7 +187,7 @@ export function InstantQuoteClient({
               <p className="text-sm text-muted-foreground">
                 {measure.source === "satellite"
                   ? `We measured about ${measure.feet} ft of front roofline (yellow line). Adjust it if it looks off.`
-                  : "Enter roughly how many feet of front roofline you'd like lit. A typical single-story home is 60–120 ft."}
+                  : "Tap each corner along the front of your roof to measure it, or enter the feet below."}
               </p>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Feet of roofline</span>

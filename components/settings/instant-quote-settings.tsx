@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import type { QuoteOption, QuoteSettings } from "@/lib/quotes/pricing";
 import type { MeasureResult } from "@/lib/quotes/measure";
 import { satelliteUrl } from "@/lib/quotes/satellite";
+import { RooflineTracer } from "@/components/quotes/roofline-tracer";
 import { saveQuoteSettings, testMeasureAddress } from "@/app/(crm)/settings/quote-actions";
 
 /** Try the satellite measurement on homes you've already measured, before going live. */
@@ -20,8 +21,20 @@ function MeasurementTester({ mapboxToken, tolerance }: { mapboxToken: string; to
   const [solar, setSolar] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [traced, setTraced] = useState(0);
   const actualFt = Number(actual);
-  const diff = result?.feet && actualFt > 0 ? Math.round(((result.feet - actualFt) / actualFt) * 100) : null;
+  const pct = (ft: number | null | undefined) => (ft && actualFt > 0 ? Math.round(((ft - actualFt) / actualFt) * 100) : null);
+
+  function diffLine(label: string, ft: number | null | undefined) {
+    const d = pct(ft);
+    if (d === null) return null;
+    const ok = Math.abs(d) <= tolerance;
+    return (
+      <p className={`text-sm font-medium ${ok ? "text-emerald-700" : "text-destructive"}`}>
+        {label}: {ft} ft → {d > 0 ? "+" : ""}{d}% {ok ? "· within tolerance" : "· too far off"}
+      </p>
+    );
+  }
 
   function run() {
     setErr(null);
@@ -50,28 +63,27 @@ function MeasurementTester({ mapboxToken, tolerance }: { mapboxToken: string; to
       {result && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">{result.formattedAddress}</p>
-          {mapboxToken && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={satelliteUrl(mapboxToken, result)} alt="Satellite view" className="w-full rounded-lg border" />
+          {result.source === "satellite" && mapboxToken && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={satelliteUrl(mapboxToken, result)} alt="Satellite view" className="w-full rounded-lg border" />
+              <p className="text-sm">Automatic measurement: <span className="font-semibold">{result.feet} ft</span> (yellow line)</p>
+            </>
           )}
-          {result.source === "satellite" ? (
-            <p className="text-sm">Measured front roofline: <span className="font-semibold">{result.feet} ft</span> (yellow line)</p>
-          ) : (
-            <p className="text-sm text-amber-700">
-              {solar
-                ? "No roof data for this address, so customers would type their own footage here."
-                : "Satellite roof measuring isn't switched on yet (Google Solar key not added), so this only finds the address."}
+          {result.source !== "satellite" && !solar && (
+            <p className="text-xs text-muted-foreground">
+              Automatic measuring turns on once the Google Solar key is added. For now, trace the roofline below.
             </p>
           )}
-          <div className="flex items-center gap-2">
+          {mapboxToken && (
+            <RooflineTracer key={`${result.lat},${result.lng}`} token={mapboxToken} lat={result.lat} lng={result.lng} onFeetChange={setTraced} />
+          )}
+          <div className="flex items-center gap-2 pt-1">
             <Label className="shrink-0 text-xs">Your real measurement (ft)</Label>
             <Input type="number" min={0} className="w-28" value={actual} onChange={(e) => setActual(e.target.value)} />
-            {diff !== null && (
-              <span className={`text-sm font-medium ${Math.abs(diff) <= tolerance ? "text-emerald-700" : "text-destructive"}`}>
-                {diff > 0 ? "+" : ""}{diff}% {Math.abs(diff) <= tolerance ? "· within tolerance" : "· too far off"}
-              </span>
-            )}
           </div>
+          {diffLine("Traced", traced || null)}
+          {diffLine("Automatic", result.source === "satellite" ? result.feet : null)}
         </div>
       )}
     </div>
