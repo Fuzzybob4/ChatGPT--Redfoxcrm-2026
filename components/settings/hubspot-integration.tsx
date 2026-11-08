@@ -14,7 +14,7 @@ export interface HubspotStatus {
   connected: boolean;
   accountName: string | null;
   lastSyncAt: string | null;
-  lastSyncResult: { total?: number; created?: number; linked?: number; skipped?: number; mapped?: number; mapRemaining?: number; error?: string } | null;
+  lastSyncResult: { total?: number; created?: number; linked?: number; skipped?: number; updated?: number; mapped?: number; mapRemaining?: number; error?: string } | null;
 }
 
 const CALLBACK_MESSAGES: Record<string, string> = {
@@ -29,6 +29,7 @@ function summarize(r: HubspotStatus["lastSyncResult"] | HubspotSyncResult | null
   if (!r || r.total == null) return null;
   const parts = [`${r.created ?? 0} new customers imported`];
   if (r.linked) parts.push(`${r.linked} matched to existing customers`);
+  if (r.updated) parts.push(`${r.updated} updated with new details`);
   if (r.skipped) parts.push(`${r.skipped} skipped (already imported or duplicates)`);
   if (r.mapped) parts.push(`${r.mapped} placed on the map`);
   if (r.mapRemaining) parts.push(`${r.mapRemaining} addresses still to map — tap Sync now again`);
@@ -103,7 +104,7 @@ export function HubspotIntegration({
           </div>
           <p className="text-xs text-muted-foreground">
             {connected
-              ? `Connected${status.accountName ? ` to ${status.accountName}` : ""}. Imports your HubSpot contacts as customers and leads.`
+              ? `Connected${status.accountName ? ` to ${status.accountName}` : ""}. New and updated HubSpot contacts sync automatically.`
               : "Import your HubSpot contacts as customers and leads. Read-only — Red Fox never changes your HubSpot data."}
           </p>
           {isSyncing && (

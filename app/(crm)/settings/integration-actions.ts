@@ -2,15 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentOrg } from "@/lib/org";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  fetchAllHubspotContacts,
-  geocodeMissingCustomers,
-  getHubspotAccessToken,
-  mapHubspotContact,
-  phoneKey,
-} from "@/lib/integrations/hubspot";
+import { runHubspotSync } from "@/lib/integrations/hubspot-sync";
 
 export interface HubspotSyncResult {
   success: boolean;
@@ -19,6 +12,7 @@ export interface HubspotSyncResult {
   created?: number;
   linked?: number;
   skipped?: number;
+  updated?: number;
   mapped?: number;
   mapRemaining?: number;
 }
@@ -32,117 +26,23 @@ async function requireManager() {
   return { org, error: null } as const;
 }
 
-/**
- * Imports every HubSpot contact into the current org's customers.
- * - Contacts already imported (same hubspot_contact_id) are skipped.
- * - Contacts matching an existing customer by email or phone are linked, not
- *   overwritten, so real customer records keep their status and details.
- * - Everyone else is created. Customers/opportunities -> "active", others -> "lead".
- */
+/** "Sync now": full import of every HubSpot contact for the current org. */
 export async function syncHubspotContacts(): Promise<HubspotSyncResult> {
   const { org, error: authError } = await requireManager();
   if (!org) return { success: false, error: authError };
 
-  const admin = createAdminClient();
-  const supabase = await createClient();
-
   try {
-    const token = await getHubspotAccessToken(org.orgId);
-    const contacts = await fetchAllHubspotContacts(token);
-
-    // Load existing customers (paged; PostgREST caps responses at 1000 rows).
-    const existing: Array<{ id: string; email: string | null; phone: string | null; hubspot_contact_id: string | null }> = [];
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("id, email, phone, hubspot_contact_id")
-        .eq("org_id", org.orgId)
-        .range(from, from + 999);
-      if (error) throw error;
-      existing.push(...(data ?? []));
-      if (!data || data.length < 1000) break;
+    const result = await runHubspotSync(org.orgId, { mode: "full" });
+    if (!result) {
+      return { success: false, error: "A sync is already running in the background. Check back in a minute." };
     }
-
-    const knownHubspotIds = new Set(existing.map((c) => c.hubspot_contact_id).filter(Boolean) as string[]);
-    const byEmail = new Map<string, { id: string; linked: boolean }>();
-    const byPhone = new Map<string, { id: string; linked: boolean }>();
-    for (const c of existing) {
-      const entry = { id: c.id, linked: Boolean(c.hubspot_contact_id) };
-      if (c.email) byEmail.set(c.email.toLowerCase(), entry);
-      const pk = phoneKey(c.phone);
-      if (pk) byPhone.set(pk, entry);
-    }
-
-    const toInsert: Array<NonNullable<ReturnType<typeof mapHubspotContact>> & { org_id: string }> = [];
-    const toLink: Array<{ id: string; hubspotId: string }> = [];
-    const seenEmail = new Set<string>();
-    const seenPhone = new Set<string>();
-    let skipped = 0;
-
-    for (const contact of contacts) {
-      if (knownHubspotIds.has(contact.id)) { skipped++; continue; }
-      const row = mapHubspotContact(contact);
-      if (!row) { skipped++; continue; }
-
-      const pk = phoneKey(row.phone);
-      const match = (row.email && byEmail.get(row.email)) || (pk && byPhone.get(pk)) || null;
-      if (match) {
-        if (!match.linked) {
-          toLink.push({ id: match.id, hubspotId: contact.id });
-          match.linked = true;
-        } else {
-          skipped++;
-        }
-        continue;
-      }
-      // Duplicates inside HubSpot itself (same email or phone twice).
-      if ((row.email && seenEmail.has(row.email)) || (pk && seenPhone.has(pk))) { skipped++; continue; }
-      if (row.email) seenEmail.add(row.email);
-      if (pk) seenPhone.add(pk);
-
-      toInsert.push({ ...row, org_id: org.orgId });
-    }
-
-    let created = 0;
-    for (let i = 0; i < toInsert.length; i += 500) {
-      const chunk = toInsert.slice(i, i + 500);
-      const { error } = await supabase.from("customers").insert(chunk);
-      if (error) throw error;
-      created += chunk.length;
-    }
-
-    let linked = 0;
-    for (const link of toLink) {
-      const { error } = await supabase
-        .from("customers")
-        .update({ hubspot_contact_id: link.hubspotId })
-        .eq("id", link.id)
-        .eq("org_id", org.orgId)
-        .is("hubspot_contact_id", null);
-      if (!error) linked++;
-    }
-
-    // Put imported customers on the map (address -> coordinates).
-    const geo = await geocodeMissingCustomers(supabase, org.orgId);
-
-    const result = { total: contacts.length, created, linked, skipped, mapped: geo.mapped, mapRemaining: geo.remaining };
-    await admin
-      .from("org_integrations")
-      .update({ last_sync_at: new Date().toISOString(), last_sync_result: result, status: "connected", updated_at: new Date().toISOString() })
-      .eq("org_id", org.orgId)
-      .eq("provider", "hubspot");
-
     revalidatePath("/customers");
+    revalidatePath("/mapping");
     revalidatePath("/settings");
     return { success: true, ...result };
   } catch (err) {
     console.error("[hubspot] sync failed:", err);
-    const message = err instanceof Error ? err.message : "Unknown error";
-    await admin
-      .from("org_integrations")
-      .update({ last_sync_result: { error: message.slice(0, 300) }, updated_at: new Date().toISOString() })
-      .eq("org_id", org.orgId)
-      .eq("provider", "hubspot");
+    const message = err instanceof Error ? err.message : "";
     return {
       success: false,
       error: message.includes("not connected")
