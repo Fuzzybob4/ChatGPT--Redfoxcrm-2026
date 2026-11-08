@@ -32,6 +32,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
 import { saveBusinessProfile } from "@/app/(crm)/settings/actions";
+import { HubspotIntegration, type HubspotStatus } from "@/components/settings/hubspot-integration";
 
 // Display shape derived from the shared pricing source of truth.
 const ADD_ONS = ADDONS.map((a) => ({
@@ -122,11 +123,17 @@ interface OrganizationSettings {
 export interface SettingsContentProps {
   businessProfile: BusinessProfile | null;
   orgData: OrganizationSettings | null;
+  hubspotStatus?: HubspotStatus;
+  hubspotCallback?: string | null;
+  initialTab?: string;
 }
 
 export function SettingsContent({
   businessProfile,
   orgData,
+  hubspotStatus,
+  hubspotCallback,
+  initialTab,
 }: SettingsContentProps) {
   // Add-ons already paid for and active on the account.
   const [persistedAddons, setPersistedAddons] = useState<Set<string>>(
@@ -204,7 +211,7 @@ export function SettingsContent({
   return (
     <div className="p-4 md:p-6">
       <div className="max-w-2xl mx-auto">
-        <Tabs defaultValue="business" className="space-y-6">
+        <Tabs defaultValue={initialTab === "integrations" || initialTab === "addons" || initialTab === "danger" ? initialTab : "business"} className="space-y-6">
           <TabsList className="h-9">
             <TabsTrigger value="business" className="text-xs px-3">Business</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs px-3">Integrations</TabsTrigger>
@@ -352,11 +359,18 @@ export function SettingsContent({
                   Integrations
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Connect your payments, accounting, email, and messaging providers.
+                  Connect your payments, accounting, email, and CRM tools. Bring your existing customers over in one click.
                 </CardDescription>
               </CardHeader>
               <CardContent className="divide-y divide-border space-y-0 p-0 px-6 pb-6">
-                {integrationsWithStatus.map((integration) => (
+                {integrationsWithStatus.map((integration) =>
+                  integration.id === "hubspot" ? (
+                    <HubspotIntegration
+                      key="hubspot"
+                      status={hubspotStatus ?? { connected: false, accountName: null, lastSyncAt: null, lastSyncResult: null }}
+                      callbackStatus={hubspotCallback}
+                    />
+                  ) : (
                   <div
                     key={integration.id}
                     className="flex items-center justify-between gap-4 py-4 first:pt-2"
@@ -385,7 +399,8 @@ export function SettingsContent({
                       ) : <Badge variant="secondary" className="text-xs">{integration.availability || "Coming soon"}</Badge>}
                     </div>
                   </div>
-                ))}
+                  ),
+                )}
               </CardContent>
             </Card>
           </TabsContent>
