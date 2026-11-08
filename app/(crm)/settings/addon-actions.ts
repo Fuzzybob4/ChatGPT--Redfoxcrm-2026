@@ -22,7 +22,11 @@ export async function purchaseAddons(addonIds: string[]): Promise<PurchaseResult
     if (!org) return { ok: false, error: "Organization not found" };
 
     // Validate the requested add-ons against our pricing source of truth.
-    const validIds = addonIds.filter((id) => getAddon(id));
+    // Never charge for an add-on that is not built yet.
+    const validIds = addonIds.filter((id) => {
+      const addon = getAddon(id);
+      return Boolean(addon && !addon.comingSoon && addon.monthlyCents != null);
+    });
     if (validIds.length === 0) {
       return { ok: false, error: "No valid add-ons selected" };
     }

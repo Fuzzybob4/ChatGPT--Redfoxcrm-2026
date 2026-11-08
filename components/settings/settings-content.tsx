@@ -40,6 +40,7 @@ const ADD_ONS = ADDONS.map((a) => ({
   name: a.name,
   price: a.monthlyCents != null ? `${formatCents(a.monthlyCents)}/mo` : 'Coming soon',
   description: a.description,
+  comingSoon: Boolean(a.comingSoon),
 }));
 
 const INTEGRATIONS = [
@@ -427,6 +428,11 @@ export function SettingsContent({
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium">{addon.name}</p>
                           <span className="text-xs font-semibold text-primary">{addon.price}</span>
+                          {addon.comingSoon && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                              Coming soon
+                            </Badge>
+                          )}
                           {isPaid && (
                             <Badge variant="outline" className="text-[10px] px-1.5 h-4 text-emerald-700 border-emerald-200 bg-emerald-50 gap-1">
                               <Check className="size-2.5" />
@@ -437,8 +443,9 @@ export function SettingsContent({
                         <p className="text-xs text-muted-foreground">{addon.description}</p>
                       </div>
                       <Switch
-                        checked={active}
-                        onCheckedChange={() => toggleAddon(addon.id)}
+                        checked={active && !addon.comingSoon}
+                        disabled={addon.comingSoon}
+                        onCheckedChange={() => { if (!addon.comingSoon) toggleAddon(addon.id); }}
                         aria-label={`Toggle ${addon.name}`}
                       />
                     </div>

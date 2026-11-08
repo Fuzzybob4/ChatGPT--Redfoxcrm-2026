@@ -72,12 +72,14 @@ export const ADDONS: AddonDefinition[] = [
     name: "Recurring Services",
     monthlyCents: 2900,
     description: "Manage recurring service contracts and billing cycles",
+    comingSoon: true,
   },
   {
     id: "route_optimization",
     name: "Route Optimization",
     monthlyCents: 4900,
     description: "Optimize routes for your crews to save time and fuel",
+    comingSoon: true,
   },
   {
     id: "portal_upsells",
@@ -90,6 +92,7 @@ export const ADDONS: AddonDefinition[] = [
     name: "SMS Notifications",
     monthlyCents: 2900,
     description: "Send text messages to customers about jobs and appointments",
+    comingSoon: true,
   },
   {
     id: "fleet_management",

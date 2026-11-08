@@ -74,11 +74,13 @@ const addons = [
     name: 'Recurring Services',
     price: '$29',
     description: 'Manage recurring service contracts and billing cycles',
+    comingSoon: true,
   },
   {
     name: 'Route Optimization',
     price: '$49',
     description: 'Optimize routes for your crews to save time and fuel',
+    comingSoon: true,
   },
   {
     name: 'Customer Portal Upsells',
@@ -89,6 +91,7 @@ const addons = [
     name: 'SMS Notifications',
     price: '$29',
     description: 'Send text messages to customers about jobs and appointments',
+    comingSoon: true,
   },
   {
     name: 'Email Campaigns',
@@ -179,6 +182,11 @@ export default function PricingPage() {
                 <span className="text-primary font-bold whitespace-nowrap">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mo</span></span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">{addon.description}</p>
+              {"comingSoon" in addon && addon.comingSoon && (
+                <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Coming soon
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -205,7 +213,7 @@ export default function PricingPage() {
                   ['Customers & Properties', '3,000', '15,000', 'Unlimited'],
                   ['Estimates & Invoicing', '✓', '✓', '✓'],
                   ['Job Scheduling', 'Basic', 'Advanced', 'Advanced'],
-                  ['Route Optimization', '—', '✓', '✓'],
+                  ['Route Optimization', '—', 'Coming soon', 'Coming soon'],
                   ['Customer Portal', '—', '✓', '✓'],
                   ['Mobile App', '✓', '✓', '✓'],
                   ['Analytics & Reports', 'Monthly', 'Weekly', 'Custom'],
