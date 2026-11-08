@@ -114,6 +114,14 @@ export async function runHubspotSync(
       if (!data || data.length < 1000) break;
     }
 
+    // Contacts the business deleted on purpose are never re-imported.
+    const { data: exclusions } = await db
+      .from("integration_import_exclusions")
+      .select("external_id")
+      .eq("org_id", orgId)
+      .eq("provider", "hubspot");
+    const excluded = new Set((exclusions ?? []).map((e) => e.external_id as string));
+
     const byHubspotId = new Map<string, Record<string, any>>();
     const byEmail = new Map<string, Record<string, any>>();
     const byPhone = new Map<string, Record<string, any>>();
@@ -132,6 +140,7 @@ export async function runHubspotSync(
     let linked = 0;
 
     for (const contact of contacts) {
+      if (excluded.has(contact.id)) { skipped++; continue; }
       const row = mapHubspotContact(contact);
       if (!row) { skipped++; continue; }
 

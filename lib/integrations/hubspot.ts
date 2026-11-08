@@ -240,13 +240,35 @@ export async function geocodeMissingCustomers(
   if (!token) return { mapped: 0, remaining: 0 };
   const started = Date.now();
 
-  // Default region for contacts whose address has no city/state/zip.
+  // Default region for contacts whose address has no state: the business's own
+  // state, else the state most of its customers are in. Results are also biased
+  // toward the business's service area (center of its already-mapped customers).
   const { data: profile } = await supabase
     .from("business_profiles")
     .select("city, state")
     .eq("org_id", orgId)
     .maybeSingle();
-  const fallbackRegion = [profile?.city, profile?.state].filter(Boolean).join(", ");
+  const { data: sample } = await supabase
+    .from("customers")
+    .select("state, lat, lng")
+    .eq("org_id", orgId)
+    .not("state", "is", null)
+    .limit(1000);
+  const STATE_ALIASES: Record<string, string> = { TEXAS: "TX", TEX: "TX" };
+  const stateCounts = new Map<string, number>();
+  for (const r of sample ?? []) {
+    const raw = String(r.state ?? "").trim().toUpperCase().replace(/[^A-Z ]/g, "");
+    const st = STATE_ALIASES[raw] ?? (raw.length === 2 ? raw : "");
+    if (st) stateCounts.set(st, (stateCounts.get(st) ?? 0) + 1);
+  }
+  const topState = [...stateCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const fallbackState = String(profile?.state ?? "").trim() || topState;
+  const fallbackRegion = [profile?.city, fallbackState].filter(Boolean).join(", ");
+  const coords = (sample ?? []).filter((r) => r.lat != null && r.lng != null);
+  const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  const proximity = coords.length >= 10
+    ? `${median(coords.map((r) => Number(r.lng))).toFixed(4)},${median(coords.map((r) => Number(r.lat))).toFixed(4)}`
+    : null;
 
   const targets: Array<{ id: string; address: string; city: string | null; state: string | null; zip_code: string | null }> = [];
   for (let from = 0; ; from += 1000) {
@@ -264,7 +286,7 @@ export async function geocodeMissingCustomers(
   }
 
   async function lookup(query: string) {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?country=us&limit=1&access_token=${token}`;
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?country=us&limit=1${proximity ? `&proximity=${proximity}` : ""}&access_token=${token}`;
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();
@@ -279,7 +301,11 @@ export async function geocodeMissingCustomers(
     while (index < targets.length && Date.now() - started < budgetMs) {
       const t = targets[index++];
       attempted++;
-      const region = [t.city, t.state, t.zip_code].map((v) => (v ?? "").trim()).filter(Boolean).join(", ");
+      // Always include a state: the contact's own, or the business's default.
+      const city = (t.city ?? "").trim();
+      const zip = (t.zip_code ?? "").trim();
+      const state = (t.state ?? "").trim() || fallbackState;
+      const region = [city, state, zip].filter(Boolean).join(", ");
       const query = [t.address.trim(), region || fallbackRegion].filter(Boolean).join(", ");
       try {
         const hit = await lookup(query);

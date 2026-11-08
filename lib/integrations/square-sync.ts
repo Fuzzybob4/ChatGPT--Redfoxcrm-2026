@@ -83,10 +83,17 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
       if (pk) byPhone.set(pk, c);
     }
 
+    const { data: exclusions } = await db
+      .from("integration_import_exclusions")
+      .select("external_id")
+      .eq("org_id", orgId)
+      .eq("provider", "square");
+    const excluded = new Set((exclusions ?? []).map((e) => e.external_id as string));
+
     const toInsert: Array<Record<string, any>> = [];
     let customersLinked = 0;
     for (const sc of squareCustomers) {
-      if (bySquareId.has(sc.id)) continue;
+      if (bySquareId.has(sc.id) || excluded.has(sc.id)) continue;
       const row = mapSquareCustomer(sc);
       if (!row) continue;
       const pk = phoneKey(row.phone);
