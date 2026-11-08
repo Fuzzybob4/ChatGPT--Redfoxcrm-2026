@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { HubspotStatus } from "@/components/settings/hubspot-integration";
+import type { SquareStatus } from "@/components/settings/square-integration";
 import { getCurrentOrg } from "@/lib/org";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { PageHeader } from "@/components/page-header";
@@ -11,9 +12,9 @@ export const maxDuration = 300;
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; hubspot?: string }>;
+  searchParams: Promise<{ tab?: string; hubspot?: string; square?: string }>;
 }) {
-  const { tab, hubspot } = await searchParams;
+  const { tab, hubspot, square } = await searchParams;
   const org = await getCurrentOrg();
   if (!org) redirect("/onboarding");
 
@@ -42,12 +43,18 @@ export default async function SettingsPage({
   }
 
   // Integration status (tokens never leave the server; only display fields are passed down).
-  const { data: hubspotRow } = await createAdminClient()
+  const { data: integrationRows } = await createAdminClient()
     .from("org_integrations")
-    .select("status, external_account_name, last_sync_at, last_sync_result")
-    .eq("org_id", org.orgId)
-    .eq("provider", "hubspot")
-    .maybeSingle();
+    .select("provider, status, external_account_name, last_sync_at, last_sync_result")
+    .eq("org_id", org.orgId);
+  const hubspotRow = (integrationRows ?? []).find((r) => r.provider === "hubspot") ?? null;
+  const squareRow = (integrationRows ?? []).find((r) => r.provider === "square") ?? null;
+  const squareStatus = {
+    connected: Boolean(squareRow),
+    accountName: squareRow?.external_account_name ?? null,
+    lastSyncAt: squareRow?.last_sync_at ?? null,
+    lastSyncResult: (squareRow?.last_sync_result as SquareStatus["lastSyncResult"]) ?? null,
+  };
   const hubspotStatus = {
     connected: Boolean(hubspotRow),
     accountName: hubspotRow?.external_account_name ?? null,
@@ -68,7 +75,9 @@ export default async function SettingsPage({
           orgData={orgData}
           hubspotStatus={hubspotStatus}
           hubspotCallback={hubspot ?? null}
-          initialTab={tab ?? (hubspot ? "integrations" : undefined)}
+          squareStatus={squareStatus}
+          squareCallback={square ?? null}
+          initialTab={tab ?? (hubspot || square ? "integrations" : undefined)}
         />
       </div>
     </div>

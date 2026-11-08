@@ -1,0 +1,5 @@
+-- Applied to production 2026-11-08. Supersedes create_tax_settings.sql and
+-- create_payment_terms.sql, which were never applied (Mark as Paid failed on
+-- its payment_terms upsert). Adds RLS, unique(invoice_id) for the upsert, and
+-- widens deposit_percentage (was decimal(3,2), max 9.99).
+-- See the Supabase migration "tax_settings_payment_terms" for the exact SQL.

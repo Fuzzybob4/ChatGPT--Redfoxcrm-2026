@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
 import { saveBusinessProfile, setInvoiceRemindersEnabled } from "@/app/(crm)/settings/actions";
 import { HubspotIntegration, type HubspotStatus } from "@/components/settings/hubspot-integration";
+import { SquareIntegration, type SquareStatus } from "@/components/settings/square-integration";
 
 // Display shape derived from the shared pricing source of truth.
 const ADD_ONS = ADDONS.map((a) => ({
@@ -81,7 +82,6 @@ const INTEGRATIONS = [
     description: "Import customers, invoices, and payment history",
     icon: Upload,
     badge: "Data Import",
-    availability: "Coming soon",
   },
   {
     id: "resend",
@@ -127,6 +127,8 @@ export interface SettingsContentProps {
   orgData: OrganizationSettings | null;
   hubspotStatus?: HubspotStatus;
   hubspotCallback?: string | null;
+  squareStatus?: SquareStatus;
+  squareCallback?: string | null;
   initialTab?: string;
 }
 
@@ -135,6 +137,8 @@ export function SettingsContent({
   orgData,
   hubspotStatus,
   hubspotCallback,
+  squareStatus,
+  squareCallback,
   initialTab,
 }: SettingsContentProps) {
   // Add-ons already paid for and active on the account.
@@ -402,6 +406,12 @@ export function SettingsContent({
                       key="hubspot"
                       status={hubspotStatus ?? { connected: false, accountName: null, lastSyncAt: null, lastSyncResult: null }}
                       callbackStatus={hubspotCallback}
+                    />
+                  ) : integration.id === "square" ? (
+                    <SquareIntegration
+                      key="square"
+                      status={squareStatus ?? { connected: false, accountName: null, lastSyncAt: null, lastSyncResult: null }}
+                      callbackStatus={squareCallback}
                     />
                   ) : (
                   <div

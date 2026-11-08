@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { maybeAutoSyncHubspot } from "@/lib/integrations/hubspot-sync";
+import { maybeAutoSyncSquare } from "@/lib/integrations/square-sync";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { LocationProvider } from "@/lib/location-context";
@@ -18,7 +19,10 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
 
   // Keep connected integrations fresh without anyone pressing "Sync now".
   // Runs after the response is sent, so it never slows the page down.
-  after(() => maybeAutoSyncHubspot(org.orgId));
+  after(async () => {
+    await maybeAutoSyncHubspot(org.orgId);
+    await maybeAutoSyncSquare(org.orgId);
+  });
 
   return (
     <OrgProvider org={org}>
