@@ -59,6 +59,7 @@ export async function updateSession(request: NextRequest) {
   // CRM. Each one checks its own access: a customer link token, Stripe's
   // webhook signature, or the cron secret.
   const PUBLIC_PREFIXES = [
+    '/quote/', // public instant quote page
     '/customer-portal/', // customer invoice/payment portal (token link)
     '/estimate/',        // customer estimate approval (token link)
     '/unsubscribe',      // email unsubscribe links

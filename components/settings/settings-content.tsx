@@ -34,6 +34,8 @@ import { ADDONS, formatCents, getAddonsMonthlyCents } from "@/lib/pricing";
 import { saveBusinessProfile, setInvoiceRemindersEnabled } from "@/app/(crm)/settings/actions";
 import { HubspotIntegration, type HubspotStatus } from "@/components/settings/hubspot-integration";
 import { SquareIntegration, type SquareStatus } from "@/components/settings/square-integration";
+import { InstantQuoteSettings } from "@/components/settings/instant-quote-settings";
+import type { QuoteSettings } from "@/lib/quotes/pricing";
 
 // Display shape derived from the shared pricing source of truth.
 const ADD_ONS = ADDONS.map((a) => ({
@@ -129,6 +131,9 @@ export interface SettingsContentProps {
   hubspotCallback?: string | null;
   squareStatus?: SquareStatus;
   squareCallback?: string | null;
+  quoteSettings?: QuoteSettings | null;
+  quoteSuggestedSlug?: string;
+  mapboxToken?: string;
   initialTab?: string;
 }
 
@@ -139,6 +144,9 @@ export function SettingsContent({
   hubspotCallback,
   squareStatus,
   squareCallback,
+  quoteSettings = null,
+  quoteSuggestedSlug = "",
+  mapboxToken = "",
   initialTab,
 }: SettingsContentProps) {
   // Add-ons already paid for and active on the account.
@@ -229,10 +237,11 @@ export function SettingsContent({
   return (
     <div className="p-4 md:p-6">
       <div className="max-w-2xl mx-auto">
-        <Tabs defaultValue={initialTab === "integrations" || initialTab === "addons" || initialTab === "danger" ? initialTab : "business"} className="space-y-6">
+        <Tabs defaultValue={initialTab === "integrations" || initialTab === "quote" || initialTab === "addons" || initialTab === "danger" ? initialTab : "business"} className="space-y-6">
           <TabsList className="h-9">
             <TabsTrigger value="business" className="text-xs px-3">Business</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs px-3">Integrations</TabsTrigger>
+            <TabsTrigger value="quote" className="text-xs px-3">Online Quote</TabsTrigger>
             <TabsTrigger value="addons" className="text-xs px-3">Add-Ons</TabsTrigger>
             <TabsTrigger value="danger" className="text-xs px-3">Advanced</TabsTrigger>
           </TabsList>
@@ -520,6 +529,11 @@ export function SettingsContent({
                 </Button>
               </div>
             )}
+          </TabsContent>
+
+          {/* ── Instant online quote ─────────────────────────── */}
+          <TabsContent value="quote">
+            <InstantQuoteSettings initial={quoteSettings} suggestedSlug={quoteSuggestedSlug} mapboxToken={mapboxToken} />
           </TabsContent>
 
           {/* ── Advanced / Danger ─────────────────────────────── */}

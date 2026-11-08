@@ -51,6 +51,12 @@ export default async function MappingPage() {
   if (locationId) invoiceQuery = invoiceQuery.eq("location_id", locationId);
   const { data: invoices } = await invoiceQuery;
 
+  // Estimates drive the "Estimate Sent" / "Estimate Approved" pipeline stages.
+  const { data: estimates } = await supabase
+    .from("estimates")
+    .select("customer_id, status, sent_at, invoice_id")
+    .not("customer_id", "is", null);
+
   // Open customer-submitted trouble calls drive the pulsing map indicator.
   const { data: troubleCalls } = await supabase
     .from("work_order_requests")
@@ -83,6 +89,7 @@ export default async function MappingPage() {
     customers: customers ?? [],
     jobs: jobs ?? [],
     invoices: invoices ?? [],
+    estimates: estimates ?? [],
   });
 
   // "Past customers": anyone who has booked before (completed job, paid

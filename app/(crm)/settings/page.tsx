@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { HubspotStatus } from "@/components/settings/hubspot-integration";
 import type { SquareStatus } from "@/components/settings/square-integration";
 import { getCurrentOrg } from "@/lib/org";
+import { settingsFromRow } from "@/lib/quotes/pricing";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { PageHeader } from "@/components/page-header";
 
@@ -62,6 +63,17 @@ export default async function SettingsPage({
     lastSyncResult: (hubspotRow?.last_sync_result as HubspotStatus["lastSyncResult"]) ?? null,
   };
 
+  const { data: quoteRow } = await createAdminClient()
+    .from("instant_quote_settings")
+    .select("*")
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  const quoteSuggestedSlug = String(businessProfile?.business_name || org.businessName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
@@ -77,6 +89,9 @@ export default async function SettingsPage({
           hubspotCallback={hubspot ?? null}
           squareStatus={squareStatus}
           squareCallback={square ?? null}
+          quoteSettings={quoteRow ? settingsFromRow(quoteRow) : null}
+          quoteSuggestedSlug={quoteSuggestedSlug}
+          mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""}
           initialTab={tab ?? (hubspot || square ? "integrations" : undefined)}
         />
       </div>

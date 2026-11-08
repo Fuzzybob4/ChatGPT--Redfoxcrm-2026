@@ -4,7 +4,9 @@
 // stage shows consistently on the customer profile and the mapping page.
 //
 // Automatic pipeline:
-//   lead            → no invoice yet
+//   lead            → no estimate or invoice yet
+//   estimate_sent   → estimate sent to the customer, waiting on approval
+//   estimate_approved → estimate approved, invoice not sent yet
 //   pending_payment → invoice sent/overdue, nothing paid
 //   pending_install → deposit (or full payment) received, not installed yet
 //   scheduled       → crew assigned + install/service date scheduled
@@ -19,6 +21,8 @@
 
 export type LifecycleStatus =
   | "lead"
+  | "estimate_sent"
+  | "estimate_approved"
   | "pending_payment"
   | "pending_install"
   | "scheduled"
@@ -36,7 +40,17 @@ export interface LifecycleMeta {
 }
 
 export const LIFECYCLE_META: Record<LifecycleStatus, LifecycleMeta> = {
-  lead: { label: "Lead", color: "#6b7280", description: "No invoice yet" },
+  lead: { label: "Lead", color: "#6b7280", description: "No estimate or invoice yet" },
+  estimate_sent: {
+    label: "Estimate Sent",
+    color: "#8b5cf6",
+    description: "Estimate sent — waiting on approval",
+  },
+  estimate_approved: {
+    label: "Estimate Approved",
+    color: "#0d9488",
+    description: "Estimate approved — invoice not sent yet",
+  },
   pending_payment: {
     label: "Pending Payment",
     color: "#dc2626",
@@ -83,6 +97,8 @@ export const LIFECYCLE_ORDER: LifecycleStatus[] = [
   "scheduled",
   "installed",
   "pending_payment",
+  "estimate_approved",
+  "estimate_sent",
   "pending_removal",
   "removed",
   "lead",
@@ -136,6 +152,10 @@ export function deriveLifecycleStatus(input: {
   hasPaidInvoice: boolean;
   /** True when any invoice has a partial payment (deposit) recorded. */
   hasDepositPaid?: boolean;
+  /** An estimate was sent (or viewed) and is still waiting on the customer. */
+  hasSentEstimate?: boolean;
+  /** An estimate was approved but no invoice is out yet. */
+  hasApprovedEstimate?: boolean;
   jobs: LifecycleJobSignal[];
   installStatus?: string | null;
 }): LifecycleStatus {
@@ -191,8 +211,18 @@ export function deriveLifecycleStatus(input: {
   // Manual "pending install" holds until a crew is scheduled or the install completes.
   if (hasPaidInvoice || hasDepositPaid || raw === "pending_install") return "pending_install";
   if (hasUnpaidInvoice) return "pending_payment";
+  if (input.hasApprovedEstimate) return "estimate_approved";
+  if (input.hasSentEstimate) return "estimate_sent";
 
   return "lead";
+}
+
+/** Turn a raw estimate row into pipeline signals. */
+export function estimateSignal(estimate: { status?: string | null; sentAt?: string | null; invoiceId?: string | null }) {
+  const status = norm(estimate.status ?? "");
+  const approved = ["accepted", "approved"].includes(status) && !estimate.invoiceId;
+  const sent = ["sent", "viewed", "pending"].includes(status) || (Boolean(estimate.sentAt) && !["accepted", "approved", "declined", "rejected", "expired", "converted"].includes(status));
+  return { approved, sent };
 }
 
 /** Normalize a raw invoice row/record into the payment signals above. */

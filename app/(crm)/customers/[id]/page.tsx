@@ -29,7 +29,7 @@ import { CustomerPhotoGallery } from "@/components/customers/customer-photo-gall
 import { CustomerPhotoUploader } from "@/components/customers/customer-photo-uploader";
 import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-link-card";
 import { CustomerProperties } from "@/components/customers/customer-properties";
-import { deriveLifecycleStatus, invoicePaymentSignal, LIFECYCLE_META } from "@/lib/lifecycle";
+import { deriveLifecycleStatus, estimateSignal, invoicePaymentSignal, LIFECYCLE_META } from "@/lib/lifecycle";
 import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-control";
 
 interface Props {
@@ -38,7 +38,7 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, refresh, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
+  const { loading, refresh, estimates, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
@@ -66,7 +66,12 @@ export default function CustomerDetailPage({ params }: Props) {
       amountPaid: (i as { amountPaid?: number | null }).amountPaid,
     }),
   );
+  const estimateSignals = estimates
+    .filter((e) => e.customerId === customer.id)
+    .map((e) => estimateSignal({ status: e.status, sentAt: e.sentAt, invoiceId: e.invoiceId }));
   const lifecycle = deriveLifecycleStatus({
+    hasSentEstimate: estimateSignals.some((s) => s.sent),
+    hasApprovedEstimate: estimateSignals.some((s) => s.approved),
     hasUnpaidInvoice: paymentSignals.some((s) => s.unpaid),
     hasPaidInvoice: paymentSignals.some((s) => s.paid),
     hasDepositPaid: paymentSignals.some((s) => s.deposit),

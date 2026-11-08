@@ -1,4 +1,4 @@
-import { deriveLifecycleStatus, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
+import { deriveLifecycleStatus, estimateSignal, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
 
 type Row = Record<string, any>;
 
@@ -11,10 +11,13 @@ export function buildStageResolver({
   customers,
   jobs,
   invoices,
+  estimates = [],
 }: {
   customers: Row[];
   jobs: Row[];
   invoices: Row[];
+  /** Optional: rows with customer_id, status, sent_at, invoice_id. */
+  estimates?: Row[];
 }): (customerId: string) => LifecycleStatus {
   const customerMap = new Map<string, Row>();
   for (const c of customers) customerMap.set(c.id, c);
@@ -45,6 +48,14 @@ export function buildStageResolver({
     });
   }
 
+  const estimatesByCustomer = new Map<string, { sent: boolean; approved: boolean }>();
+  for (const e of estimates) {
+    if (!e.customer_id) continue;
+    const sig = estimateSignal({ status: e.status, sentAt: e.sent_at, invoiceId: e.invoice_id });
+    const cur = estimatesByCustomer.get(e.customer_id) ?? { sent: false, approved: false };
+    estimatesByCustomer.set(e.customer_id, { sent: cur.sent || sig.sent, approved: cur.approved || sig.approved });
+  }
+
   const cache = new Map<string, LifecycleStatus>();
   return (customerId: string) => {
     const cached = cache.get(customerId);
@@ -55,6 +66,8 @@ export function buildStageResolver({
       hasUnpaidInvoice: payments?.unpaid ?? false,
       hasPaidInvoice: payments?.paid ?? false,
       hasDepositPaid: payments?.deposit ?? false,
+      hasSentEstimate: estimatesByCustomer.get(customerId)?.sent ?? false,
+      hasApprovedEstimate: estimatesByCustomer.get(customerId)?.approved ?? false,
       jobs: (jobsByCustomer.get(customerId) ?? []).map((j) => ({
         status: j.status ?? "",
         jobType: j.job_type,
