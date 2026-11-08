@@ -135,9 +135,15 @@ export async function setPaymentProvider(
 }
 
 /**
- * Starts Stripe Connect Express onboarding for the org and returns a hosted
+ * Starts Stripe Connect onboarding for the org and returns a hosted
  * onboarding URL. Falls back gracefully if Connect is not enabled on the
  * platform account.
+ *
+ * Businesses get a Standard account: their own full Stripe account (they can
+ * also log in to stripe.com). Stripe and the business, not Red Fox, are
+ * responsible for refunds, disputes, chargebacks and negative balances, and
+ * the business pays its own Stripe fees. Customer payments are direct charges
+ * on the business's account, so Red Fox never holds their money.
  */
 export async function startStripeConnect(
   orgId: string,
@@ -156,8 +162,9 @@ export async function startStripeConnect(
     let accountId = org.stripe_account_id as string | null;
     if (!accountId) {
       const account = await stripe.accounts.create({
-        type: 'express',
+        type: 'standard',
         business_profile: { name: org.name ?? undefined },
+        metadata: { redfox_org_id: orgId },
       });
       accountId = account.id;
       await supabase
