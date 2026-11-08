@@ -155,7 +155,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       { data: propertyPhotoRows, error: propertyPhotoError },
       { data: propertyRows },
     ] = await Promise.all([
-      supabase.from('customers').select('*').order('created_at', { ascending: false }),
+      // Page through customers: the database API returns at most 1,000 rows per request.
+      (async () => {
+        const rows: Record<string, any>[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await supabase
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true })
+            .range(from, from + 999);
+          if (error) return { data: rows.length ? rows : null, error };
+          rows.push(...(data ?? []));
+          if (!data || data.length < 1000) break;
+        }
+        return { data: rows, error: null };
+      })(),
       supabase.from('locations').select('*').order('created_at', { ascending: true }),
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('invoice_line_items').select('*').order('order', { ascending: true }),

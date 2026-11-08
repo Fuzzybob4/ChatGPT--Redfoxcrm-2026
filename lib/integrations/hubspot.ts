@@ -224,3 +224,74 @@ export function phoneKey(phone: string | null | undefined): string {
   const digits = (phone ?? "").replace(/\D/g, "");
   return digits.length >= 10 ? digits.slice(-10) : "";
 }
+
+/**
+ * Looks up map coordinates for this org's customers that have a street address
+ * but no lat/lng yet (e.g. right after a HubSpot import). Runs with limited
+ * concurrency and stops before the time budget so the request can't time out;
+ * anything left over is picked up by the next sync.
+ */
+export async function geocodeMissingCustomers(
+  supabase: { from: (table: string) => any },
+  orgId: string,
+  { budgetMs = 200_000, concurrency = 8 }: { budgetMs?: number; concurrency?: number } = {},
+): Promise<{ mapped: number; remaining: number }> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return { mapped: 0, remaining: 0 };
+  const started = Date.now();
+
+  // Default region for contacts whose address has no city/state/zip.
+  const { data: profile } = await supabase
+    .from("business_profiles")
+    .select("city, state")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const fallbackRegion = [profile?.city, profile?.state].filter(Boolean).join(", ");
+
+  const targets: Array<{ id: string; address: string; city: string | null; state: string | null; zip_code: string | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, address, city, state, zip_code")
+      .eq("org_id", orgId)
+      .is("lat", null)
+      .not("address", "is", null)
+      .neq("address", "")
+      .range(from, from + 999);
+    if (error) throw error;
+    targets.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+
+  async function lookup(query: string) {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?country=us&limit=1&access_token=${token}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const coords = data?.features?.[0]?.geometry?.coordinates;
+    return Array.isArray(coords) ? { lng: coords[0] as number, lat: coords[1] as number } : null;
+  }
+
+  let index = 0;
+  let mapped = 0;
+  let attempted = 0;
+  async function worker() {
+    while (index < targets.length && Date.now() - started < budgetMs) {
+      const t = targets[index++];
+      attempted++;
+      const region = [t.city, t.state, t.zip_code].map((v) => (v ?? "").trim()).filter(Boolean).join(", ");
+      const query = [t.address.trim(), region || fallbackRegion].filter(Boolean).join(", ");
+      try {
+        const hit = await lookup(query);
+        if (hit) {
+          await supabase.from("customers").update({ lat: hit.lat, lng: hit.lng }).eq("id", t.id).eq("org_id", orgId);
+          mapped++;
+        }
+      } catch (err) {
+        console.error("[geocode] failed for customer", t.id, err);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
+  return { mapped, remaining: Math.max(0, targets.length - attempted) };
+}

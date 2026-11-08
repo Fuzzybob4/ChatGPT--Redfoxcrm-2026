@@ -14,11 +14,19 @@ export default async function MappingPage() {
   const supabase = await createClient();
   const locationId = (await cookies()).get("redfox_selected_location")?.value;
 
-  let customerQuery = supabase
-    .from("customers")
-    .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng");
-  if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
-  const { data: customers } = await customerQuery;
+  // Page through results: the database API returns at most 1,000 rows per request.
+  const customers: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    let customerQuery = supabase
+      .from("customers")
+      .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng")
+      .order("id")
+      .range(from, from + 999);
+    if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
+    const { data: page } = await customerQuery;
+    customers.push(...(page ?? []));
+    if (!page || page.length < 1000) break;
+  }
 
   let propertyQuery = supabase
     .from("customer_properties")

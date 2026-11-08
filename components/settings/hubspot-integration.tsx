@@ -14,7 +14,7 @@ export interface HubspotStatus {
   connected: boolean;
   accountName: string | null;
   lastSyncAt: string | null;
-  lastSyncResult: { total?: number; created?: number; linked?: number; skipped?: number; error?: string } | null;
+  lastSyncResult: { total?: number; created?: number; linked?: number; skipped?: number; mapped?: number; mapRemaining?: number; error?: string } | null;
 }
 
 const CALLBACK_MESSAGES: Record<string, string> = {
@@ -30,6 +30,8 @@ function summarize(r: HubspotStatus["lastSyncResult"] | HubspotSyncResult | null
   const parts = [`${r.created ?? 0} new customers imported`];
   if (r.linked) parts.push(`${r.linked} matched to existing customers`);
   if (r.skipped) parts.push(`${r.skipped} skipped (already imported or duplicates)`);
+  if (r.mapped) parts.push(`${r.mapped} placed on the map`);
+  if (r.mapRemaining) parts.push(`${r.mapRemaining} addresses still to map — tap Sync now again`);
   return parts.join(" · ");
 }
 
@@ -106,7 +108,7 @@ export function HubspotIntegration({
           </p>
           {isSyncing && (
             <p className="text-xs text-primary mt-1 flex items-center gap-1">
-              <Loader2 className="size-3 animate-spin" /> Importing contacts… this can take a minute.
+              <Loader2 className="size-3 animate-spin" /> Importing contacts and placing them on the map… this can take a few minutes.
             </p>
           )}
           {!isSyncing && result && <p className="text-xs text-emerald-700 mt-1">{result}</p>}

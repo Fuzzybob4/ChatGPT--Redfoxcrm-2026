@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   fetchAllHubspotContacts,
+  geocodeMissingCustomers,
   getHubspotAccessToken,
   mapHubspotContact,
   phoneKey,
@@ -18,6 +19,8 @@ export interface HubspotSyncResult {
   created?: number;
   linked?: number;
   skipped?: number;
+  mapped?: number;
+  mapRemaining?: number;
 }
 
 async function requireManager() {
@@ -119,7 +122,10 @@ export async function syncHubspotContacts(): Promise<HubspotSyncResult> {
       if (!error) linked++;
     }
 
-    const result = { total: contacts.length, created, linked, skipped };
+    // Put imported customers on the map (address -> coordinates).
+    const geo = await geocodeMissingCustomers(supabase, org.orgId);
+
+    const result = { total: contacts.length, created, linked, skipped, mapped: geo.mapped, mapRemaining: geo.remaining };
     await admin
       .from("org_integrations")
       .update({ last_sync_at: new Date().toISOString(), last_sync_result: result, status: "connected", updated_at: new Date().toISOString() })
