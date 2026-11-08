@@ -81,21 +81,33 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
   const [currentPage, setCurrentPage] = useState(1);
   const [isMerging, setIsMerging] = useState(false);
   const [pageSize, setPageSize] = useState(25);
-  const [addressFilter, setAddressFilter] = useState<"all" | "has" | "none">("all");
+  const [addressFilter, setAddressFilter] = useState<"all" | "has" | "none" | "vendors">("all");
 
   const hasAddress = (c: Customer) => Boolean(((c as any).address ?? "").trim());
+  const isVendor = (c: Customer) => ((c as any).tags ?? []).includes("vendor");
   const addressCounts = useMemo(() => {
     let has = 0;
-    for (const c of customers) if (hasAddress(c)) has++;
-    return { all: customers.length, has, none: customers.length - has };
+    let vendors = 0;
+    let people = 0;
+    for (const c of customers) {
+      if (isVendor(c)) { vendors++; continue; }
+      people++;
+      if (hasAddress(c)) has++;
+    }
+    return { all: people, has, none: people - has, vendors };
   }, [customers]);
 
   // Filter customers
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return customers.filter((c) => {
-      if (addressFilter === "has" && !hasAddress(c)) return false;
-      if (addressFilter === "none" && hasAddress(c)) return false;
+      if (addressFilter === "vendors") {
+        if (!isVendor(c)) return false;
+      } else {
+        if (isVendor(c)) return false;
+        if (addressFilter === "has" && !hasAddress(c)) return false;
+        if (addressFilter === "none" && hasAddress(c)) return false;
+      }
       if (!q) return true;
       const tags: string[] = (c as any).tags ?? [];
       return (
@@ -220,6 +232,7 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
             { id: "all", label: "All" },
             { id: "has", label: "Has address" },
             { id: "none", label: "No address" },
+            { id: "vendors", label: "Vendors" },
           ] as const).map((f) => (
             <button
               key={f.id}

@@ -24,7 +24,8 @@ export default async function MappingPage() {
       .range(from, from + 999);
     if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
     const { data: page } = await customerQuery;
-    customers.push(...(page ?? []));
+    // Vendors (tagged "vendor") are contacts, not service locations: keep them off the map.
+    customers.push(...(page ?? []).filter((c: any) => !(c.tags ?? []).includes("vendor")));
     if (!page || page.length < 1000) break;
   }
 
