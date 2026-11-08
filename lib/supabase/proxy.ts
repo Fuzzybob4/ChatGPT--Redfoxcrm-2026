@@ -55,7 +55,22 @@ export async function updateSession(request: NextRequest) {
   // Don't redirect them here — let the layout enforce the gate
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin/')
 
+  // Pages and endpoints used by people or services who never log in to the
+  // CRM. Each one checks its own access: a customer link token, Stripe's
+  // webhook signature, or the cron secret.
+  const PUBLIC_PREFIXES = [
+    '/customer-portal/', // customer invoice/payment portal (token link)
+    '/estimate/',        // customer estimate approval (token link)
+    '/unsubscribe',      // email unsubscribe links
+    '/api/webhooks/',    // Stripe webhooks (signature verified)
+    '/api/cron/',        // Vercel cron jobs (CRON_SECRET verified)
+    '/api/portal/',      // customer portal actions (token verified)
+    '/api/newsletter/',  // public newsletter signup
+  ]
+  const isPublicEndpoint = PUBLIC_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p))
+
   const isPublicPage =
+    isPublicEndpoint ||
     request.nextUrl.pathname.startsWith('/landing') ||
     request.nextUrl.pathname === '/' ||
     isAuthPage ||
