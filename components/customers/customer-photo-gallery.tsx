@@ -34,7 +34,10 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
     );
   }
 
-  const photoSrc = (photoUrl: string) => photoUrl;
+  // New uploads live in private storage and are served through an
+  // org-checked route; older public Blob links load directly.
+  const photoSrc = (photoUrl: string) =>
+    /^https?:\/\//i.test(photoUrl) ? photoUrl : `/api/file/photo?pathname=${encodeURIComponent(photoUrl)}`;
 
   const selected = selectedIndex !== null ? photos[selectedIndex] : null;
 
