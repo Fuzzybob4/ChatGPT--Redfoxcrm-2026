@@ -10,6 +10,7 @@ import {
   squareGet,
   type SquareCustomer,
   type SquareInvoice,
+  type SquarePayment,
 } from "@/lib/integrations/square";
 
 export interface SquareSyncSummary {
@@ -18,8 +19,13 @@ export interface SquareSyncSummary {
   invoicesCreated: number;
   invoicesUpdated: number;
   invoicesSkipped: number;
+  /** Card/cash/payment-link payments taken without a Square invoice. */
+  paymentsImported?: number;
   mapped: number;
 }
+
+/** How far back to read Square payments (two seasons, for past-customer history). */
+const PAYMENT_LOOKBACK_DAYS = 550;
 
 const LOCK_MS = 10 * 60 * 1000;
 const AUTO_SYNC_EVERY_MS = 10 * 60 * 1000;
@@ -221,6 +227,78 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
       invoicesCreated++;
     }
 
+    // ── Payments without a Square invoice (card, cash, payment links) ──
+    // Invoice payments are already counted above, so skip any payment whose
+    // order belongs to a Square invoice.
+    const invoiceOrders = new Set(squareInvoices.map((si) => si.order_id).filter(Boolean) as string[]);
+    const { data: knownPayments } = await db
+      .from("invoices")
+      .select("square_payment_id")
+      .eq("org_id", orgId)
+      .not("square_payment_id", "is", null);
+    const seenPayments = new Set((knownPayments ?? []).map((p) => p.square_payment_id as string));
+    const begin = new Date(now.getTime() - PAYMENT_LOOKBACK_DAYS * 86_400_000).toISOString();
+    let payCursor: string | undefined;
+    let paymentsImported = 0;
+    for (let page = 0; page < 200; page++) {
+      const q = new URLSearchParams({ begin_time: begin, sort_order: "ASC", limit: "100" });
+      if (payCursor) q.set("cursor", payCursor);
+      const data = await squareGet<{ payments?: SquarePayment[]; cursor?: string }>(token, `/v2/payments?${q}`);
+      const rows: Array<Record<string, any>> = [];
+      for (const p of data.payments ?? []) {
+        if ((p.status ?? "").toUpperCase() !== "COMPLETED") continue;
+        if (seenPayments.has(p.id) || (p.order_id && invoiceOrders.has(p.order_id))) continue;
+        const customerId = p.customer_id ? bySquareId.get(p.customer_id) : undefined;
+        if (!customerId) continue;
+        const amount = Math.max(0, (Number(p.amount_money?.amount ?? 0) - Number(p.refunded_money?.amount ?? 0)) / 100);
+        if (amount <= 0) continue;
+        const kind = (p.source_type ?? "").toUpperCase() === "CASH" ? "cash" : (p.source_type ?? "").toUpperCase() === "CARD" ? "card" : "payment";
+        const title = p.note?.trim() ? p.note.trim().slice(0, 120) : `Square ${kind} payment`;
+        seenPayments.add(p.id);
+        rows.push({
+          org_id: orgId,
+          customer_id: customerId,
+          square_payment_id: p.id,
+          invoice_number: `SQP-${p.receipt_number ?? p.id.slice(-6)}`,
+          title,
+          subtotal: amount,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: amount,
+          deposit_amount: 0,
+          amount_paid: amount,
+          balance_due: 0,
+          status: "paid",
+          payment_state: "paid",
+          payment_method: "square",
+          paid_at: p.created_at ?? now.toISOString(),
+          sent_at: p.created_at ?? null,
+          notes: `Square ${kind} payment (no Square invoice)${p.receipt_url ? ` · receipt: ${p.receipt_url}` : ""}`,
+          created_at: p.created_at ?? now.toISOString(),
+        });
+      }
+      if (rows.length) {
+        const { data: inserted, error } = await db.from("invoices").insert(rows).select("id, title, total_amount");
+        if (error) throw error;
+        paymentsImported += inserted?.length ?? 0;
+        if (inserted?.length) {
+          await db.from("invoice_line_items").insert(
+            inserted.map((r) => ({
+              org_id: orgId,
+              invoice_id: r.id,
+              description: r.title,
+              quantity: 1,
+              unit_price: r.total_amount,
+              line_total: r.total_amount,
+              sort_order: 0,
+            })),
+          );
+        }
+      }
+      payCursor = data.cursor;
+      if (!payCursor) break;
+    }
+
     const geo = await geocodeMissingCustomers(db, orgId, { budgetMs: geocodeBudgetMs });
     const summary: SquareSyncSummary = {
       customersCreated,
@@ -228,6 +306,7 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
       invoicesCreated,
       invoicesUpdated,
       invoicesSkipped,
+      paymentsImported,
       mapped: geo.mapped,
     };
     await db

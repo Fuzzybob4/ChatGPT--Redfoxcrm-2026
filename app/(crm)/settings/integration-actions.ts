@@ -90,6 +90,7 @@ export interface SquareSyncResult {
   invoicesCreated?: number;
   invoicesUpdated?: number;
   invoicesSkipped?: number;
+  paymentsImported?: number;
   mapped?: number;
 }
 

@@ -216,6 +216,7 @@ export interface SquareInvoice {
   created_at?: string;
   updated_at?: string;
   public_url?: string;
+  order_id?: string;
   primary_recipient?: { customer_id?: string; email_address?: string; given_name?: string; family_name?: string };
   payment_requests?: Array<{
     request_type?: string;
@@ -223,6 +224,20 @@ export interface SquareInvoice {
     computed_amount_money?: { amount?: number };
     total_completed_amount_money?: { amount?: number };
   }>;
+}
+
+export interface SquarePayment {
+  id: string;
+  status?: string;
+  source_type?: string;
+  created_at?: string;
+  customer_id?: string;
+  order_id?: string;
+  note?: string;
+  receipt_number?: string;
+  receipt_url?: string;
+  amount_money?: { amount?: number };
+  refunded_money?: { amount?: number };
 }
 
 const SQUARE_STATUS: Record<string, string> = {
