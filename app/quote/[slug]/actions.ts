@@ -100,11 +100,13 @@ export async function submitInstantQuote(
 
     const today = new Date();
     const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
-    const description = quote.lines.map((l) => `${l.label}: ${l.quantity} × $${l.unitPrice} = $${l.total.toFixed(2)}`).join("\n");
+    const description = quote.lines
+      .map((l) => (l.label.startsWith("Front roofline") ? `${l.label}: $${l.total.toFixed(2)}` : `${l.label} × ${l.quantity}: $${l.total.toFixed(2)}`))
+      .join("\n");
     const measureNote =
       input.measurementSource === "satellite"
         ? `Roofline measured from satellite at ${input.measuredFeet ?? "?"} ft; customer submitted ${input.selection.feet} ft.`
-        : `Roofline entered by customer: ${input.selection.feet} ft.`;
+        : `Roofline traced by customer: ${input.selection.feet} ft.`;
 
     const { data: est, error: estError } = await db
       .from("estimates")

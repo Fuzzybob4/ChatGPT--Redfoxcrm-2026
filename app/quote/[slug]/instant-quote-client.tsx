@@ -43,6 +43,7 @@ export function InstantQuoteClient({
   const [address, setAddress] = useState("");
   const [measure, setMeasure] = useState<MeasureResult | null>(null);
   const [stories, setStories] = useState<1 | 2>(1);
+  const [tracing, setTracing] = useState(false);
   const [feet, setFeet] = useState(0);
   const [wreaths, setWreaths] = useState<Record<number, number>>({});
   const [trees, setTrees] = useState<Record<number, number>>({});
@@ -60,12 +61,15 @@ export function InstantQuoteClient({
     [settings, feet, stories, wreaths, trees],
   );
 
+  const rooflinePrice = quote.lines.find((l) => l.label.startsWith("Front roofline"))?.total ?? 0;
+
   function find() {
     setError(null);
     startLookup(async () => {
       const res = await lookupAddress(slug, address);
       if (!res.ok) return setError(res.error);
       setMeasure(res.result);
+      setTracing(false);
       setFeet(res.result.feet ?? 0);
     });
   }
@@ -152,7 +156,7 @@ export function InstantQuoteClient({
                   onClick={() => setStories(s)}
                   className="flex-1"
                 >
-                  {s}-story · {usd(s === 2 ? settings.pricePerFoot2Story : settings.pricePerFoot1Story)}/ft
+                  {s === 1 ? "1-story home" : "2-story home"}
                 </Button>
               ))}
             </div>
@@ -166,33 +170,35 @@ export function InstantQuoteClient({
               <CardDescription className="text-xs">{measure.formattedAddress}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {mapboxToken && measure.source !== "satellite" && (
+              {mapboxToken && (measure.source !== "satellite" || tracing) && (
                 <RooflineTracer
                   key={`${measure.lat},${measure.lng}`}
                   token={mapboxToken}
                   lat={measure.lat}
                   lng={measure.lng}
                   compact
-                  onFeetChange={(ft) => { if (ft > 0) setFeet(Math.round(ft / 5) * 5); }}
+                  hideFeet
+                  priceLabel={rooflinePrice > 0 ? usd(rooflinePrice) : undefined}
+                  onFeetChange={(ft) => setFeet(ft > 0 ? Math.round(ft / 5) * 5 : measure.source === "satellite" && !tracing ? measure.feet ?? 0 : 0)}
                 />
               )}
-              {mapboxToken && measure.source === "satellite" && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={satelliteUrl(mapboxToken, measure)}
-                  alt="Satellite view of your home"
-                  className="w-full rounded-lg border"
-                />
+              {mapboxToken && measure.source === "satellite" && !tracing && (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={satelliteUrl(mapboxToken, measure)} alt="Satellite view of your home" className="w-full rounded-lg border" />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm">Roofline price: <span className="font-semibold">{usd(rooflinePrice)}</span></span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => { setTracing(true); setFeet(0); }}>
+                      Line not right? Tap it yourself
+                    </Button>
+                  </div>
+                </>
               )}
-              <p className="text-sm text-muted-foreground">
-                {measure.source === "satellite"
-                  ? `We measured about ${measure.feet} ft of front roofline (yellow line). Adjust it if it looks off.`
-                  : "Tap each corner along the front of your roof to measure it, or enter the feet below."}
+              <p className="text-xs text-muted-foreground">
+                {measure.source === "satellite" && !tracing
+                  ? "The yellow line is the part of your roof we'd light."
+                  : "Zoom in with +, then tap along the front edge of your roof where you want lights. Use New section for a separate roof edge, like a garage."}
               </p>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Feet of roofline</span>
-                <Stepper value={feet} onChange={setFeet} max={1000} step={5} />
-              </div>
             </CardContent>
           </Card>
         )}
@@ -234,7 +240,7 @@ export function InstantQuoteClient({
               <div className="space-y-1 text-sm">
                 {quote.lines.map((l) => (
                   <div key={l.label} className="flex justify-between gap-2">
-                    <span>{l.label}{l.quantity > 1 && !l.label.includes(" ft") ? ` × ${l.quantity}` : ""}</span>
+                    <span>{l.label}{l.quantity > 1 && !l.label.startsWith("Front roofline") ? ` × ${l.quantity}` : ""}</span>
                     <span className="tabular-nums">{usd(l.total)}</span>
                   </div>
                 ))}

@@ -34,12 +34,18 @@ export function RooflineTracer({
   lng,
   onFeetChange,
   compact = false,
+  hideFeet = false,
+  priceLabel,
 }: {
   token: string;
   lat: number;
   lng: number;
   onFeetChange?: (feet: number) => void;
   compact?: boolean;
+  /** Customer-facing: don't show footage. */
+  hideFeet?: boolean;
+  /** Shown in place of the footage, e.g. the live price. */
+  priceLabel?: string;
 }) {
   const [zoom, setZoom] = useState(19.5);
   const [lines, setLines] = useState<Pt[][]>([[]]);
@@ -118,7 +124,7 @@ export function RooflineTracer({
         </svg>
         {!hasPoints && (
           <div className="pointer-events-none absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full bg-black/70 px-3 py-1 text-xs text-white">
-            Tap each corner along the front roofline
+            Tap along the front edge of your roof
           </div>
         )}
         <div className="absolute right-2 top-2 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
@@ -133,7 +139,11 @@ export function RooflineTracer({
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-auto text-sm">
-          Traced: <span className="font-semibold tabular-nums">{feet} ft</span>
+          {hideFeet ? (
+            priceLabel ? <>Your price: <span className="font-semibold tabular-nums">{priceLabel}</span></> : null
+          ) : (
+            <>Traced: <span className="font-semibold tabular-nums">{feet} ft</span></>
+          )}
         </span>
         <Button type="button" size="sm" variant="outline" className="gap-1" onClick={undo} disabled={!hasPoints}>
           <RotateCcw className="size-3.5" /> Undo

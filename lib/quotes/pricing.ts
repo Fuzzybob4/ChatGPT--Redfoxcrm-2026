@@ -72,7 +72,7 @@ export function computeQuote(s: QuoteSettings, sel: QuoteSelection): QuoteResult
   const perFoot = sel.stories === 2 ? s.pricePerFoot2Story : s.pricePerFoot1Story;
   if (feet > 0) {
     lines.push({
-      label: `Roofline lighting (${sel.stories}-story), ${feet} ft`,
+      label: `Front roofline lighting (${sel.stories}-story home)`,
       quantity: feet,
       unitPrice: perFoot,
       total: money(feet * perFoot),
