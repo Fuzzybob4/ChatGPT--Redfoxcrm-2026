@@ -185,7 +185,9 @@ export function mapHubspotContact(contact: HubspotContact) {
 
   let email = clean(p.email).toLowerCase();
   if (email.endsWith("@placeholder.com")) email = "";
-  const phone = clean(p.phone) || clean(p.mobilephone);
+  // HubSpot spreadsheet imports sometimes store numbers with a leading ' .
+  const cleanPhone = (v: string | null | undefined) => clean(v).replace(/^'+/, "").trim();
+  const phone = cleanPhone(p.phone) || cleanPhone(p.mobilephone);
   const company = clean(p.company);
 
   let first = clean(p.firstname);

@@ -470,6 +470,12 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
                             </Avatar>
                             <div className="min-w-0">
                               <span className="font-medium text-sm block">{customer.name}</span>
+                              {/* On phones the email/phone columns are off-screen, so show them here. */}
+                              {(customer.phone || customer.email) && (
+                                <span className="block truncate text-xs text-muted-foreground sm:hidden">
+                                  {[customer.phone, customer.email].filter(Boolean).join(" · ")}
+                                </span>
+                              )}
                               {((customer as any).tags ?? []).length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-0.5">
                                   {((customer as any).tags as string[]).slice(0, 3).map((tag) => (
