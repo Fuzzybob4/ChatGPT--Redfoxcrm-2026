@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { MapPin, Search, X } from "lucide-react";
+import { ChevronDown, Check, MapPin, Search, X } from "lucide-react";
+import { updateCustomerStage } from "@/app/(crm)/customers/actions";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -13,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LIFECYCLE_META, LIFECYCLE_ORDER, type LifecycleStatus } from "@/lib/lifecycle";
+import { LIFECYCLE_META, LIFECYCLE_ORDER, MANUAL_STAGE_OPTIONS, type LifecycleStatus } from "@/lib/lifecycle";
 import { cn } from "@/lib/utils";
 
 export interface MapPin {
@@ -54,7 +56,38 @@ function matchesView(p: MapPin, view: MapView): boolean {
   return p.stage === view;
 }
 
-export function CustomerMap({ pins }: { pins: MapPin[] }) {
+export function CustomerMap({ pins: serverPins }: { pins: MapPin[] }) {
+  const router = useRouter();
+  // Stage changes made from the popup show right away; the server refresh
+  // then brings in the authoritative stage.
+  const [overrides, setOverrides] = useState<Record<string, LifecycleStatus>>({});
+  const pins = useMemo(
+    () => serverPins.map((p) => (overrides[p.customerId] ? { ...p, stage: overrides[p.customerId] } : p)),
+    [serverPins, overrides],
+  );
+  const [stageMenu, setStageMenu] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
+  const [savingStage, startStage] = useTransition();
+
+  function changeStage(pin: MapPin, stage: LifecycleStatus | null) {
+    setStageMenu(false);
+    setStageError(null);
+    if (stage) {
+      setOverrides((o) => ({ ...o, [pin.customerId]: stage }));
+      setSelected({ ...pin, stage });
+    }
+    startStage(async () => {
+      try {
+        await updateCustomerStage(pin.customerId, stage);
+        if (!stage) setOverrides((o) => { const n = { ...o }; delete n[pin.customerId]; return n; });
+        router.refresh();
+      } catch {
+        setOverrides((o) => { const n = { ...o }; delete n[pin.customerId]; return n; });
+        setSelected(pin);
+        setStageError("Couldn't change the stage. Try again.");
+      }
+    });
+  }
   // Open on the work that needs attention when there is any.
   const [view, setView] = useState<MapView>(() =>
     pins.some((p) => p.stage === "pending_install") ? "pending_install" : "all",
@@ -244,6 +277,7 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                 onClick={(e) => {
                   e.originalEvent.stopPropagation();
                   setSelected(p);
+                  setStageMenu(false);
                 }}
               >
                 <div className="relative flex flex-col items-center">
@@ -296,12 +330,47 @@ export function CustomerMap({ pins }: { pins: MapPin[] }) {
                     <X className="size-3.5" />
                   </button>
                 </div>
-                <span
-                  className="inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white"
-                  style={{ backgroundColor: LIFECYCLE_META[selected.stage].color }}
-                >
-                  {LIFECYCLE_META[selected.stage].label}
-                </span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setStageMenu((v) => !v)}
+                    disabled={savingStage}
+                    aria-haspopup="menu"
+                    aria-expanded={stageMenu}
+                    className="inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white disabled:opacity-60"
+                    style={{ backgroundColor: LIFECYCLE_META[selected.stage].color }}
+                  >
+                    {savingStage ? "Saving…" : LIFECYCLE_META[selected.stage].label}
+                    <ChevronDown className="size-3" />
+                  </button>
+                  {stageMenu && (
+                    <div role="menu" className="absolute left-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-md border bg-white py-1 shadow-lg">
+                      {MANUAL_STAGE_OPTIONS.map((st) => (
+                        <button
+                          key={st}
+                          role="menuitem"
+                          type="button"
+                          onClick={() => changeStage(selected, st)}
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs text-gray-800 hover:bg-gray-100"
+                        >
+                          <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: LIFECYCLE_META[st].color }} />
+                          <span className="flex-1">{LIFECYCLE_META[st].label}</span>
+                          {selected.stage === st && <Check className="size-3" />}
+                        </button>
+                      ))}
+                      <div className="my-1 border-t" />
+                      <button
+                        role="menuitem"
+                        type="button"
+                        onClick={() => changeStage(selected, null)}
+                        className="w-full px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100"
+                      >
+                        Automatic (from payments &amp; jobs)
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {stageError && <p className="text-[11px] text-red-600">{stageError}</p>}
                 <p className="text-xs text-gray-600">{selected.address}</p>
                 {selected.pastCustomer && (
                   <span

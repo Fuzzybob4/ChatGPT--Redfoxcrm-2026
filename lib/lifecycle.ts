@@ -83,9 +83,9 @@ export const LIFECYCLE_META: Record<LifecycleStatus, LifecycleMeta> = {
     description: "Paused by the customer or team",
   },
   not_interested: {
-    label: "Not Interested",
-    color: "#9ca3af",
-    description: "Customer declined",
+    label: "Cancelled",
+    color: "#9f1239",
+    description: "Cancelled or not interested this season",
   },
   lost: { label: "Lost", color: "#7f1d1d", description: "Lost to a competitor or churned" },
 };
