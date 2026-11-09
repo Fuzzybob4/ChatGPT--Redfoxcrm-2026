@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { getCurrentOrg } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SQUARE_SCOPES, SQUARE_STATE_COOKIE, exchangeSquareCode, getSquareMerchantName } from "@/lib/integrations/square";
+import { SQUARE_SCOPES, SQUARE_STATE_COOKIE, exchangeSquareCode, getSquareMerchantName, squareCredentialShape } from "@/lib/integrations/square";
 
 function safeEqual(a: string, b: string) {
   const ab = Buffer.from(a);
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     );
     if (error) throw error;
   } catch (err) {
-    console.error("[square] OAuth callback failed:", err);
+    console.error("[square] OAuth callback failed:", err, squareCredentialShape());
     return done("error");
   }
   return done("connected");

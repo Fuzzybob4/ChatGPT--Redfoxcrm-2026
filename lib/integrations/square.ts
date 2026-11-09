@@ -26,8 +26,21 @@ const isSandbox = () => (process.env.SQUARE_ENVIRONMENT || "").toLowerCase() ===
 const OAUTH_BASE = () => (isSandbox() ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com");
 const API_BASE = () => (isSandbox() ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com");
 
+// Trim in case a value was pasted with a space or line break.
+const appId = () => (process.env.SQUARE_APPLICATION_ID || "").trim();
+const appSecret = () => (process.env.SQUARE_APPLICATION_SECRET || "").trim();
+
+/** Non-secret description of the configured credentials, for troubleshooting. */
+export function squareCredentialShape(): string {
+  const id = appId();
+  const secret = appSecret();
+  const kind = (v: string, prod: string, sandbox: string) =>
+    v.startsWith(sandbox) ? "sandbox" : v.startsWith(prod) ? "production" : v.startsWith("EAAA") ? "access-token(wrong)" : "unknown";
+  return `id=${kind(id, "sq0idp-", "sandbox-sq0idb-")} secret=${kind(secret, "sq0csp-", "sandbox-sq0csb-")} secretLen=${secret.length} rawHadWhitespace=${/\s/.test(process.env.SQUARE_APPLICATION_SECRET || "") || /\s/.test(process.env.SQUARE_APPLICATION_ID || "")} env=${isSandbox() ? "sandbox" : "production"}`;
+}
+
 export function squareConfigured(): boolean {
-  return Boolean(process.env.SQUARE_APPLICATION_ID && process.env.SQUARE_APPLICATION_SECRET);
+  return Boolean(appId() && appSecret());
 }
 
 export function squareRedirectUri(origin: string): string {
@@ -36,7 +49,7 @@ export function squareRedirectUri(origin: string): string {
 
 export function squareAuthorizeUrl(origin: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.SQUARE_APPLICATION_ID!,
+    client_id: appId(),
     scope: SQUARE_SCOPES.join(" "),
     session: "false",
     state,
@@ -57,8 +70,8 @@ async function tokenRequest(body: Record<string, string>): Promise<SquareToken> 
     method: "POST",
     headers: { "Content-Type": "application/json", "Square-Version": SQUARE_VERSION },
     body: JSON.stringify({
-      client_id: process.env.SQUARE_APPLICATION_ID,
-      client_secret: process.env.SQUARE_APPLICATION_SECRET,
+      client_id: appId(),
+      client_secret: appSecret(),
       ...body,
     }),
     cache: "no-store",
@@ -80,9 +93,9 @@ export async function revokeSquareToken(accessToken: string) {
     headers: {
       "Content-Type": "application/json",
       "Square-Version": SQUARE_VERSION,
-      Authorization: `Client ${process.env.SQUARE_APPLICATION_SECRET}`,
+      Authorization: `Client ${appSecret()}`,
     },
-    body: JSON.stringify({ client_id: process.env.SQUARE_APPLICATION_ID, access_token: accessToken }),
+    body: JSON.stringify({ client_id: appId(), access_token: accessToken }),
   }).catch(() => undefined);
 }
 
