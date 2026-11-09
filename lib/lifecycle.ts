@@ -217,6 +217,21 @@ export function deriveLifecycleStatus(input: {
   return "lead";
 }
 
+/**
+ * Aug 1 of the current holiday season (YYYY-MM-DD). Invoices and estimates
+ * from before this date belong to past seasons and don't drive this season's
+ * pipeline stage (they still count toward "past customer").
+ */
+export function currentSeasonStart(today: Date = new Date()): string {
+  const y = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
+  return `${y}-08-01`;
+}
+
+/** True when a timestamp/date is in the current season (missing dates count as current). */
+export function inCurrentSeason(date: string | null | undefined, seasonStart = currentSeasonStart()): boolean {
+  return !date || String(date).slice(0, 10) >= seasonStart;
+}
+
 /** Turn a raw estimate row into pipeline signals. */
 export function estimateSignal(estimate: { status?: string | null; sentAt?: string | null; invoiceId?: string | null }) {
   const status = norm(estimate.status ?? "");

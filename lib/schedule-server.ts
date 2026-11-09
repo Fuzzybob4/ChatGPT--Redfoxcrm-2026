@@ -4,11 +4,8 @@ import { DEFAULT_WORK_DAYS, type PlanCustomer } from "@/lib/schedule";
 
 type Db = any;
 
-/** Aug 1 of the current holiday season. */
-export function seasonStart(today = new Date()): string {
-  const y = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
-  return `${y}-08-01`;
-}
+export { currentSeasonStart as seasonStart } from "@/lib/lifecycle";
+import { currentSeasonStart as seasonStart } from "@/lib/lifecycle";
 
 async function readAll<T = any>(build: (from: number, to: number) => any): Promise<T[]> {
   const out: T[] = [];

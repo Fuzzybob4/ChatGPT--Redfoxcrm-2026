@@ -54,7 +54,7 @@ export default async function MappingPage() {
   // Estimates drive the "Estimate Sent" / "Estimate Approved" pipeline stages.
   const { data: estimates } = await supabase
     .from("estimates")
-    .select("customer_id, status, sent_at, invoice_id")
+    .select("customer_id, status, sent_at, invoice_id, created_at")
     .not("customer_id", "is", null);
 
   // Open customer-submitted trouble calls drive the pulsing map indicator.

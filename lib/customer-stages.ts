@@ -1,4 +1,4 @@
-import { deriveLifecycleStatus, estimateSignal, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
+import { currentSeasonStart, deriveLifecycleStatus, estimateSignal, inCurrentSeason, invoicePaymentSignal, type LifecycleStatus } from "@/lib/lifecycle";
 
 type Row = Record<string, any>;
 
@@ -31,8 +31,11 @@ export function buildStageResolver({
   }
 
   const paymentsByCustomer = new Map<string, { paid: boolean; deposit: boolean; unpaid: boolean }>();
+  const season = currentSeasonStart();
   for (const inv of invoices) {
     if (!inv.customer_id) continue;
+    // Last season's invoices don't make someone a pending install this year.
+    if (!inCurrentSeason(inv.issue_date ?? inv.created_at, season)) continue;
     const amountPaid =
       inv.amount_paid != null
         ? Number(inv.amount_paid)
@@ -51,6 +54,7 @@ export function buildStageResolver({
   const estimatesByCustomer = new Map<string, { sent: boolean; approved: boolean }>();
   for (const e of estimates) {
     if (!e.customer_id) continue;
+    if (!inCurrentSeason(e.created_at ?? e.sent_at, season)) continue;
     const sig = estimateSignal({ status: e.status, sentAt: e.sent_at, invoiceId: e.invoice_id });
     const cur = estimatesByCustomer.get(e.customer_id) ?? { sent: false, approved: false };
     estimatesByCustomer.set(e.customer_id, { sent: cur.sent || sig.sent, approved: cur.approved || sig.approved });
