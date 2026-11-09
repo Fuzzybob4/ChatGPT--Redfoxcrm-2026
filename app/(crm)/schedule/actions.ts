@@ -166,7 +166,7 @@ export async function undoScheduleBatch(batchId: string): Promise<{ ok: true; re
   if (changes?.length) {
     await db.from("schedule_changes").update({ undone_at: new Date().toISOString() }).eq("org_id", org.orgId).eq("batch_id", batchId);
     // The rained-out day is the earliest original date among rain moves.
-    const rainDays = changes.filter((c) => c.reason === "rain").map((c) => c.from_date as string).sort();
+    const rainDays = changes.filter((c: any) => c.reason === "rain").map((c: any) => c.from_date as string).sort();
     if (rainDays[0]) await db.from("schedule_days_off").delete().eq("org_id", org.orgId).eq("day", rainDays[0]);
   }
   refresh();
@@ -239,7 +239,7 @@ export async function previewAutoSchedule(startDate: string): Promise<{ ok: true
     loadScheduleSettings(db, org.orgId),
     loadNeedsScheduling(db, org.orgId),
   ]);
-  const active = crews.filter((c) => c.active);
+  const active = crews.filter((c: { active: boolean }) => c.active);
   if (!active.length) return { ok: false, error: "Add a crew first." };
 
   const { data: existing } = await db
@@ -274,10 +274,10 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
   const db = createAdminClient();
 
   // Re-check against the live list so nobody gets double-booked.
-  const needs = new Map((await loadNeedsScheduling(db, org.orgId)).map((c) => [c.id, c]));
+  const needs = new Map((await loadNeedsScheduling(db, org.orgId)).map((c) => [c.id, c] as const));
   const { crews } = await loadScheduleSettings(db, org.orgId);
-  const crewById = new Map(crews.map((c) => [c.id, c]));
-  const ids = plan.map((p) => p.customerId).filter((id) => needs.has(id));
+  const crewById = new Map(crews.map((c) => [c.id, c] as const));
+  const ids = plan.map((p) => p.customerId).filter((id: string) => needs.has(id));
   if (!ids.length) return { ok: false, error: "Those customers are already scheduled." };
 
   const { data: customers } = await db

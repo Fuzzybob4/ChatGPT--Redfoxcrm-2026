@@ -20,7 +20,14 @@ async function readAll<T = any>(build: (from: number, to: number) => any): Promi
   return out;
 }
 
-export async function loadScheduleSettings(db: Db, orgId: string) {
+export interface ScheduleSettings {
+  workDays: number[];
+  notifyOnMove: boolean;
+  daysOff: { day: string; reason: string }[];
+  crews: { id: string; name: string; color: string; capacity: number; active: boolean }[];
+}
+
+export async function loadScheduleSettings(db: Db, orgId: string): Promise<ScheduleSettings> {
   const [{ data: s }, { data: off }, { data: crews }] = await Promise.all([
     db.from("schedule_settings").select("work_days, notify_customers_on_move").eq("org_id", orgId).maybeSingle(),
     db.from("schedule_days_off").select("day, reason").eq("org_id", orgId).gte("day", seasonStart()),
@@ -65,10 +72,10 @@ export async function loadNeedsScheduling(db: Db, orgId: string): Promise<(PlanC
   }
   const hasInstall = new Set(
     jobs
-      .filter((j) => j.customer_id && !String(j.job_type ?? "").toLowerCase().includes("remov") && String(j.status ?? "").toLowerCase() !== "cancelled")
-      .map((j) => j.customer_id as string),
+      .filter((j: any) => j.customer_id && !String(j.job_type ?? "").toLowerCase().includes("remov") && String(j.status ?? "").toLowerCase() !== "cancelled")
+      .map((j: any) => j.customer_id as string),
   );
-  const ids = [...booked.keys()].filter((id) => !hasInstall.has(id));
+  const ids = [...booked.keys()].filter((id: string) => !hasInstall.has(id));
   if (!ids.length) return [];
 
   const customers: any[] = [];

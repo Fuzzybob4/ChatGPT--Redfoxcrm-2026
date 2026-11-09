@@ -31,7 +31,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .order("scheduled_date"),
   ]);
 
-  const customerIds = [...new Set((jobs ?? []).map((j) => j.customer_id).filter(Boolean))] as string[];
+  const customerIds = [...new Set((jobs ?? []).map((j: any) => j.customer_id).filter(Boolean))] as string[];
   const { data: customers } = customerIds.length
     ? await db.from("customers").select("id, full_name, first_name, last_name, phone").in("id", customerIds)
     : { data: [] as any[] };
@@ -39,7 +39,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   // Jobs that still only carry a typed crew name get matched to the crew.
   const crewByName = new Map(settings.crews.map((c) => [c.name.toLowerCase(), c.id]));
-  const boardJobs: BoardJob[] = (jobs ?? []).map((j) => {
+  const boardJobs: BoardJob[] = (jobs ?? []).map((j: any) => {
     const c = j.customer_id ? byId.get(j.customer_id) : null;
     return {
       id: j.id,
