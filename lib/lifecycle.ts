@@ -218,13 +218,15 @@ export function deriveLifecycleStatus(input: {
 }
 
 /**
- * Aug 1 of the current holiday season (YYYY-MM-DD). Invoices and estimates
- * from before this date belong to past seasons and don't drive this season's
- * pipeline stage (they still count toward "past customer").
+ * May 1 of the current holiday season (YYYY-MM-DD). Early-bird deposits start
+ * in spring, while last season's final payments and removals wrap up by April.
+ * Invoices and estimates from before this date belong to past seasons and
+ * don't drive this season's pipeline stage (they still count toward "past
+ * customer").
  */
 export function currentSeasonStart(today: Date = new Date()): string {
-  const y = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
-  return `${y}-08-01`;
+  const y = today.getMonth() >= 4 ? today.getFullYear() : today.getFullYear() - 1;
+  return `${y}-05-01`;
 }
 
 /** True when a timestamp/date is in the current season (missing dates count as current). */
