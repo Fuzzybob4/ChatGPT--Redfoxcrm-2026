@@ -82,6 +82,13 @@ const navItems = [
     href: "/jobs",
     icon: CalendarDays,
     badge: true,
+    children: [
+      {
+        title: "Crew Schedule",
+        href: "/schedule",
+        icon: CalendarDays,
+      },
+    ],
   },
   {
     title: "Trouble Calls",
