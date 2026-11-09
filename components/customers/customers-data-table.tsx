@@ -42,6 +42,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { mergeCustomers } from "@/app/(crm)/customers/merge-actions";
+import { deleteCustomers } from "@/app/(crm)/customers/actions";
 import type { Customer } from "@/lib/data";
 
 interface CustomersDataTableProps {
@@ -181,6 +182,8 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleMergeCustomers = async () => {
     if (selectedRows.size < 2) {
       alert("Please select at least 2 customers to merge");
@@ -210,15 +213,24 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
     }
   };
 
-  const handleDeleteCustomers = () => {
+  const handleDeleteCustomers = async () => {
     if (selectedRows.size === 0) return;
-
-    const confirmMessage = `Delete ${selectedRows.size} customer(s)? This action cannot be undone.`;
-    if (confirm(confirmMessage)) {
-      // TODO: Implement delete logic via API
-      console.log("[v0] Delete customers:", Array.from(selectedRows));
-      alert("Delete functionality coming soon. Selected IDs: " + Array.from(selectedRows).join(", "));
+    const n = selectedRows.size;
+    if (!confirm(`Delete ${n} customer${n > 1 ? "s" : ""}? This can't be undone.\n\nCustomers with invoices or jobs are kept — mark those Cancelled instead.`)) return;
+    setIsDeleting(true);
+    try {
+      const { deleted, kept } = await deleteCustomers(Array.from(selectedRows));
+      let msg = `Deleted ${deleted} customer${deleted === 1 ? "" : "s"}.`;
+      if (kept.length) {
+        msg += `\n\nKept ${kept.length} with invoices or jobs:\n${kept.slice(0, 10).map((k) => `- ${k.name}`).join("\n")}${kept.length > 10 ? "\n…" : ""}`;
+      }
+      alert(msg);
       setSelectedRows(new Set());
+      onRefresh?.();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Couldn't delete those customers.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -321,10 +333,11 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
                 size="sm"
                 variant="ghost"
                 onClick={handleDeleteCustomers}
+                disabled={isDeleting}
                 className="gap-2 text-destructive hover:text-destructive"
               >
                 <Trash2 className="size-3.5" />
-                Delete
+                {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             </div>
           </div>
