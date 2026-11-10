@@ -36,6 +36,7 @@ const CONTACT_PROPERTIES = [
   "company",
   "lifecyclestage",
   "hs_email_optout",
+  "hs_lead_status",
 ];
 
 export function hubspotConfigured(): boolean {
@@ -222,6 +223,8 @@ export function mapHubspotContact(contact: HubspotContact) {
     status: ACTIVE_STAGES.has(stage) ? "active" : "lead",
     // Opted out of all HubSpot email: never send them Red Fox marketing email either.
     marketing_unsubscribed: clean(p.hs_email_optout).toLowerCase() === "true",
+    // A lead status like "Not Interested - Opted Out" or "Do Not Contact" means no outreach at all.
+    do_not_contact: /opted?[\s-]*out|do[\s-]*not[\s-]*contact/i.test(clean(p.hs_lead_status)),
   };
 }
 

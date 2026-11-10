@@ -105,7 +105,7 @@ export async function runHubspotSync(
     for (let from = 0; ; from += 1000) {
       const { data, error } = await db
         .from("customers")
-        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id, marketing_unsubscribed")
+        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id, marketing_unsubscribed, do_not_contact")
         .eq("org_id", orgId)
         .order("id")
         .range(from, from + 999);
@@ -156,6 +156,7 @@ export async function runHubspotSync(
           changes.marketing_unsubscribed = true;
           changes.marketing_opt_in = false;
         }
+        if (row.do_not_contact && !known.do_not_contact) Object.assign(changes, doNotContactChanges());
         if (Object.keys(changes).length) {
           if (changes.address) { changes.lat = null; changes.lng = null; }
           updates.push({ id: known.id, changes });
@@ -172,6 +173,7 @@ export async function runHubspotSync(
             linkChanges.marketing_unsubscribed = true;
             linkChanges.marketing_opt_in = false;
           }
+          if (row.do_not_contact && !match.do_not_contact) Object.assign(linkChanges, doNotContactChanges());
           updates.push({ id: match.id, changes: linkChanges });
           match.hubspot_contact_id = contact.id;
           linked++;
@@ -181,7 +183,7 @@ export async function runHubspotSync(
       if ((row.email && seenEmail.has(row.email)) || (pk && seenPhone.has(pk))) { skipped++; continue; }
       if (row.email) seenEmail.add(row.email);
       if (pk) seenPhone.add(pk);
-      toInsert.push({ ...row, org_id: orgId });
+      toInsert.push(row.do_not_contact ? { ...row, ...doNotContactChanges(), org_id: orgId } : { ...row, org_id: orgId });
     }
 
     let created = 0;
@@ -250,4 +252,16 @@ export async function maybeAutoSyncHubspot(orgId: string): Promise<void> {
   } catch (err) {
     console.error("[hubspot] auto-sync failed for org", orgId, err);
   }
+}
+
+/** Fields set when HubSpot says a contact opted out of all outreach. */
+function doNotContactChanges(): Record<string, any> {
+  return {
+    do_not_contact: true,
+    do_not_contact_at: new Date().toISOString(),
+    do_not_contact_reason: "Opted out (HubSpot lead status)",
+    marketing_unsubscribed: true,
+    marketing_opt_in: false,
+    sms_opt_out: true,
+  };
 }
