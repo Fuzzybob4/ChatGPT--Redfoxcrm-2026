@@ -119,9 +119,8 @@ function WorkOrderCard({
 
   function handleReassign() {
     if (!selectedEmployee) return;
-    const emp = employees.find((e) => e.id === selectedEmployee);
     run(
-      () => reassignJob(job.id, emp?.crewName ?? emp?.fullName ?? "", [selectedEmployee]),
+      () => reassignJob(job.id, [selectedEmployee]),
       () => setReassignOpen(false),
     );
   }

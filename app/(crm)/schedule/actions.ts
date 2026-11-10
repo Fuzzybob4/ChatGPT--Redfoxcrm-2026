@@ -336,7 +336,11 @@ export async function saveCrew(input: { id?: string; name: string; color: string
     ? await db.from("crews").update(row).eq("id", input.id).eq("org_id", org.orgId)
     : await db.from("crews").insert(row);
   if (error) return { ok: false, error: error.code === "23505" ? "There's already a crew with that name." : "Couldn't save the crew." };
-  if (input.id) await db.from("scheduled_jobs").update({ crew_name: name }).eq("crew_id", input.id).eq("org_id", org.orgId);
+  if (input.id) {
+    await db.from("scheduled_jobs").update({ crew_name: name }).eq("crew_id", input.id).eq("org_id", org.orgId);
+    await db.from("employees").update({ crew_name: name }).eq("crew_id", input.id).eq("org_id", org.orgId);
+    revalidatePath("/crew");
+  }
   refresh();
   return { ok: true };
 }
@@ -352,4 +356,41 @@ export async function saveScheduleSettings(input: { workDays: number[]; notifyOn
   if (error) return { ok: false, error: "Couldn't save." };
   refresh();
   return { ok: true };
+}
+
+/** The org's crews, for every crew picker in the app. */
+export async function listCrews(): Promise<{ id: string; name: string; color: string; active: boolean }[]> {
+  const org = await requireOrg();
+  if (!org) return [];
+  const { data } = await createAdminClient()
+    .from("crews")
+    .select("id, name, color, active")
+    .eq("org_id", org.orgId)
+    .order("sort_order")
+    .order("name");
+  return (data ?? []).map((c: any) => ({ id: c.id, name: c.name, color: c.color, active: Boolean(c.active) }));
+}
+
+/** "+ Add a crew" from any crew picker. Returns the existing crew if the name is already taken. */
+export async function quickAddCrew(
+  name: string,
+): Promise<{ ok: true; crew: { id: string; name: string; color: string; active: boolean } } | Fail> {
+  const org = await requireOrg(true);
+  if (!org) return { ok: false, error: "Only owners, admins and managers can add crews." };
+  const clean = (name || "").trim().slice(0, 40);
+  if (!clean) return { ok: false, error: "Give the crew a name." };
+  const db = createAdminClient();
+  const { data: existing } = await db.from("crews").select("id, name, color, active").eq("org_id", org.orgId);
+  const match = (existing ?? []).find((c: any) => c.name.trim().toLowerCase() === clean.toLowerCase());
+  if (match) return { ok: true, crew: { id: match.id, name: match.name, color: match.color, active: Boolean(match.active) } };
+  const palette = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c", "#0891b2"];
+  const { data, error } = await db
+    .from("crews")
+    .insert({ org_id: org.orgId, name: clean, color: palette[(existing ?? []).length % palette.length] })
+    .select("id, name, color, active")
+    .single();
+  if (error || !data) return { ok: false, error: "Couldn't add the crew." };
+  refresh();
+  revalidatePath("/crew");
+  return { ok: true, crew: { id: data.id, name: data.name, color: data.color, active: Boolean(data.active) } };
 }

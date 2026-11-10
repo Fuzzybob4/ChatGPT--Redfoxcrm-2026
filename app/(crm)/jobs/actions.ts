@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { crewForEmployees, resolveCrew } from "@/lib/crews";
 
 // ── Status transition ──────────────────────────────────────────────────────
 
@@ -43,19 +45,17 @@ export async function updateJobStatus(
 
 // ── Employee reassignment ──────────────────────────────────────────────────
 
-export async function reassignJob(
-  jobId: string,
-  crewName: string,
-  assignedEmployees: string[],
-) {
+/** Assign people to a job; the job takes their crew when they share one. */
+export async function reassignJob(jobId: string, assignedEmployees: string[]) {
   const supabase = await createClient();
   const org = await getCurrentOrg();
   if (!org) throw new Error("Not authenticated");
 
+  const crew = await crewForEmployees(createAdminClient(), org.orgId, assignedEmployees);
   const { error } = await supabase
     .from("scheduled_jobs")
     .update({
-      crew_name: crewName || null,
+      ...(crew ? { crew_id: crew.id, crew_name: crew.name } : {}),
       assigned_employees: assignedEmployees,
       updated_at: new Date().toISOString(),
     })
@@ -85,6 +85,9 @@ export interface CreateJobInput {
   city?: string;
   state?: string;
   zipCode?: string;
+  /** A crew from the shared crew list. */
+  crewId?: string;
+  /** Older callers: a crew name, matched to (or added to) the crew list. */
   crewName?: string;
   assignedEmployees?: string[];
   notes?: string;
@@ -108,6 +111,11 @@ export async function createJob(input: CreateJobInput) {
     locationId = customer.location_id;
   }
 
+  const admin = createAdminClient();
+  const crew =
+    (await resolveCrew(admin, org.orgId, { crewId: input.crewId, crewName: input.crewName })) ??
+    (await crewForEmployees(admin, org.orgId, input.assignedEmployees ?? []));
+
   const { data, error } = await supabase
     .from("scheduled_jobs")
     .insert({
@@ -127,7 +135,8 @@ export async function createJob(input: CreateJobInput) {
       city: input.city ?? null,
       state: input.state ?? null,
       zip_code: input.zipCode ?? null,
-      crew_name: input.crewName ?? null,
+      crew_id: crew?.id ?? null,
+      crew_name: crew?.name ?? null,
       assigned_employees: input.assignedEmployees ?? [],
       notes: input.notes ?? null,
       season_year: input.seasonYear ?? new Date().getFullYear(),
@@ -154,7 +163,7 @@ export async function createRemovalJob(
   scheduledDate: string,
   startTime: string,
   endTime: string,
-  crewName?: string,
+  crewId?: string,
   assignedEmployees?: string[],
   notes?: string,
 ) {
@@ -165,12 +174,14 @@ export async function createRemovalJob(
   // Fetch the original install job to copy its metadata
   const { data: original, error: fetchErr } = await supabase
     .from("scheduled_jobs")
-    .select("customer_id, invoice_id, estimate_id, property_id, location_id, address, city, state, zip_code, season_year, title, org_id")
+    .select("customer_id, invoice_id, estimate_id, property_id, location_id, address, city, state, zip_code, season_year, title, org_id, crew_id")
     .eq("id", installJobId)
     .eq("org_id", org.orgId)
     .single();
 
   if (fetchErr || !original) throw new Error(fetchErr?.message ?? "Install job not found");
+  // Same crew as the install unless another is picked.
+  const crew = await resolveCrew(createAdminClient(), org.orgId, { crewId: crewId || original.crew_id });
 
   const { data, error } = await supabase
     .from("scheduled_jobs")
@@ -190,7 +201,8 @@ export async function createRemovalJob(
       city: original.city ?? null,
       state: original.state ?? null,
       zip_code: original.zip_code ?? null,
-      crew_name: crewName ?? null,
+      crew_id: crew?.id ?? null,
+      crew_name: crew?.name ?? null,
       assigned_employees: assignedEmployees ?? [],
       notes: notes ?? null,
       season_year: original.season_year ?? new Date().getFullYear(),

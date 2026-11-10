@@ -1,5 +1,7 @@
 "use server";
 
+import { crewForEmployees } from "@/lib/crews";
+
 import { revalidatePath } from "next/cache";
 import { getFieldContext } from "@/lib/field";
 import { getWorkOrderCustomer } from "@/lib/field-homes";
@@ -55,11 +57,10 @@ function refresh(jobId: string) {
   revalidatePath("/mapping");
 }
 
-async function crewNameFor(admin: Awaited<ReturnType<typeof getFieldContext>>["admin"], ids: string[]) {
-  if (ids.length === 0) return null;
-  const { data } = await admin.from("employees").select("full_name, crew_name").in("id", ids);
-  const names = (data ?? []).map((e) => e.crew_name?.trim() || e.full_name?.trim()).filter(Boolean);
-  return names.length ? Array.from(new Set(names)).join(", ") : null;
+/** The job's crew comes from the people on it when they all share one crew. */
+async function crewFieldsFor(admin: Awaited<ReturnType<typeof getFieldContext>>["admin"], orgId: string, ids: string[]) {
+  const crew = await crewForEmployees(admin, orgId, ids);
+  return crew ? { crew_id: crew.id, crew_name: crew.name } : { crew_id: null, crew_name: null };
 }
 
 export async function createFieldWorkOrder(customerId: string, input: WorkOrderInput): Promise<Result> {
@@ -91,7 +92,7 @@ export async function createFieldWorkOrder(customerId: string, input: WorkOrderI
       state: customer.state,
       zip_code: customer.zipCode,
       assigned_employees: assigned,
-      crew_name: await crewNameFor(admin, assigned),
+      ...(await crewFieldsFor(admin, org.orgId, assigned)),
       notes: input.notes.trim() || null,
       season_year: Number(input.scheduledDate.slice(0, 4)),
       status: "scheduled",
@@ -122,7 +123,7 @@ export async function updateFieldWorkOrder(jobId: string, input: WorkOrderInput)
       start_time: input.startTime,
       end_time: input.endTime,
       assigned_employees: assigned,
-      crew_name: await crewNameFor(admin, assigned),
+      ...(await crewFieldsFor(admin, org.orgId, assigned)),
       notes: input.notes.trim() || null,
       updated_at: new Date().toISOString(),
     })

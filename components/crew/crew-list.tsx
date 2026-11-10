@@ -6,6 +6,7 @@ import { CrewMemberActions, CREW_ROLES } from "@/components/crew/crew-member-act
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrewSelect } from "@/components/crews/crew-select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -49,6 +50,7 @@ export interface CrewMember {
   phone: string;
   position: string;
   crewName: string;
+  crewId: string;
   isActive: boolean;
   loginStatus: "active" | "invited" | "none";
   canWorkOrders: boolean;
@@ -276,8 +278,8 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="crewName">Crew</Label>
-                <Input id="crewName" name="crewName" placeholder="Crew A" />
+                <Label htmlFor="crewId">Crew</Label>
+                <CrewSelect id="crewId" name="crewId" />
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">Access</p>

@@ -5,6 +5,7 @@ import { Pencil, UserX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrewSelect } from "@/components/crews/crew-select";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -99,7 +100,7 @@ function EditMemberDialog({
         email: emailLocked ? member.email : String(form.get("email") ?? ""),
         phone: String(form.get("phone") ?? ""),
         position: String(form.get("position") ?? ""),
-        crewName: String(form.get("crewName") ?? ""),
+        crewId: String(form.get("crewId") ?? ""),
         role,
       });
       if ("error" in result && result.error) setError(result.error);
@@ -169,13 +170,7 @@ function EditMemberDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`crew-${member.id}`}>Crew</Label>
-              <Input
-                id={`crew-${member.id}`}
-                name="crewName"
-                defaultValue={member.crewName}
-                placeholder="Crew A"
-                className="text-base md:text-sm"
-              />
+              <CrewSelect id={`crew-${member.id}`} name="crewId" defaultValue={member.crewId} />
             </div>
           </div>
           <div className="flex flex-col gap-1.5">

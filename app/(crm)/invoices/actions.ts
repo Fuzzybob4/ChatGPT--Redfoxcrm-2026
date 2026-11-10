@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrg } from "@/lib/org";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveCrew } from "@/lib/crews";
 
 // ── Input schemas ─────────────────────────────────────────────────────────────
 
@@ -218,7 +220,10 @@ export async function createInvoice(input: CreateInvoiceInput) {
       city,
       state,
       zip_code: zipCode,
-      crew_name: wo.crewName ?? null,
+      ...(await (async () => {
+        const crew = await resolveCrew(createAdminClient(), org.orgId, { crewName: wo.crewName });
+        return { crew_id: crew?.id ?? null, crew_name: crew?.name ?? null };
+      })()),
       assigned_employees: wo.assignedEmployees ?? [],
       notes: wo.notes ?? null,
       season_year: wo.seasonYear ?? today.getFullYear(),

@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { useData } from "@/lib/data-context";
 import { createJob } from "../actions";
+import { CrewSelect } from "@/components/crews/crew-select";
 
 export default function NewJobPage() {
   const searchParams = useSearchParams();
@@ -35,7 +36,7 @@ export default function NewJobPage() {
     city: customer?.city ?? "",
     state: customer?.state ?? "",
     zipCode: customer?.zip ?? "",
-    crewName: "",
+    crewId: "",
     notes: "",
   });
 
@@ -62,7 +63,7 @@ export default function NewJobPage() {
           city: formData.city,
           state: formData.state,
           zipCode: formData.zipCode,
-          crewName: formData.crewName || undefined,
+          crewId: formData.crewId || undefined,
           notes: formData.notes || undefined,
         });
 
@@ -212,12 +213,8 @@ export default function NewJobPage() {
 
                 {/* Crew */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Crew / Technician (Optional)</label>
-                  <Input
-                    placeholder="Enter crew name"
-                    value={formData.crewName}
-                    onChange={(e) => setFormData({ ...formData, crewName: e.target.value })}
-                  />
+                  <label className="text-sm font-medium">Crew (Optional)</label>
+                  <CrewSelect value={formData.crewId} onChange={(crewId) => setFormData({ ...formData, crewId })} />
                 </div>
 
                 {/* Notes */}

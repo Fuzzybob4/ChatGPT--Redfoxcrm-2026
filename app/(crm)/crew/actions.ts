@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
+import { resolveCrew } from "@/lib/crews";
 import { membershipRoleFor, sendEmployeeLoginInvite } from "@/lib/crew-accounts";
 
 export async function inviteEmployee(formData: FormData) {
@@ -105,7 +106,7 @@ export async function addEmployee(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const phone = String(formData.get("phone") ?? "").trim();
   const position = String(formData.get("position") ?? "").trim();
-  const crewName = String(formData.get("crewName") ?? "").trim();
+  const crewIdRaw = String(formData.get("crewId") ?? "").trim();
   const canWorkOrders = formData.get("canWorkOrders") === "on";
   const canMapping = formData.get("canMapping") === "on";
 
@@ -116,6 +117,7 @@ export async function addEmployee(formData: FormData) {
   const org = await getCurrentOrg();
   if (!org) return { error: "Organization not found." };
 
+  const crew = await resolveCrew(createAdminClient(), org.orgId, { crewId: crewIdRaw });
   const supabase = await createClient();
   const { error } = await supabase.from("employees").insert({
     org_id: org.orgId,
@@ -125,7 +127,8 @@ export async function addEmployee(formData: FormData) {
     email,
     phone: phone || null,
     position: position || null,
-    crew_name: crewName || null,
+    crew_id: crew?.id ?? null,
+    crew_name: crew?.name ?? null,
     role: position.toLowerCase().includes("lead") ? "crew_lead" : "technician",
     is_active: true,
     can_access_work_orders: canWorkOrders,
@@ -180,7 +183,7 @@ export interface EmployeeUpdateInput {
   email: string;
   phone: string;
   position: string;
-  crewName: string;
+  crewId: string;
   role: string;
 }
 
@@ -193,7 +196,6 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
   const email = input.email.trim().toLowerCase().slice(0, 254);
   const phone = input.phone.trim().slice(0, 40);
   const position = input.position.trim().slice(0, 80);
-  const crewName = input.crewName.trim().slice(0, 80);
   const role = input.role.trim();
 
   if (!firstName || !lastName) return { error: "First and last name are required." };
@@ -225,6 +227,7 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
     if (duplicate) return { error: "Another crew member already uses that email." };
   }
 
+  const crew = await resolveCrew(admin, org.orgId, { crewId: input.crewId });
   const { error } = await admin
     .from("employees")
     .update({
@@ -234,7 +237,8 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
       email,
       phone: phone || null,
       position: position || null,
-      crew_name: crewName || null,
+      crew_id: crew?.id ?? null,
+      crew_name: crew?.name ?? null,
       role,
     })
     .eq("id", employeeId)

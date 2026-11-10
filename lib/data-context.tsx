@@ -20,6 +20,7 @@ export interface Employee {
   phone: string;
   role: string;
   crewName: string;
+  crewId: string | null;
   isActive: boolean;
   canAccessWorkOrders: boolean;
   canAccessMapping: boolean;
@@ -202,6 +203,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         phone: r.phone ?? '',
         role: r.role ?? r.position ?? '',
         crewName: r.crew_name ?? '',
+        crewId: r.crew_id ?? null,
         isActive: r.is_active ?? true,
         canAccessWorkOrders: r.can_access_work_orders ?? false,
         canAccessMapping: r.can_access_mapping ?? false,
