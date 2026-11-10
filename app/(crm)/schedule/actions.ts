@@ -288,9 +288,16 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
   const byId = new Map<string, any>((customers ?? []).map((c: any) => [c.id, c]));
   const year = new Date().getFullYear();
 
+  // Stops in a crew's day get back-to-back 3-hour windows starting at 8 am.
+  const slotIndex = new Map<string, number>();
+  const SLOTS = [["08:00", "11:00"], ["11:00", "14:00"], ["14:00", "17:00"], ["15:00", "17:00"]];
   const rows = plan
     .filter((p) => byId.has(p.customerId) && crewById.has(p.crewId) && isDay(p.date))
     .map((p) => {
+      const key = `${p.date}|${p.crewId}`;
+      const i = slotIndex.get(key) ?? 0;
+      slotIndex.set(key, i + 1);
+      const [start_time, end_time] = SLOTS[Math.min(i, SLOTS.length - 1)];
       const c = byId.get(p.customerId);
       const crew = crewById.get(p.crewId)!;
       return {
@@ -299,6 +306,8 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
         title: "Holiday lighting installation",
         job_type: "install",
         scheduled_date: p.date,
+        start_time,
+        end_time,
         address: c.address,
         city: c.city,
         state: c.state,
