@@ -8,7 +8,7 @@ import { InstallItems } from "@/components/field/install-items";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
 import { PhotoCapture } from "@/components/field/photo-capture";
-import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel } from "@/components/field/format";
+import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel, meaningfulTitle } from "@/components/field/format";
 
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -110,8 +110,11 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
             )}
           </h1>
 
+          {meaningfulTitle(job.title, job.customerName) && (
+            <p className="text-lg font-semibold leading-snug text-foreground text-pretty">{meaningfulTitle(job.title, job.customerName)}</p>
+          )}
           <p className="text-sm text-muted-foreground">
-            {job.title} · {formatDay(job.scheduledDate)}
+            {formatDay(job.scheduledDate)}
             {job.startTime ? ` · ${formatClock(job.startTime)}` : ""}
             {job.endTime ? `–${formatClock(job.endTime)}` : ""}
           </p>

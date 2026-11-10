@@ -39,3 +39,11 @@ export const STATUS_LABEL: Record<string, string> = {
 export function directionsUrl(address: string): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 }
+
+/** The work order's title, unless it only repeats the job type and customer name. */
+export function meaningfulTitle(title: string, customerName: string): string {
+  const t = (title ?? "").trim();
+  const bare = t.replace(/^(install|removal|service|job)\s*[–-]\s*/i, "").trim().toLowerCase();
+  if (!t || bare === (customerName ?? "").trim().toLowerCase() || /^(work order|job)$/i.test(t)) return "";
+  return t;
+}

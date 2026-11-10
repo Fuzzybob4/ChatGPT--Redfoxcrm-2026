@@ -7,7 +7,7 @@ import { ChevronRight, MapPin, Timer } from "lucide-react";
 import type { FieldJob, OpenTimeEntry } from "@/lib/field";
 import { cn } from "@/lib/utils";
 import { ElapsedTimer } from "./elapsed-timer";
-import { STATUS_LABEL, formatClock, formatDay, jobTypeLabel, localToday } from "./format";
+import { STATUS_LABEL, formatClock, formatDay, jobTypeLabel, localToday, meaningfulTitle } from "./format";
 
 interface Section {
   key: string;
@@ -116,6 +116,9 @@ function JobCard({ job, clockedInSince }: { job: FieldJob; clockedInSince: strin
           </span>
         </div>
         <p className="truncate font-semibold text-foreground">{job.customerName}</p>
+        {meaningfulTitle(job.title, job.customerName) && (
+          <p className="line-clamp-2 text-sm font-medium text-foreground/80">{meaningfulTitle(job.title, job.customerName)}</p>
+        )}
         {job.address && (
           <p className="flex items-start gap-1 text-sm leading-snug text-muted-foreground">
             <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
