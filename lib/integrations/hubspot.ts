@@ -280,7 +280,15 @@ export async function geocodeMissingCustomers(
     ? `${median(coords.map((r: SampleRow) => Number(r.lng))).toFixed(4)},${median(coords.map((r: SampleRow) => Number(r.lat))).toFixed(4)}`
     : null;
 
-  const targets: Array<{ id: string; address: string; city: string | null; state: string | null; zip_code: string | null }> = [];
+  type Target = {
+    id: string;
+    address: string;
+    city: string | null;
+    state: string | null;
+    zip_code: string | null;
+    table?: "customers" | "customer_properties";
+  };
+  const targets: Target[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
       .from("customers")
@@ -293,6 +301,18 @@ export async function geocodeMissingCustomers(
     if (error) throw error;
     targets.push(...(data ?? []));
     if (!data || data.length < 1000) break;
+  }
+  // Extra service addresses (a customer with more than one house) need pins too.
+  {
+    const { data: props } = await supabase
+      .from("customer_properties")
+      .select("id, address, city, state, zip_code")
+      .eq("org_id", orgId)
+      .is("lat", null)
+      .not("address", "is", null)
+      .neq("address", "")
+      .limit(500);
+    for (const p of (props ?? []) as Target[]) targets.push({ ...p, table: "customer_properties" });
   }
 
   async function lookup(query: string) {
@@ -320,7 +340,7 @@ export async function geocodeMissingCustomers(
       try {
         const hit = await lookup(query);
         if (hit) {
-          await supabase.from("customers").update({ lat: hit.lat, lng: hit.lng }).eq("id", t.id).eq("org_id", orgId);
+          await supabase.from(t.table ?? "customers").update({ lat: hit.lat, lng: hit.lng }).eq("id", t.id).eq("org_id", orgId);
           mapped++;
         }
       } catch (err) {
