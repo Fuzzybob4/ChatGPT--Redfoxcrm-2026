@@ -118,6 +118,63 @@ export async function squareGet<T>(accessToken: string, path: string): Promise<T
   throw new Error("Square is rate limiting requests; try again shortly");
 }
 
+export async function squarePost<T>(accessToken: string, path: string, body: unknown): Promise<T> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(`${API_BASE()}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Square-Version": SQUARE_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Square request ${path} failed (${res.status}): ${text.slice(0, 200)}`);
+    }
+    return (await res.json()) as T;
+  }
+  throw new Error("Square is rate limiting requests; try again shortly");
+}
+
+export interface SquareOrder {
+  id: string;
+  line_items?: Array<{
+    name?: string;
+    variation_name?: string;
+    note?: string;
+    quantity?: string;
+    base_price_money?: { amount?: number };
+    gross_sales_money?: { amount?: number };
+    total_money?: { amount?: number };
+  }>;
+  discounts?: Array<{ name?: string; applied_money?: { amount?: number } }>;
+}
+
+/** Turns a Square order into Red Fox invoice line items (names, quantities, prices). */
+export function orderToLineItems(order: SquareOrder): Array<{ description: string; quantity: number; unit_price: number; line_total: number }> {
+  const items = (order.line_items ?? []).map((li) => {
+    const variation = li.variation_name && !/^regular$/i.test(li.variation_name.trim()) ? li.variation_name.trim() : "";
+    const name = [li.name?.trim() || "Item", variation].filter(Boolean).join(" – ");
+    const description = [name.trim(), li.note?.trim()].filter(Boolean).join("\n").slice(0, 1000);
+    const quantity = Number(li.quantity ?? 1) || 1;
+    const unit = Number(li.base_price_money?.amount ?? 0) / 100;
+    const total = Number(li.gross_sales_money?.amount ?? li.total_money?.amount ?? unit * 100 * quantity) / 100;
+    return { description, quantity, unit_price: unit, line_total: total };
+  });
+  for (const d of order.discounts ?? []) {
+    const amt = Number(d.applied_money?.amount ?? 0) / 100;
+    if (amt > 0) items.push({ description: `Discount${d.name ? `: ${d.name}` : ""}`, quantity: 1, unit_price: -amt, line_total: -amt });
+  }
+  return items;
+}
+
 export async function getSquareMerchantName(accessToken: string, merchantId: string): Promise<string | null> {
   try {
     const data = await squareGet<{ merchant?: { business_name?: string } }>(accessToken, `/v2/merchants/${merchantId}`);

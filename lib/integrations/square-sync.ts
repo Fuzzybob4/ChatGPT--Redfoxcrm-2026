@@ -11,6 +11,9 @@ import {
   type SquareCustomer,
   type SquareInvoice,
   type SquarePayment,
+  type SquareOrder,
+  orderToLineItems,
+  squarePost,
 } from "@/lib/integrations/square";
 
 export interface SquareSyncSummary {
@@ -21,6 +24,8 @@ export interface SquareSyncSummary {
   invoicesSkipped: number;
   /** Card/cash/payment-link payments taken without a Square invoice. */
   paymentsImported?: number;
+  /** Square invoices whose real line items were pulled in this sync. */
+  itemsPulled?: number;
   mapped: number;
 }
 
@@ -154,6 +159,19 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
       .select("id, square_invoice_id, status, amount_paid")
       .eq("org_id", orgId)
       .not("square_invoice_id", "is", null);
+    const { data: needItems } = await db
+      .from("invoices")
+      .select("id, square_invoice_id")
+      .eq("org_id", orgId)
+      .not("square_invoice_id", "is", null)
+      .is("square_items_synced_at", null);
+    // Red Fox invoice id → Square order id, for invoices still showing a single placeholder line.
+    const itemsWanted = new Map<string, string>();
+    const orderBySquareInvoice = new Map(squareInvoices.map((si) => [si.id, si.order_id]));
+    for (const r of needItems ?? []) {
+      const orderId = orderBySquareInvoice.get(r.square_invoice_id as string);
+      if (orderId) itemsWanted.set(r.id as string, orderId);
+    }
     const invoiceBySquareId = new Map((knownInvoices ?? []).map((i) => [i.square_invoice_id as string, i]));
 
     let invoicesCreated = 0;
@@ -215,6 +233,7 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
         .select("id")
         .single();
       if (error || !created) { invoicesSkipped++; continue; }
+      if (si.order_id) itemsWanted.set(created.id, si.order_id);
       await db.from("invoice_line_items").insert({
         org_id: orgId,
         invoice_id: created.id,
@@ -225,6 +244,38 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
         sort_order: 0,
       });
       invoicesCreated++;
+    }
+
+    // ── Real line items from each invoice's Square order ──
+    // Replaces the single placeholder line ("Square invoice 000438") with what
+    // was actually sold, so the crew app can show what's being installed.
+    let itemsPulled = 0;
+    const wanted = [...itemsWanted.entries()];
+    for (let i = 0; i < wanted.length; i += 100) {
+      const batch = wanted.slice(i, i + 100);
+      let orders: SquareOrder[] = [];
+      try {
+        const res = await squarePost<{ orders?: SquareOrder[] }>(token, "/v2/orders/batch-retrieve", {
+          order_ids: [...new Set(batch.map(([, o]) => o))],
+        });
+        orders = res.orders ?? [];
+      } catch (e) {
+        console.error("[square] order lookup failed:", e);
+        break; // try again next sync
+      }
+      const byOrder = new Map(orders.map((o) => [o.id, o]));
+      for (const [invoiceId, orderId] of batch) {
+        const order = byOrder.get(orderId);
+        const lines = order ? orderToLineItems(order) : [];
+        if (lines.length) {
+          await db.from("invoice_line_items").delete().eq("invoice_id", invoiceId).eq("org_id", orgId);
+          await db.from("invoice_line_items").insert(
+            lines.map((l, idx) => ({ org_id: orgId, invoice_id: invoiceId, ...l, sort_order: idx })),
+          );
+          itemsPulled++;
+        }
+        await db.from("invoices").update({ square_items_synced_at: now.toISOString() }).eq("id", invoiceId).eq("org_id", orgId);
+      }
     }
 
     // ── Payments without a Square invoice (card, cash, payment links) ──
@@ -307,6 +358,7 @@ export async function runSquareSync(orgId: string, { geocodeBudgetMs = 120_000 }
       invoicesUpdated,
       invoicesSkipped,
       paymentsImported,
+      itemsPulled,
       mapped: geo.mapped,
     };
     await db

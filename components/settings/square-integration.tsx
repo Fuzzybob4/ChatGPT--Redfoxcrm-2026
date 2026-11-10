@@ -26,6 +26,7 @@ function summarize(r: SquareStatus["lastSyncResult"] | SquareSyncResult | null) 
   parts.push(`${r.invoicesCreated ?? 0} invoices imported`);
   if (r.invoicesUpdated) parts.push(`${r.invoicesUpdated} invoices updated`);
   if (r.paymentsImported) parts.push(`${r.paymentsImported} card/cash payments imported`);
+  if (r.itemsPulled) parts.push(`${r.itemsPulled} invoices got their line items`);
   if (r.mapped) parts.push(`${r.mapped} placed on the map`);
   return parts.join(" · ");
 }

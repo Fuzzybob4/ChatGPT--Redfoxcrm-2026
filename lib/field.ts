@@ -301,7 +301,7 @@ export interface InstallItem {
 export async function getInstallItems(orgId: string, customerId: string): Promise<InstallItem[]> {
   const admin = createAdminClient();
   const { currentSeasonStart } = await import("@/lib/lifecycle");
-  const { isCrewSafeItem } = await import("@/lib/field-privacy");
+  const { crewSafeText } = await import("@/lib/field-privacy");
   const season = currentSeasonStart();
   const [{ data: estimates }, { data: invoices }] = await Promise.all([
     admin
@@ -315,7 +315,7 @@ export async function getInstallItems(orgId: string, customerId: string): Promis
       .limit(1),
     admin
       .from("invoices")
-      .select("id, invoice_line_items(description, quantity, sort_order)")
+      .select("id, invoice_line_items(description, quantity, line_total, sort_order)")
       .eq("org_id", orgId)
       .eq("customer_id", customerId)
       .neq("status", "cancelled")
@@ -329,6 +329,8 @@ export async function getInstallItems(orgId: string, customerId: string): Promis
     .sort(sort);
   const fromInvoice = ((invoices?.[0] as any)?.invoice_line_items ?? []).sort(sort);
   return (fromEstimate.length ? fromEstimate : fromInvoice)
-    .filter((i: any) => isCrewSafeItem(i.description))
-    .map((i: any) => ({ description: String(i.description).trim(), quantity: Number(i.quantity ?? 1) }));
+    .filter((i: any) => Number(i.line_total ?? 1) >= 0 && !/^(square (invoice|card|cash|payment)|discount|deposit)\b/i.test(String(i.description ?? "").trim()))
+    // Item names stay; any sentence about money inside an item's note is dropped.
+    .map((i: any) => ({ description: crewSafeText(i.description), quantity: Number(i.quantity ?? 1) }))
+    .filter((i: InstallItem) => i.description);
 }

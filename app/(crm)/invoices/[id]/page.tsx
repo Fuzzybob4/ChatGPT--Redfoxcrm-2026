@@ -194,7 +194,7 @@ export default function InvoiceDetailPage({ params }: Props) {
                       key={idx}
                       className="grid grid-cols-12 text-sm px-3 py-2.5 bg-card"
                     >
-                      <span className="col-span-6 text-foreground">
+                      <span className="col-span-6 whitespace-pre-line text-foreground">
                         {item.description}
                       </span>
                       <span className="col-span-2 text-right text-muted-foreground">

@@ -7,10 +7,10 @@ export function InstallItems({ items }: { items: InstallItem[] }) {
         What we&apos;re installing
       </h2>
       {items.length ? (
-        <ul className="flex flex-col gap-1.5 text-sm text-foreground">
+        <ul className="flex flex-col gap-2.5 text-sm text-foreground">
           {items.map((i, idx) => (
             <li key={idx} className="flex justify-between gap-3">
-              <span>{i.description}</span>
+              <span className="whitespace-pre-line">{i.description}</span>
               {i.quantity !== 1 && <span className="shrink-0 tabular-nums text-muted-foreground">× {i.quantity}</span>}
             </li>
           ))}
