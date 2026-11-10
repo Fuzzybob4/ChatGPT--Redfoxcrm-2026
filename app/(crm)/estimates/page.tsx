@@ -125,7 +125,7 @@ export default function EstimatesPage() {
                 <TableBody>
                   {filtered.map((est) => {
                     const customer = getCustomerById(est.customerId);
-                    const config = statusConfig[est.status];
+                    const config = statusConfig[est.status] ?? { label: String(est.status), variant: 'outline' as const, color: 'text-gray-600' };
 
                     return (
                       <TableRow key={est.id}>
@@ -138,7 +138,7 @@ export default function EstimatesPage() {
                           {format(new Date(est.createdDate), 'MMM dd, yyyy')}
                         </TableCell>
                         <TableCell className="font-semibold text-foreground">
-                          ${getEstimateTotal(est).toFixed(2)}
+                          ${((est as { total?: number }).total ?? getEstimateTotal(est)).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={config.variant}>{config.label}</Badge>

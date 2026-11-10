@@ -174,7 +174,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       supabase.from('locations').select('*').order('created_at', { ascending: true }),
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('invoice_line_items').select('*').order('order', { ascending: true }),
-      supabase.from('estimates').select('*').order('created_at', { ascending: false }),
+      supabase.from('estimates').select('*, estimate_line_items(id, description, quantity, unit_price, line_total, optional, selected, sort_order)').order('created_at', { ascending: false }),
       supabase.from('scheduled_jobs').select('*').order('scheduled_date', { ascending: true }),
       supabase.from('employees').select('*').order('created_at', { ascending: true }),
       supabase.from('addon_catalog').select('*').order('price_cents', { ascending: true }),

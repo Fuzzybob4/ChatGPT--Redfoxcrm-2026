@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { applyRefund } from "@/lib/invoices/refunds";
 
 // Stripe signs platform events (Red Fox subscriptions) and connected-account
 // events (customers paying a business's invoice) with different endpoint
@@ -68,6 +69,8 @@ export async function POST(req: Request) {
         event.data.object as Stripe.Subscription,
         event.type,
       );
+    } else if (event.type === "refund.created" || event.type === "refund.updated") {
+      processingError = await handleRefund(event.data.object as Stripe.Refund);
     } else if (event.type === "customer.subscription.deleted") {
       processingError = await handleSubscriptionCancelled(event.data.object as Stripe.Subscription);
     }
@@ -137,6 +140,34 @@ async function finishWebhookEvent(eventId: string, status: "succeeded" | "failed
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
+
+/**
+ * A refund issued in the business's Stripe dashboard (or by Red Fox's own
+ * refund button; applyRefund ignores ones it has already recorded).
+ */
+async function handleRefund(refund: Stripe.Refund): Promise<string | null> {
+  if (refund.status !== "succeeded") return null;
+  const intent = typeof refund.payment_intent === "string" ? refund.payment_intent : refund.payment_intent?.id;
+  if (!intent) return null;
+  const supabase = createAdminClient();
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("org_id, invoice_id")
+    .eq("provider_payment_id", intent)
+    .maybeSingle();
+  if (!payment?.invoice_id) return null; // not an invoice payment (e.g. a subscription)
+  await applyRefund(supabase, {
+    orgId: payment.org_id,
+    invoiceId: payment.invoice_id,
+    amountCents: refund.amount,
+    method: "stripe",
+    reason: "Refunded in Stripe",
+    stripeRefundId: refund.id,
+    stripePaymentIntentId: intent,
+  });
+  return null;
+}
+
 
 /**
  * Handles checkout.session.completed event.

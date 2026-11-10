@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { createEstimate } from '@/app/(crm)/estimates/actions';
 
 interface LineItem {
   id: string;
@@ -23,9 +24,12 @@ interface LineItem {
 export default function NewEstimatePage() {
   const router = useRouter();
   const { selectedLocationId } = useLocation();
-  const { getLocationCustomers } = useData();
+  const { getLocationCustomers, refresh } = useData();
   const [customerId, setCustomerId] = useState('');
   const [discount, setDiscount] = useState('0');
+  const [title, setTitle] = useState('');
+  const [depositPercent, setDepositPercent] = useState('50');
+  const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', description: '', quantity: 1, unitPrice: 0 },
@@ -61,10 +65,23 @@ export default function NewEstimatePage() {
     }
 
     setIsSaving(true);
-    // In production, this would call an API
-    setTimeout(() => {
-      router.push('/estimates');
-    }, 500);
+    setError(null);
+    const res = await createEstimate({
+      customerId,
+      title,
+      locationId: selectedLocationId || null,
+      lineItems: lineItems.map((i) => ({ description: i.description, quantity: i.quantity, unitPrice: i.unitPrice })),
+      discount: parseFloat(discount || '0') || 0,
+      depositPercent: parseFloat(depositPercent || '0') || 0,
+      notes,
+    });
+    if (!res.ok) {
+      setError(res.error);
+      setIsSaving(false);
+      return;
+    }
+    await refresh();
+    router.push(`/estimates/${res.id}`);
   };
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -105,6 +122,10 @@ export default function NewEstimatePage() {
                   </SelectGroup>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Estimate title</label>
+                <Input placeholder="Holiday lighting 2026" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </div>
             </CardContent>
           </Card>
 
@@ -114,7 +135,7 @@ export default function NewEstimatePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Line Items</CardTitle>
-                  <CardDescription>Add services and products to this estimate</CardDescription>
+                  <CardDescription>List each service on its own line. Your customer can check the ones they want and approve just those.</CardDescription>
                 </div>
                 <Button onClick={addLineItem} variant="outline" size="sm">
                   <Plus className="w-4 h-4 mr-2" />
@@ -136,7 +157,7 @@ export default function NewEstimatePage() {
                       type="number"
                       placeholder="Qty"
                       value={item.quantity}
-                      onChange={(e) => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                      onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                       className="col-span-2"
                     />
                     <Input
@@ -182,6 +203,17 @@ export default function NewEstimatePage() {
                     placeholder="0"
                   />
                 </div>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm text-muted-foreground">Deposit due at approval (%)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={depositPercent}
+                    onChange={(e) => setDepositPercent(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
                 <div className="border-t border-border pt-2 flex justify-between">
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
@@ -200,13 +232,15 @@ export default function NewEstimatePage() {
             </CardContent>
           </Card>
 
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
           {/* Actions */}
           <div className="flex gap-2 justify-end pb-6">
             <Button render={<Link href="/estimates" />} variant="outline">
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/90">
-              {isSaving ? 'Saving...' : 'Save as Draft'}
+              {isSaving ? 'Saving...' : 'Save estimate'}
             </Button>
           </div>
         </div>

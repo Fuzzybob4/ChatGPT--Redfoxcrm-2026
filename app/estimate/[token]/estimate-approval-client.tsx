@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,14 +29,38 @@ interface Props {
     approvedAt: string | null;
     approvedByName: string | null;
     declinedAt: string | null;
+    taxRate: number;
   };
+  items: { id: string; description: string; quantity: number; lineTotal: number; optional: boolean; selected: boolean | null }[];
 }
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const day = (d: string | null) =>
   d ? new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "";
 
-export function EstimateApprovalClient({ token, business, customer, estimate }: Props) {
+export function EstimateApprovalClient({ token, business, customer, estimate: base, items }: Props) {
+  const locked = Boolean(base.approvedAt) || Boolean(base.declinedAt);
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(items.filter((i) => (locked ? i.selected !== false : true)).map((i) => i.id)),
+  );
+  // With line items the customer chooses what they want and the totals follow.
+  const estimate = useMemo(() => {
+    if (!items.length || locked) return base;
+    const chosen = items.filter((i) => !i.optional || picked.has(i.id));
+    const subtotal = Math.max(0, Math.round(chosen.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100);
+    const taxAmount = Math.round(subtotal * base.taxRate) / 100;
+    const total = Math.round((subtotal + taxAmount) * 100) / 100;
+    return { ...base, subtotal, taxAmount, total, depositAmount: Math.round(total * base.depositPercent) / 100 };
+  }, [base, items, picked, locked]);
+  const optionalCount = items.filter((i) => i.optional).length;
+  const nothingPicked = items.length > 0 && !items.some((i) => i.lineTotal > 0 && (!i.optional || picked.has(i.id)));
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
   const [name, setName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [declining, setDeclining] = useState(false);
@@ -51,7 +75,7 @@ export function EstimateApprovalClient({ token, business, customer, estimate }: 
   function onApprove() {
     setError(null);
     startTransition(async () => {
-      const res = await approveEstimate(token, { name, agreed });
+      const res = await approveEstimate(token, { name, agreed, selectedItemIds: items.length ? [...picked] : undefined });
       if (!res.ok) setError(res.error);
       else setApproved({ portalUrl: res.portalUrl, hasDeposit: res.hasDeposit });
     });
@@ -92,6 +116,39 @@ export function EstimateApprovalClient({ token, business, customer, estimate }: 
           </CardHeader>
           <CardContent className="space-y-4">
             {estimate.description && <p className="whitespace-pre-line text-sm">{estimate.description}</p>}
+
+            {items.length > 0 && (
+              <div className="space-y-2">
+                {!locked && optionalCount > 1 && (
+                  <p className="text-sm text-muted-foreground">
+                    Choose what you&apos;d like this season. Uncheck anything you want to skip and the total updates.
+                  </p>
+                )}
+                <div className="divide-y rounded-lg border bg-background">
+                  {items.map((i) => {
+                    const on = !i.optional || picked.has(i.id);
+                    const canToggle = i.optional && !locked;
+                    return (
+                      <label
+                        key={i.id}
+                        className={`flex items-start gap-3 p-3 text-sm ${canToggle ? "cursor-pointer" : ""} ${on ? "" : "text-muted-foreground"}`}
+                      >
+                        {i.optional ? (
+                          <Checkbox checked={on} disabled={!canToggle} onChange={() => canToggle && toggle(i.id)} className="mt-0.5" />
+                        ) : (
+                          <span className="w-4" />
+                        )}
+                        <span className={`flex-1 ${on ? "" : "line-through"}`}>
+                          {i.description}
+                          {i.quantity !== 1 ? ` × ${i.quantity}` : ""}
+                        </span>
+                        <span className={`tabular-nums ${on ? "font-medium" : "line-through"}`}>{usd(i.lineTotal)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1 rounded-lg border bg-background p-4 text-sm">
               <div className="flex justify-between">
@@ -199,8 +256,8 @@ export function EstimateApprovalClient({ token, business, customer, estimate }: 
                     </span>
                   </label>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button onClick={onApprove} disabled={pending} className="sm:flex-1">
-                      {pending ? "Saving…" : "Approve estimate"}
+                    <Button onClick={onApprove} disabled={pending || nothingPicked} className="sm:flex-1">
+                      {pending ? "Saving…" : nothingPicked ? "Pick at least one item" : `Approve ${usd(estimate.total)}`}
                     </Button>
                     <Button variant="outline" onClick={() => setDeclining(true)} disabled={pending}>
                       Decline

@@ -132,6 +132,8 @@ export interface EstimateLineItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  /** false once the customer approved the estimate without this item. */
+  selected?: boolean | null;
 }
 
 export interface Estimate {

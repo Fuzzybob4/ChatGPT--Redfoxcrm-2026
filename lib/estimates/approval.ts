@@ -53,24 +53,79 @@ export const ESTIMATE_COLUMNS =
 
 const money = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
 
+export interface EstimateItemRow {
+  id: string;
+  description: string;
+  quantity: number | string;
+  unit_price: number | string;
+  line_total: number | string;
+  optional: boolean;
+  selected: boolean | null;
+  sort_order: number;
+}
+
+export async function loadEstimateItems(db: Db, estimateId: string, orgId: string): Promise<EstimateItemRow[]> {
+  const { data } = await db
+    .from("estimate_line_items")
+    .select("id, description, quantity, unit_price, line_total, optional, selected, sort_order")
+    .eq("estimate_id", estimateId)
+    .eq("org_id", orgId)
+    .order("sort_order");
+  return (data ?? []) as unknown as EstimateItemRow[];
+}
+
+/**
+ * Totals for the items a customer chose. Items that aren't optional (for
+ * example a discount line) always apply. Pass `null` to take every item.
+ */
+export function totalsForSelection(
+  items: EstimateItemRow[],
+  selectedIds: string[] | null,
+  taxRate: number,
+  depositPercent: number,
+) {
+  const picked = new Set(selectedIds ?? []);
+  const chosen = items.filter((i) => !i.optional || selectedIds === null || picked.has(i.id));
+  const subtotal = Math.max(0, money(chosen.reduce((sum, i) => sum + Number(i.line_total ?? 0), 0)));
+  const taxAmount = money((subtotal * Math.max(0, taxRate)) / 100);
+  const total = money(subtotal + taxAmount);
+  const deposit = money((total * Math.min(Math.max(depositPercent, 0), 100)) / 100);
+  const hasChargeable = chosen.some((i) => Number(i.line_total ?? 0) > 0);
+  return { chosen, subtotal, taxAmount, total, deposit, hasChargeable };
+}
+
+export class NothingSelectedError extends Error {
+  constructor() {
+    super("Pick at least one item to approve.");
+  }
+}
+
 /**
  * Marks an estimate approved and creates the matching invoice (sent, with the
- * estimate's deposit). Safe to call twice: an already-converted estimate
- * returns its existing invoice.
+ * estimate's deposit). When the estimate has line items, the invoice carries
+ * only the ones the customer selected (`selectedItemIds`; omit to take all).
+ * Safe to call twice: an already-converted estimate returns its existing invoice.
  */
 export async function approveEstimateAndCreateInvoice(
   db: Db,
   estimate: EstimateRow,
-  approval: { name: string; ip: string | null },
+  approval: { name: string; ip: string | null; selectedItemIds?: string[] | null },
 ): Promise<{ invoiceId: string }> {
   if (estimate.invoice_id) return { invoiceId: estimate.invoice_id };
 
-  const total = money(estimate.total_amount) || money(estimate.subtotal);
-  const subtotal = money(estimate.subtotal) || total;
-  const taxAmount = money(estimate.tax_amount);
   const depositPercent = Math.min(Math.max(Number(estimate.deposit_percent ?? 0), 0), 100);
-  const deposit = money((total * depositPercent) / 100);
+  const items = await loadEstimateItems(db, estimate.id, estimate.org_id);
 
+  let total = money(estimate.total_amount) || money(estimate.subtotal);
+  let subtotal = money(estimate.subtotal) || total;
+  let taxAmount = money(estimate.tax_amount);
+  let deposit = money((total * depositPercent) / 100);
+  let chosen: EstimateItemRow[] = [];
+  if (items.length) {
+    const t = totalsForSelection(items, approval.selectedItemIds ?? null, Number(estimate.tax_rate ?? 0), depositPercent);
+    if (!t.hasChargeable || t.total <= 0) throw new NothingSelectedError();
+    ({ chosen, subtotal, taxAmount, total, deposit } = t);
+  }
   const today = new Date();
   const datePart = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
   const invoiceNumber = `INV-${datePart}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -104,20 +159,36 @@ export async function approveEstimateAndCreateInvoice(
     .single();
   if (invoiceError || !invoice) throw new Error(invoiceError?.message ?? "Could not create the invoice");
 
-  await db.from("invoice_line_items").insert({
-    org_id: estimate.org_id,
-    invoice_id: invoice.id,
-    description: title,
-    quantity: 1,
-    unit_price: subtotal,
-    line_total: subtotal,
-    sort_order: 0,
-  });
+  await db.from("invoice_line_items").insert(
+    chosen.length
+      ? chosen.map((i, idx) => ({
+          org_id: estimate.org_id,
+          invoice_id: invoice.id,
+          description: i.description,
+          quantity: Number(i.quantity ?? 1),
+          unit_price: Number(i.unit_price ?? 0),
+          line_total: Number(i.line_total ?? 0),
+          sort_order: idx,
+        }))
+      : [{ org_id: estimate.org_id, invoice_id: invoice.id, description: title, quantity: 1, unit_price: subtotal, line_total: subtotal, sort_order: 0 }],
+  );
+
+  // Remember which items the customer took and which they passed on.
+  if (items.length) {
+    const chosenIds = chosen.map((i) => i.id);
+    await db.from("estimate_line_items").update({ selected: true }).eq("estimate_id", estimate.id).in("id", chosenIds);
+    const skipped = items.filter((i) => !chosenIds.includes(i.id)).map((i) => i.id);
+    if (skipped.length) await db.from("estimate_line_items").update({ selected: false }).eq("estimate_id", estimate.id).in("id", skipped);
+  }
 
   const { error: updateError } = await db
     .from("estimates")
     .update({
       status: "accepted",
+      // The estimate now reflects what was actually approved.
+      subtotal,
+      tax_amount: taxAmount,
+      total_amount: total,
       approved_at: new Date().toISOString(),
       approved_by_name: approval.name.slice(0, 200),
       approval_ip: approval.ip,

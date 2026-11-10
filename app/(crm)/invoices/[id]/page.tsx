@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, Printer, Download } from "lucide-react";
 import { MarkAsPaidDialog } from "@/components/invoices/mark-as-paid-dialog";
+import { RefundDialog } from "@/components/invoices/refund-dialog";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -97,6 +98,9 @@ export default function InvoiceDetailPage({ params }: Props) {
                 total={total}
                 onComplete={() => startTransition(async () => { await refresh(); })}
               />
+            )}
+            {invoice.amountPaid > 0 && (
+              <RefundDialog invoiceId={invoice.id} onComplete={() => startTransition(async () => { await refresh(); })} />
             )}
           </div>
         }

@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getEstimateTotal } from '@/lib/data';
 import { useData } from '@/lib/data-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,9 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   Sent: { label: 'Sent', color: 'bg-blue-100 text-blue-800' },
   Accepted: { label: 'Accepted', color: 'bg-green-100 text-green-800' },
   Rejected: { label: 'Rejected', color: 'bg-red-100 text-red-800' },
+  Declined: { label: 'Declined', color: 'bg-red-100 text-red-800' },
+  Viewed: { label: 'Viewed', color: 'bg-blue-100 text-blue-800' },
+  Expired: { label: 'Expired', color: 'bg-gray-100 text-gray-800' },
   Converted: { label: 'Converted', color: 'bg-purple-100 text-purple-800' },
 };
 
@@ -51,8 +53,9 @@ export default function EstimateDetailPage() {
   }
 
   const customer = getCustomerById(estimate.customerId);
-  const total = getEstimateTotal(estimate);
-  const config = statusConfig[estimate.status];
+  // Saved total reflects what the customer approved (tax included).
+  const total = (estimate as { total?: number }).total ?? 0;
+  const config = statusConfig[estimate.status] ?? { label: estimate.status, color: 'bg-gray-100 text-gray-800' };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -112,7 +115,7 @@ export default function EstimateDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Valid Until</p>
-                  <p className="font-medium text-foreground">{format(new Date(estimate.validUntil), 'PPP')}</p>
+                  <p className="font-medium text-foreground">{estimate.validUntil ? format(new Date(estimate.validUntil + 'T12:00:00'), 'PPP') : '—'}</p>
                 </div>
               </div>
             </CardContent>
@@ -136,8 +139,11 @@ export default function EstimateDetailPage() {
                   </TableHeader>
                   <TableBody>
                     {estimate.lineItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-foreground">{item.description}</TableCell>
+                      <TableRow key={item.id} className={item.selected === false ? 'opacity-50 line-through' : ''}>
+                        <TableCell className="text-foreground">
+                          {item.description}
+                          {item.selected === false && <span className="ml-2 text-xs no-underline">(customer skipped)</span>}
+                        </TableCell>
                         <TableCell className="text-right text-muted-foreground">{item.quantity}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           ${item.unitPrice.toFixed(2)}
@@ -157,29 +163,10 @@ export default function EstimateDetailPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-3 max-w-xs ml-auto">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="text-foreground font-medium">
-                    ${(total + (estimate.discount || 0)).toFixed(2)}
-                  </span>
+                <div className="border-t border-border pt-3 flex justify-between">
+                  <span className="font-semibold text-foreground">{estimate.status === 'Accepted' ? 'Approved total' : 'Total'}</span>
+                  <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
                 </div>
-                {estimate.discount ? (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Discount</span>
-                      <span className="text-red-600 font-medium">-${estimate.discount.toFixed(2)}</span>
-                    </div>
-                    <div className="border-t border-border pt-3 flex justify-between">
-                      <span className="font-semibold text-foreground">Total</span>
-                      <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="border-t border-border pt-3 flex justify-between">
-                    <span className="font-semibold text-foreground">Total</span>
-                    <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadEstimateItems } from "@/lib/estimates/approval";
 import { EstimateApprovalClient } from "./estimate-approval-client";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export default async function PublicEstimatePage({ params }: Props) {
     await db.from("estimates").update({ viewed_at: new Date().toISOString() }).eq("id", estimate.id);
   }
 
+  const items = await loadEstimateItems(db, estimate.id, estimate.org_id);
   const total = Number(estimate.total_amount ?? 0) || Number(estimate.subtotal ?? 0);
   const depositPercent = Number(estimate.deposit_percent ?? 0);
 
@@ -76,7 +78,16 @@ export default async function PublicEstimatePage({ params }: Props) {
         approvedAt: estimate.approved_at,
         approvedByName: estimate.approved_by_name,
         declinedAt: estimate.declined_at,
+        taxRate: Number(estimate.tax_rate ?? 0),
       }}
+      items={items.map((i) => ({
+        id: i.id,
+        description: i.description,
+        quantity: Number(i.quantity ?? 1),
+        lineTotal: Number(i.line_total ?? 0),
+        optional: i.optional,
+        selected: i.selected,
+      }))}
     />
   );
 }

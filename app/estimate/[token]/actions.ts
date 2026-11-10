@@ -2,8 +2,11 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isEmailConfigured } from "@/lib/email/resend";
+import { sendInvoiceEmail } from "@/lib/email/transactional";
 import {
   ESTIMATE_COLUMNS,
+  NothingSelectedError,
   approveEstimateAndCreateInvoice,
   ensurePortalToken,
   type EstimateRow,
@@ -22,7 +25,7 @@ async function loadByToken(token: string) {
 
 export async function approveEstimate(
   token: string,
-  input: { name: string; agreed: boolean },
+  input: { name: string; agreed: boolean; selectedItemIds?: string[] },
 ): Promise<{ ok: true; portalUrl: string; hasDeposit: boolean } | { ok: false; error: string }> {
   const name = (input.name ?? "").trim();
   if (name.length < 2) return { ok: false, error: "Please type your full name to sign." };
@@ -40,7 +43,19 @@ export async function approveEstimate(
   const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
 
   try {
-    await approveEstimateAndCreateInvoice(db, estimate, { name, ip });
+    const selectedItemIds = Array.isArray(input.selectedItemIds)
+      ? input.selectedItemIds.filter((id) => typeof id === "string").slice(0, 200)
+      : null;
+    const alreadyApproved = Boolean(estimate.invoice_id);
+    const { invoiceId } = await approveEstimateAndCreateInvoice(db, estimate, { name, ip, selectedItemIds });
+    // Email the invoice with its pay link (skipped until email is set up).
+    if (!alreadyApproved && isEmailConfigured()) {
+      try {
+        await sendInvoiceEmail(db, estimate.org_id, invoiceId, "invoice_sent");
+      } catch (e) {
+        console.error("[estimate] invoice email failed:", e);
+      }
+    }
     const portalToken = await ensurePortalToken(db, estimate.customer_id, estimate.org_id);
     return {
       ok: true,
@@ -48,6 +63,7 @@ export async function approveEstimate(
       hasDeposit: Number(estimate.deposit_percent ?? 0) > 0,
     };
   } catch (err) {
+    if (err instanceof NothingSelectedError) return { ok: false, error: err.message };
     console.error("[estimate] approval failed:", err);
     return { ok: false, error: "Something went wrong saving your approval. Please try again." };
   }
@@ -65,7 +81,7 @@ export async function declineEstimate(
   const { error } = await db
     .from("estimates")
     .update({
-      status: "rejected",
+      status: "declined",
       declined_at: new Date().toISOString(),
       decline_reason: (reason ?? "").trim().slice(0, 1000) || null,
       updated_at: new Date().toISOString(),

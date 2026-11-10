@@ -107,7 +107,7 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   // Fetch line items for this invoice from the provided rows
   const invoiceLineItems = lineItemRows
     .filter((li) => li.invoice_id === row.id)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((li) => ({
       description: li.description ?? 'Services',
       quantity: li.quantity ?? 1,
@@ -157,14 +157,24 @@ export function mapEstimate(row: Record<string, any>): Estimate & { total: numbe
     status,
     createdDate: (row.created_at ?? '').slice(0, 10),
     validUntil: row.valid_until ?? '',
-    lineItems: [
-      {
-        id: `${row.id}-li`,
-        description: row.title || row.description || 'Estimate',
-        quantity: 1,
-        unitPrice: toNum(row.subtotal) || total,
-      },
-    ],
+    lineItems: Array.isArray(row.estimate_line_items) && row.estimate_line_items.length
+      ? [...row.estimate_line_items]
+          .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((li: any) => ({
+            id: li.id,
+            description: li.description ?? '',
+            quantity: toNum(li.quantity) || 1,
+            unitPrice: toNum(li.unit_price),
+            selected: li.selected ?? null,
+          }))
+      : [
+          {
+            id: `${row.id}-li`,
+            description: row.title || row.description || 'Estimate',
+            quantity: 1,
+            unitPrice: toNum(row.subtotal) || total,
+          },
+        ],
     discount: 0,
     notes: row.notes ?? undefined,
     total,
