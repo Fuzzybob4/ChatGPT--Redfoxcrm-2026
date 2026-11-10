@@ -287,3 +287,48 @@ export async function canSeeCustomer(orgId: string, employeeId: string | null, c
     .limit(1);
   return Boolean(data?.length);
 }
+
+export interface InstallItem {
+  description: string;
+  quantity: number;
+}
+
+/**
+ * What's being installed for a customer this season: the approved estimate's
+ * chosen items, otherwise the newest invoice's items. No prices, and billing
+ * lines (deposits, discounts, "Square invoice …") are left out.
+ */
+export async function getInstallItems(orgId: string, customerId: string): Promise<InstallItem[]> {
+  const admin = createAdminClient();
+  const { currentSeasonStart } = await import("@/lib/lifecycle");
+  const { isCrewSafeItem } = await import("@/lib/field-privacy");
+  const season = currentSeasonStart();
+  const [{ data: estimates }, { data: invoices }] = await Promise.all([
+    admin
+      .from("estimates")
+      .select("id, estimate_line_items(description, quantity, selected, line_total, sort_order)")
+      .eq("org_id", orgId)
+      .eq("customer_id", customerId)
+      .eq("status", "accepted")
+      .gte("created_at", season)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    admin
+      .from("invoices")
+      .select("id, invoice_line_items(description, quantity, sort_order)")
+      .eq("org_id", orgId)
+      .eq("customer_id", customerId)
+      .neq("status", "cancelled")
+      .gte("created_at", season)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+  const sort = (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  const fromEstimate = ((estimates?.[0] as any)?.estimate_line_items ?? [])
+    .filter((i: any) => i.selected !== false && Number(i.line_total ?? 0) > 0)
+    .sort(sort);
+  const fromInvoice = ((invoices?.[0] as any)?.invoice_line_items ?? []).sort(sort);
+  return (fromEstimate.length ? fromEstimate : fromInvoice)
+    .filter((i: any) => isCrewSafeItem(i.description))
+    .map((i: any) => ({ description: String(i.description).trim(), quantity: Number(i.quantity ?? 1) }));
+}

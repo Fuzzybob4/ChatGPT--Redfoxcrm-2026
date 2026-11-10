@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
 
-import { getAccessibleJob, getAssignedJobs, getFieldContext, getOpenTimeEntry, isOpenStatus } from "@/lib/field";
+import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus } from "@/lib/field";
+import { crewSafeText } from "@/lib/field-privacy";
+import { InstallItems } from "@/components/field/install-items";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
 import { PhotoCapture } from "@/components/field/photo-capture";
@@ -16,7 +18,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
   if (!access) notFound();
   const { job, assigned } = access;
 
-  const [propertyPhotos, customerPhotos, entries, openEntry, myJobs] = await Promise.all([
+  const [propertyPhotos, customerPhotos, entries, openEntry, myJobs, items, customerRow] = await Promise.all([
     job.customerId
       ? admin
           .from("property_photos")
@@ -40,7 +42,13 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
       .eq("scheduled_job_id", job.id),
     employee ? getOpenTimeEntry(employee.id) : Promise.resolve(null),
     employee ? getAssignedJobs(org.orgId, employee.id) : Promise.resolve([]),
+    job.customerId ? getInstallItems(org.orgId, job.customerId) : Promise.resolve([]),
+    job.customerId
+      ? admin.from("customers").select("notes").eq("id", job.customerId).eq("org_id", org.orgId).maybeSingle()
+      : Promise.resolve({ data: null as { notes: string | null } | null }),
   ]);
+  // Money never shows on crew screens.
+  const notes = [crewSafeText(job.notes), crewSafeText(customerRow.data?.notes)].filter(Boolean).join("\n\n");
 
   // Show photos of this property first, then the rest of the customer's history.
   const photos: FieldPhoto[] = [
@@ -101,11 +109,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
               job.customerName
             )}
           </h1>
-          {job.customerId && (
-            <Link href={`/field/customers/${job.customerId}`} className="w-fit text-sm font-medium text-primary">
-              What we&apos;re installing, notes &amp; photos →
-            </Link>
-          )}
+
           <p className="text-sm text-muted-foreground">
             {job.title} · {formatDay(job.scheduledDate)}
             {job.startTime ? ` · ${formatClock(job.startTime)}` : ""}
@@ -146,12 +150,14 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
 
         {job.address && <p className="text-sm leading-relaxed text-foreground">{job.address}</p>}
 
-        {job.notes && (
+        <InstallItems items={items} />
+
+        {notes && (
           <section aria-labelledby="notes-heading" className="flex flex-col gap-2 rounded-xl bg-muted p-4">
             <h2 id="notes-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Job notes
+              Notes, colors &amp; materials
             </h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{job.notes}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{notes}</p>
           </section>
         )}
 
@@ -159,7 +165,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 id="photos-heading" className="text-base font-semibold text-foreground">
-                Past installs
+                Photos of the home
               </h2>
               <p className="text-sm text-muted-foreground">
                 {photos.length === 0
