@@ -105,7 +105,7 @@ export async function runHubspotSync(
     for (let from = 0; ; from += 1000) {
       const { data, error } = await db
         .from("customers")
-        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id, marketing_unsubscribed, do_not_contact")
+        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id, marketing_unsubscribed, do_not_contact, updated_at")
         .eq("org_id", orgId)
         .order("id")
         .range(from, from + 999);
@@ -157,6 +157,22 @@ export async function runHubspotSync(
           changes.marketing_opt_in = false;
         }
         if (row.do_not_contact && !known.do_not_contact) Object.assign(changes, doNotContactChanges());
+        // Moved house: HubSpot has a different street address and was edited
+        // more recently than the Red Fox record, so take HubSpot's address.
+        const hsModified = Date.parse(String(contact.properties?.lastmodifieddate ?? ""));
+        const rfModified = Date.parse(String(known.updated_at ?? ""));
+        if (
+          row.address &&
+          String(known.address ?? "").trim() &&
+          !sameStreet(row.address, known.address) &&
+          Number.isFinite(hsModified) &&
+          (!Number.isFinite(rfModified) || hsModified > rfModified)
+        ) {
+          changes.address = row.address;
+          changes.city = row.city ?? known.city ?? null;
+          changes.state = row.state ?? known.state ?? null;
+          changes.zip_code = row.zip_code ?? known.zip_code ?? null;
+        }
         if (Object.keys(changes).length) {
           if (changes.address) { changes.lat = null; changes.lng = null; }
           updates.push({ id: known.id, changes });
@@ -264,4 +280,12 @@ function doNotContactChanges(): Record<string, any> {
     marketing_opt_in: false,
     sms_opt_out: true,
   };
+}
+
+/** True when two street addresses are the same (ignoring case, punctuation and a trailing city/zip). */
+function sameStreet(a: string, b: string): boolean {
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const x = norm(a);
+  const y = norm(b);
+  return x === y || x.startsWith(y) || y.startsWith(x);
 }
