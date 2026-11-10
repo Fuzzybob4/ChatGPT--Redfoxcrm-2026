@@ -525,7 +525,7 @@ function CalendarView({
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {selectedJobs.map((j) => (
-                <Link key={j.id} href={`/jobs/${j.id}`} className="block">
+                <Link key={j.id} href={j.customerId ? `/customers/${j.customerId}` : "/schedule"} className="block">
                   <Card className="transition-colors hover:bg-muted/40 active:bg-muted/60">
                     <CardContent className="py-3 px-4">
                       <div className="flex items-start justify-between gap-2">
