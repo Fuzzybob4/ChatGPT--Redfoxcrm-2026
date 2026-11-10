@@ -32,6 +32,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ file: s
     .gte("scheduled_date", from)
     .lte("scheduled_date", to)
     .is("archived_at", null)
+    // Cancelled jobs are left out, so they drop off subscribed calendars.
+    .neq("status", "cancelled")
     .order("scheduled_date")
     .limit(5000);
   if (feed.crew_id) q = q.eq("crew_id", feed.crew_id);
