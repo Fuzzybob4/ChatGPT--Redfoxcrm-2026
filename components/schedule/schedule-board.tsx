@@ -38,6 +38,8 @@ export interface BoardJob {
   phone: string | null;
   address: string;
   date: string;
+  /** "HH:MM" (24h) or null. */
+  startTime?: string | null;
   crewId: string | null;
   size: JobSize;
   status: string;
@@ -47,6 +49,12 @@ export interface BoardJob {
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const shortDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const longDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+const fmtTime = (t?: string | null) => {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "AM" : "PM"}`;
+};
+const byTime = (a: BoardJob, b: BoardJob) => (a.startTime ?? "99").localeCompare(b.startTime ?? "99");
 const fmtPts = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ""));
 const selectCls = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
 
@@ -91,7 +99,13 @@ export function ScheduleBoard({
   const rows: (BoardCrew | null)[] = [...activeCrews, ...(jobs.some((j) => !j.crewId || !crews.some((c) => c.id === j.crewId)) ? [null] : [])];
 
   const cellJobs = (day: string, crewId: string | null) =>
-    jobs.filter((j) => j.date === day && (crewId ? j.crewId === crewId : !j.crewId || !crews.some((c) => c.id === j.crewId)));
+    jobs
+      .filter((j) => j.date === day && (crewId ? j.crewId === crewId : !j.crewId || !crews.some((c) => c.id === j.crewId)))
+      .sort(byTime);
+
+  // Phones show one day at a time: today if it's in this week, else the first day.
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const mobileDay = pickedDay && days.includes(pickedDay) ? pickedDay : days.includes(today) ? today : days[0];
 
   function act<T>(fn: () => Promise<T>, done?: (r: T) => void) {
     setError(null);
@@ -146,8 +160,26 @@ export function ScheduleBoard({
         </Card>
       )}
 
+      {/* Phone: one day at a time */}
+      {mobileDay && (
+        <MobileDayView
+          days={days}
+          day={mobileDay}
+          today={today}
+          onDay={setPickedDay}
+          rows={rows}
+          offSet={offSet}
+          cellJobs={cellJobs}
+          jobs={jobs}
+          canManage={canManage}
+          onPick={setEditing}
+          onRain={(d) => setRainConfirm(d)}
+          onReopen={(d) => act(() => reopenDay(d))}
+        />
+      )}
+
       {/* Board */}
-      <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+      <div className="hidden overflow-x-auto md:block">
         <div className="grid min-w-[760px] gap-px overflow-hidden rounded-lg border bg-border" style={{ gridTemplateColumns: `120px repeat(${days.length}, minmax(140px, 1fr))` }}>
           {/* Header row */}
           <div className="bg-muted/60 p-2 text-xs font-medium text-muted-foreground">Crew</div>
@@ -194,7 +226,7 @@ export function ScheduleBoard({
           {!rows.length && <div className="col-span-full bg-background p-6 text-center text-sm text-muted-foreground">Nothing scheduled this week.</div>}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="hidden text-xs text-muted-foreground md:block">
         Numbers show job load vs. crew limit. Standard install = 1, small = ¾, large = 1½. Tap a job to move it or change its size.
       </p>
 
@@ -296,6 +328,134 @@ export function ScheduleBoard({
   );
 }
 
+function MobileDayView({
+  days,
+  day,
+  today,
+  onDay,
+  rows,
+  offSet,
+  cellJobs,
+  jobs,
+  canManage,
+  onPick,
+  onRain,
+  onReopen,
+}: {
+  days: string[];
+  day: string;
+  today: string;
+  onDay: (d: string) => void;
+  rows: (BoardCrew | null)[];
+  offSet: Set<string>;
+  cellJobs: (day: string, crewId: string | null) => BoardJob[];
+  jobs: BoardJob[];
+  canManage: boolean;
+  onPick: (j: BoardJob) => void;
+  onRain: (d: string) => void;
+  onReopen: (d: string) => void;
+}) {
+  const idx = days.indexOf(day);
+  const isOff = offSet.has(day);
+  return (
+    <div className="space-y-3 md:hidden">
+      {/* Day picker: every day of the week fits on one row */}
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
+        {days.map((d) => {
+          const count = jobs.filter((j) => j.date === d).length;
+          const active = d === day;
+          return (
+            <button
+              key={d}
+              onClick={() => onDay(d)}
+              className={`flex flex-col items-center rounded-lg border py-1.5 text-xs ${
+                active ? "border-primary bg-primary text-primary-foreground" : offSet.has(d) ? "bg-sky-50 dark:bg-sky-950/40" : "bg-background"
+              }`}
+            >
+              <span className={`font-medium ${!active && d === today ? "text-primary" : ""}`}>{DAY[weekdayOf(d)]}</span>
+              <span className="text-[11px] opacity-80">{Number(d.slice(8))}</span>
+              <span className={`mt-0.5 text-[10px] tabular-nums ${active ? "" : "text-muted-foreground"}`}>{count || "–"}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="outline" size="icon" aria-label="Previous day" disabled={idx <= 0} onClick={() => onDay(days[idx - 1])}>
+          <ChevronLeft className="size-4" />
+        </Button>
+        <div className="text-center">
+          <p className="text-sm font-semibold">{longDate(day)}</p>
+          {canManage &&
+            (isOff ? (
+              <button className="mx-auto flex items-center gap-1 text-xs text-sky-700" onClick={() => onReopen(day)}>
+                <CloudRain className="size-3" /> Rain day · reopen
+              </button>
+            ) : (
+              day >= today && (
+                <button className="mx-auto flex items-center gap-1 text-xs text-muted-foreground" onClick={() => onRain(day)}>
+                  <CloudRain className="size-3" /> Rain day
+                </button>
+              )
+            ))}
+        </div>
+        <Button variant="outline" size="icon" aria-label="Next day" disabled={idx >= days.length - 1} onClick={() => onDay(days[idx + 1])}>
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+
+      {rows.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Nothing scheduled this week.</p>}
+      {rows.map((crew) => {
+        const list = cellJobs(day, crew?.id ?? null);
+        if (!crew && list.length === 0) return null;
+        const pts = list.reduce((s, j) => s + jobPoints(j.size), 0);
+        const over = crew ? pts > crew.capacity : false;
+        return (
+          <Card key={crew?.id ?? "none"}>
+            <CardContent className="space-y-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full" style={{ background: crew?.color ?? "#9ca3af" }} />
+                  <span className="text-sm font-semibold">{crew?.name ?? "No crew"}</span>
+                </div>
+                {crew && (
+                  <span className={`text-xs tabular-nums ${over ? "font-medium text-destructive" : "text-muted-foreground"}`}>
+                    {fmtPts(pts)}/{fmtPts(crew.capacity)} jobs{over ? " · over limit" : ""}
+                  </span>
+                )}
+              </div>
+              {list.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No jobs.</p>
+              ) : (
+                list.map((j) => (
+                  <button
+                    key={j.id}
+                    onClick={() => onPick(j)}
+                    className={`flex w-full items-start gap-3 rounded-md border p-2 text-left active:bg-muted ${j.status === "completed" ? "opacity-60" : ""}`}
+                    style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}` }}
+                  >
+                    <span className="w-14 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">{fmtTime(j.startTime) || "—"}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{j.customerName}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {j.jobType.includes("remov") ? "Removal · " : ""}
+                        {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
+                        {j.status === "completed" ? "Done · " : ""}
+                        {j.address}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+      <p className="text-xs text-muted-foreground">Tap a job to move it or change its size.</p>
+    </div>
+  );
+}
+
 function Row({
   crew,
   days,
@@ -336,7 +496,10 @@ function Row({
                 className={`block w-full rounded-md border px-1.5 py-1 text-left text-[11px] leading-tight hover:bg-muted ${j.status === "completed" ? "opacity-60" : ""}`}
                 style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}` }}
               >
-                <span className="block truncate font-medium">{j.customerName}</span>
+                <span className="block truncate font-medium">
+                  {j.startTime ? <span className="font-normal text-muted-foreground">{fmtTime(j.startTime)} · </span> : null}
+                  {j.customerName}
+                </span>
                 <span className="block truncate text-muted-foreground">
                   {j.jobType.includes("remov") ? "Removal · " : ""}
                   {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}

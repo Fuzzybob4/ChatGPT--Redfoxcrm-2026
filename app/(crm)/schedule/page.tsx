@@ -23,7 +23,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     loadNeedsScheduling(db, org.orgId),
     db
       .from("scheduled_jobs")
-      .select("id, customer_id, title, job_type, scheduled_date, status, crew_id, crew_name, job_size, address, city")
+      .select("id, customer_id, title, job_type, scheduled_date, start_time, status, crew_id, crew_name, job_size, address, city")
       .eq("org_id", org.orgId)
       .gte("scheduled_date", start)
       .lte("scheduled_date", end)
@@ -49,6 +49,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       phone: c?.phone ?? null,
       address: [j.address, j.city].filter(Boolean).join(", "),
       date: j.scheduled_date,
+      startTime: j.start_time ? String(j.start_time).slice(0, 5) : null,
       crewId: j.crew_id ?? (j.crew_name ? crewByName.get(String(j.crew_name).toLowerCase()) ?? null : null),
       size: (j.job_size ?? "standard") as BoardJob["size"],
       status: String(j.status ?? "scheduled").toLowerCase(),

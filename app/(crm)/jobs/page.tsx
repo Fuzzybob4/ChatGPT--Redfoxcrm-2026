@@ -428,11 +428,13 @@ function CalendarView({
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   const selectedJobs = selectedDay
-    ? (jobsByDate[selectedDay] ?? []).filter((j) => {
-        const c = getCustomerById(j.customerId);
-        const q = query.toLowerCase();
-        return j.title.toLowerCase().includes(q) || c?.name.toLowerCase().includes(q);
-      })
+    ? (jobsByDate[selectedDay] ?? [])
+        .filter((j) => {
+          const c = getCustomerById(j.customerId);
+          const q = query.toLowerCase();
+          return j.title.toLowerCase().includes(q) || c?.name.toLowerCase().includes(q);
+        })
+        .sort((a, b) => (a.scheduledTime ?? "99").localeCompare(b.scheduledTime ?? "99"))
     : [];
 
   return (
@@ -523,15 +525,22 @@ function CalendarView({
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {selectedJobs.map((j) => (
-                <Card key={j.id}>
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium text-sm leading-tight">{j.title}</p>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${STATUS_STYLES[j.status].badge}`}>{j.status}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{getCustomerById(j.customerId)?.name}</p>
-                  </CardContent>
-                </Card>
+                <Link key={j.id} href={`/jobs/${j.id}`} className="block">
+                  <Card className="transition-colors hover:bg-muted/40 active:bg-muted/60">
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-sm leading-tight">
+                          {j.scheduledTime && <span className="mr-1.5 font-normal text-muted-foreground">{j.scheduledTime.slice(0, 5)}</span>}
+                          {getCustomerById(j.customerId)?.name ?? j.title}
+                        </p>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${STATUS_STYLES[j.status]?.badge ?? ""}`}>{j.status}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {[j.title, j.technicianName].filter(Boolean).join(" · ")}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}
