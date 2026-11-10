@@ -31,6 +31,7 @@ import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-l
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, estimateSignal, inCurrentSeason, invoicePaymentSignal, LIFECYCLE_META } from "@/lib/lifecycle";
 import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-control";
+import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -227,6 +228,8 @@ export default function CustomerDetailPage({ params }: Props) {
                 </button>
               </CardContent>
             </Card>
+
+            <ContactPreferencesCard customerId={customer.id} onChanged={refresh} />
 
             {/* Portal Access Card */}
             <CustomerPortalLinkCard 

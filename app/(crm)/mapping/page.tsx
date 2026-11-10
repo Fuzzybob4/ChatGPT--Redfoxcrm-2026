@@ -19,7 +19,7 @@ export default async function MappingPage() {
   for (let from = 0; ; from += 1000) {
     let customerQuery = supabase
       .from("customers")
-      .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng, tags")
+      .select("id, full_name, first_name, last_name, email, phone, status, install_status, address, city, state, zip_code, lat, lng, tags, do_not_contact")
       .order("id")
       .range(from, from + 999);
     if (locationId) customerQuery = customerQuery.eq("location_id", locationId);
@@ -109,8 +109,10 @@ export default async function MappingPage() {
   for (const j of jobs ?? []) {
     if (j.customer_id && String(j.status ?? "").toLowerCase() === "completed") bookedBefore.add(j.customer_id);
   }
+  // Customers who asked not to be contacted never show on the rebooking list.
+  const doNotContact = new Set(customers.filter((c) => c.do_not_contact).map((c) => c.id as string));
   const isPastCustomer = (customerId: string) =>
-    bookedBefore.has(customerId) && !BOOKED_STAGES.has(getCustomerStage(customerId));
+    bookedBefore.has(customerId) && !doNotContact.has(customerId) && !BOOKED_STAGES.has(getCustomerStage(customerId));
 
   const customerName = (c: any) =>
     c.full_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();

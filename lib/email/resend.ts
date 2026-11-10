@@ -134,6 +134,7 @@ export async function buildRecipientList(
     .eq("org_id", orgId)
     .eq("marketing_opt_in", true)
     .eq("marketing_unsubscribed", false)
+    .eq("do_not_contact", false)
     .eq("status", "active")
     .not("email", "is", null)
     .neq("email", "");

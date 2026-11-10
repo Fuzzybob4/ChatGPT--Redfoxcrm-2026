@@ -47,6 +47,7 @@ export function mapCustomer(row: Record<string, any>): Customer & {
   notes: string;
   isPropertyManager: boolean;
   propertyManagerCompany: string;
+  doNotContact: boolean;
 } {
   const name =
     row.full_name?.trim() ||
@@ -77,6 +78,7 @@ export function mapCustomer(row: Record<string, any>): Customer & {
     notes: row.notes ?? '',
     isPropertyManager: !!row.is_property_manager,
     propertyManagerCompany: row.property_manager_company ?? '',
+    doNotContact: !!row.do_not_contact,
   };
 }
 

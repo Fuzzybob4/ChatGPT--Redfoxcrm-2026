@@ -82,20 +82,23 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
   const [currentPage, setCurrentPage] = useState(1);
   const [isMerging, setIsMerging] = useState(false);
   const [pageSize, setPageSize] = useState(25);
-  const [addressFilter, setAddressFilter] = useState<"all" | "has" | "none" | "vendors">("all");
+  const [addressFilter, setAddressFilter] = useState<"all" | "has" | "none" | "vendors" | "dnc">("all");
 
   const hasAddress = (c: Customer) => Boolean(((c as any).address ?? "").trim());
   const isVendor = (c: Customer) => ((c as any).tags ?? []).includes("vendor");
+  const isDnc = (c: Customer) => Boolean((c as any).doNotContact);
   const addressCounts = useMemo(() => {
     let has = 0;
     let vendors = 0;
     let people = 0;
+    let dnc = 0;
     for (const c of customers) {
+      if (isDnc(c)) dnc++;
       if (isVendor(c)) { vendors++; continue; }
       people++;
       if (hasAddress(c)) has++;
     }
-    return { all: people, has, none: people - has, vendors };
+    return { all: people, has, none: people - has, vendors, dnc };
   }, [customers]);
 
   // Filter customers
@@ -104,6 +107,8 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
     return customers.filter((c) => {
       if (addressFilter === "vendors") {
         if (!isVendor(c)) return false;
+      } else if (addressFilter === "dnc") {
+        if (!isDnc(c)) return false;
       } else {
         if (isVendor(c)) return false;
         if (addressFilter === "has" && !hasAddress(c)) return false;
@@ -245,6 +250,7 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
             { id: "has", label: "Has address" },
             { id: "none", label: "No address" },
             { id: "vendors", label: "Vendors" },
+            { id: "dnc", label: "Do not contact" },
           ] as const).map((f) => (
             <button
               key={f.id}
@@ -469,7 +475,14 @@ export function CustomersDataTable({ customers, onRefresh }: CustomersDataTableP
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <span className="font-medium text-sm block">{customer.name}</span>
+                              <span className="font-medium text-sm flex items-center gap-1.5">
+                                {customer.name}
+                                {isDnc(customer) && (
+                                  <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0 font-medium">
+                                    Do not contact
+                                  </Badge>
+                                )}
+                              </span>
                               {/* On phones the email/phone columns are off-screen, so show them here. */}
                               {(customer.phone || customer.email) && (
                                 <span className="block truncate text-xs text-muted-foreground sm:hidden">

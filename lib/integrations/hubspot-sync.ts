@@ -105,7 +105,7 @@ export async function runHubspotSync(
     for (let from = 0; ; from += 1000) {
       const { data, error } = await db
         .from("customers")
-        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id")
+        .select("id, email, phone, address, city, state, zip_code, hubspot_contact_id, marketing_unsubscribed")
         .eq("org_id", orgId)
         .order("id")
         .range(from, from + 999);
@@ -151,6 +151,11 @@ export async function runHubspotSync(
         for (const field of ["email", "phone", "address", "city", "state", "zip_code"] as const) {
           if (!String(known[field] ?? "").trim() && row[field]) changes[field] = row[field];
         }
+        // Opt-outs only ever flow one way: HubSpot can opt someone out, never back in.
+        if (row.marketing_unsubscribed && !known.marketing_unsubscribed) {
+          changes.marketing_unsubscribed = true;
+          changes.marketing_opt_in = false;
+        }
         if (Object.keys(changes).length) {
           if (changes.address) { changes.lat = null; changes.lng = null; }
           updates.push({ id: known.id, changes });
@@ -162,7 +167,12 @@ export async function runHubspotSync(
       const match = (row.email && byEmail.get(row.email)) || (pk && byPhone.get(pk)) || null;
       if (match) {
         if (!match.hubspot_contact_id) {
-          updates.push({ id: match.id, changes: { hubspot_contact_id: contact.id } });
+          const linkChanges: Record<string, any> = { hubspot_contact_id: contact.id };
+          if (row.marketing_unsubscribed) {
+            linkChanges.marketing_unsubscribed = true;
+            linkChanges.marketing_opt_in = false;
+          }
+          updates.push({ id: match.id, changes: linkChanges });
           match.hubspot_contact_id = contact.id;
           linked++;
         } else skipped++;

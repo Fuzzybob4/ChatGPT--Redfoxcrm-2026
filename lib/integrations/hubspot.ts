@@ -35,6 +35,7 @@ const CONTACT_PROPERTIES = [
   "zip",
   "company",
   "lifecyclestage",
+  "hs_email_optout",
 ];
 
 export function hubspotConfigured(): boolean {
@@ -219,6 +220,8 @@ export function mapHubspotContact(contact: HubspotContact) {
     notes,
     tags: ["hubspot-import", `hs-${stage}`],
     status: ACTIVE_STAGES.has(stage) ? "active" : "lead",
+    // Opted out of all HubSpot email: never send them Red Fox marketing email either.
+    marketing_unsubscribed: clean(p.hs_email_optout).toLowerCase() === "true",
   };
 }
 

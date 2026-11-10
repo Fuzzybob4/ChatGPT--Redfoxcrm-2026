@@ -256,7 +256,8 @@ export async function getOptInStats() {
     .select("*", { count: "exact", head: true })
     .eq("org_id", org.orgId)
     .eq("marketing_opt_in", true)
-    .eq("marketing_unsubscribed", false);
+    .eq("marketing_unsubscribed", false)
+    .eq("do_not_contact", false);
 
   return { total: total ?? 0, optedIn: optedIn ?? 0 };
 }
