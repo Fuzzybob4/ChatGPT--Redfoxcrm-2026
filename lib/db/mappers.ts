@@ -223,5 +223,6 @@ export function mapJob(row: Record<string, any>): Job {
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
     seasonYear: row.season_year ?? undefined,
+    archivedAt: row.archived_at ?? undefined,
   };
 }

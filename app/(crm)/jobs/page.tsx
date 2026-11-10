@@ -7,6 +7,7 @@ import {
   Search, CalendarDays, LayoutList, Navigation, Play,
   CheckCircle2, Plus, Users, Truck, Wrench, MapPin, Clock,
   ChevronLeft, ChevronRight, MoreVertical, AlertTriangle, Scissors,
+  Archive, ArchiveRestore, Trash2, CalendarPlus,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -26,7 +27,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { type Job, type JobStatus } from "@/lib/data";
 import { useData, type Employee } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
-import { updateJobStatus, reassignJob, createRemovalJob } from "./actions";
+import {
+  updateJobStatus, reassignJob, createRemovalJob,
+  archiveJobs, archiveAllFinishedJobs, restoreJob, deleteCancelledJob,
+} from "./actions";
+import { CalendarSyncDialog } from "@/components/schedule/calendar-sync-dialog";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -106,8 +111,8 @@ function WorkOrderCard({
         await action();
         onRefresh();
         onSuccess?.();
-      } catch {
-        setActionError("Couldn't save that change. Please try again.");
+      } catch (e) {
+        setActionError(e instanceof Error && e.message ? e.message : "Couldn't save that change. Please try again.");
       }
     });
   }
@@ -174,12 +179,37 @@ function WorkOrderCard({
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => run(() => updateJobStatus(job.id, "cancelled"))}
-                >
-                  Cancel job
-                </DropdownMenuItem>
+                {job.archivedAt ? (
+                  <DropdownMenuItem onClick={() => run(() => restoreJob(job.id))}>
+                    <ArchiveRestore className="size-3.5 mr-2" />
+                    Restore
+                  </DropdownMenuItem>
+                ) : (job.status === "Completed" || job.status === "Cancelled") ? (
+                  <DropdownMenuItem onClick={() => run(() => archiveJobs([job.id]))}>
+                    <Archive className="size-3.5 mr-2" />
+                    Archive
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => run(() => updateJobStatus(job.id, "cancelled"))}
+                  >
+                    Cancel job
+                  </DropdownMenuItem>
+                )}
+                {job.status === "Cancelled" && (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => {
+                      if (confirm("Delete this cancelled work order for good? This can't be undone.")) {
+                        run(() => deleteCancelledJob(job.id));
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -519,19 +549,26 @@ const STATUS_ORDER: Record<JobStatus, number> = {
 
 export default function JobsPage() {
   const [query, setQuery] = useState("");
-  const [activeStatus, setActiveStatus] = useState<"all" | JobStatus>("all");
+  const [activeStatus, setActiveStatus] = useState<"all" | JobStatus | "Archived">("all");
+  const [archiving, startArchiving] = useTransition();
+  const [syncOpen, setSyncOpen] = useState(false);
   const [view, setView] = useState<"list" | "calendar">("list");
   const { loading, jobs: allJobs, getCustomerById, employees, refresh } = useData();
   const { selectedLocationId } = useLocation();
 
-  const jobs = useMemo(
+  const inLocation = useMemo(
     () => (selectedLocationId ? allJobs.filter((j) => j.locationId === selectedLocationId) : allJobs),
     [allJobs, selectedLocationId],
   );
+  // Archived work orders are kept for history but hidden everywhere except the Archived filter.
+  const jobs = useMemo(() => inLocation.filter((j) => !j.archivedAt), [inLocation]);
+  const archivedJobs = useMemo(() => inLocation.filter((j) => j.archivedAt), [inLocation]);
+  const finishedCount = jobs.filter((j) => j.status === "Completed" || j.status === "Cancelled").length;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return jobs.filter((j) => {
+    const pool = activeStatus === "Archived" ? archivedJobs : jobs;
+    return pool.filter((j) => {
       const customer = getCustomerById(j.customerId);
       const matchesQuery =
         !q ||
@@ -539,10 +576,10 @@ export default function JobsPage() {
         (customer?.name ?? "").toLowerCase().includes(q) ||
         j.technicianName.toLowerCase().includes(q) ||
         j.address.toLowerCase().includes(q);
-      const matchesStatus = activeStatus === "all" || j.status === activeStatus;
+      const matchesStatus = activeStatus === "all" || activeStatus === "Archived" || j.status === activeStatus;
       return matchesQuery && matchesStatus;
     });
-  }, [jobs, query, activeStatus, getCustomerById]);
+  }, [jobs, archivedJobs, query, activeStatus, getCustomerById]);
 
   const byDate = useMemo(
     () =>
@@ -564,6 +601,7 @@ export default function JobsPage() {
     "In Progress": jobs.filter((j) => j.status === "In Progress").length,
     Completed: jobs.filter((j) => j.status === "Completed").length,
     Cancelled: jobs.filter((j) => j.status === "Cancelled").length,
+    Archived: archivedJobs.length,
   };
 
   if (loading) {
@@ -580,10 +618,16 @@ export default function JobsPage() {
         title="Work Orders"
         description={`${jobs.length} total work orders`}
         actions={
-          <Button size="sm" render={<Link href="/jobs/new" />}>
-            <Plus className="size-3.5 mr-1.5" />
-            New
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSyncOpen(true)}>
+              <CalendarPlus className="size-3.5 mr-1.5" />
+              Sync calendar
+            </Button>
+            <Button size="sm" render={<Link href="/jobs/new" />}>
+              <Plus className="size-3.5 mr-1.5" />
+              New
+            </Button>
+          </div>
         }
       />
 
@@ -627,10 +671,10 @@ export default function JobsPage() {
             {/* Status filter — horizontal scroll on mobile */}
             <div className="-mx-4 px-4 lg:mx-0 lg:px-0">
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {(["all", ...ALL_STATUSES] as ("all" | JobStatus)[]).map((s) => {
+                {(["all", ...ALL_STATUSES, "Archived"] as ("all" | JobStatus | "Archived")[]).map((s) => {
                   const cnt = counts[s] ?? 0;
                   const isActive = activeStatus === s;
-                  const dot = s !== "all" ? STATUS_STYLES[s as JobStatus].dot : undefined;
+                  const dot = s !== "all" && s !== "Archived" ? STATUS_STYLES[s as JobStatus].dot : undefined;
                   return (
                     <button
                       key={s}
@@ -648,6 +692,28 @@ export default function JobsPage() {
                 })}
               </div>
             </div>
+
+            {activeStatus !== "Archived" && finishedCount > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  {finishedCount} completed or cancelled work order{finishedCount === 1 ? "" : "s"} still showing.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={archiving}
+                  onClick={() =>
+                    startArchiving(async () => {
+                      await archiveAllFinishedJobs();
+                      await refresh();
+                    })
+                  }
+                >
+                  <Archive className="size-3.5 mr-1.5" />
+                  {archiving ? "Archiving..." : "Archive all"}
+                </Button>
+              </div>
+            )}
 
             {/* Job list */}
             {sortedDates.length === 0 ? (
@@ -693,6 +759,7 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+      <CalendarSyncDialog open={syncOpen} onOpenChange={setSyncOpen} />
     </div>
   );
 }

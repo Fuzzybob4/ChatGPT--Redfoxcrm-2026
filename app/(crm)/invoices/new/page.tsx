@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
 import { createInvoice } from '../actions';
+import { CrewSelect } from '@/components/crews/crew-select';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +69,11 @@ export default function NewInvoicePage() {
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [scheduleInstall, setScheduleInstall] = useState(false);
+  const [installDate, setInstallDate] = useState('');
+  const [installStart, setInstallStart] = useState('09:00');
+  const [installEnd, setInstallEnd] = useState('12:00');
+  const [installCrewId, setInstallCrewId] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', description: '', quantity: 1, unitPrice: 0 },
   ]);
@@ -176,6 +182,11 @@ export default function NewInvoicePage() {
       return;
     }
 
+    if (scheduleInstall && (!installDate || installEnd <= installStart)) {
+      setError('Pick an install date, with the end time after the start time.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const invoiceId = await createInvoice({
@@ -202,6 +213,15 @@ export default function NewInvoicePage() {
               price: item.price,
               maxQuantity: item.maxQuantity,
             }))
+          : undefined,
+        workOrder: scheduleInstall
+          ? {
+              scheduledDate: installDate,
+              startTime: installStart,
+              endTime: installEnd,
+              crewId: installCrewId || undefined,
+              seasonYear: Number(installDate.slice(0, 4)),
+            }
           : undefined,
       });
       router.push(`/invoices/${invoiceId}`);
@@ -358,6 +378,44 @@ export default function NewInvoicePage() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Install work order */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">Schedule the install</CardTitle>
+                  <Switch checked={scheduleInstall} onCheckedChange={(v) => setScheduleInstall(Boolean(v))} />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Turn on to create the install work order with this invoice. It goes on the Work Orders calendar, the Crew Schedule and
+                  any synced Google or iPhone calendars. You can also do this later from the invoice.
+                </p>
+                {scheduleInstall && (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-3 space-y-1 sm:col-span-1">
+                        <Label className="text-xs">Install date</Label>
+                        <Input type="date" value={installDate} onChange={(e) => setInstallDate(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Start</Label>
+                        <Input type="time" value={installStart} onChange={(e) => setInstallStart(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">End</Label>
+                        <Input type="time" value={installEnd} onChange={(e) => setInstallEnd(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Crew</Label>
+                      <CrewSelect value={installCrewId} onChange={setInstallCrewId} />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

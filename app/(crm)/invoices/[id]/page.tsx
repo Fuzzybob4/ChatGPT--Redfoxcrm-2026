@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Send, Printer, Download } from "lucide-react";
 import { MarkAsPaidDialog } from "@/components/invoices/mark-as-paid-dialog";
 import { RefundDialog } from "@/components/invoices/refund-dialog";
+import { InvoiceWorkOrders } from "@/components/invoices/invoice-work-orders";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -28,7 +29,7 @@ interface Props {
 
 export default function InvoiceDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, invoices, getCustomerById, refresh } = useData();
+  const { loading, invoices, jobs, getCustomerById, refresh } = useData();
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
   const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -254,6 +255,11 @@ export default function InvoiceDetailPage({ params }: Props) {
               </div>
             </CardContent>
           </Card>
+          <InvoiceWorkOrders
+            invoiceId={invoice.id}
+            jobs={jobs.filter((j) => j.invoiceId === invoice.id)}
+            onChanged={() => startTransition(async () => { await refresh(); })}
+          />
         </div>
       </div>
     </div>

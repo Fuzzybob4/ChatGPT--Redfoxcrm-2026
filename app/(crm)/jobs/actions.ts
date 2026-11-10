@@ -219,3 +219,160 @@ export async function createRemovalJob(
 
   return data.id as string;
 }
+
+// ── Archive / delete ───────────────────────────────────────────────────────
+
+const DONE = ["completed", "cancelled"];
+
+/**
+ * Archive hides finished work orders from the lists and calendars but keeps
+ * them, so a customer's history (and their "Installed" stage) stays intact.
+ * Only completed or cancelled work orders can be archived.
+ */
+export async function archiveJobs(jobIds: string[]): Promise<{ archived: number }> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  const ids = [...new Set(jobIds)].slice(0, 1000);
+  if (!ids.length) return { archived: 0 };
+  const { data, error } = await createAdminClient()
+    .from("scheduled_jobs")
+    .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", org.orgId)
+    .in("id", ids)
+    .in("status", DONE)
+    .is("archived_at", null)
+    .select("id");
+  if (error) throw new Error("Couldn't archive those work orders.");
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+  return { archived: data?.length ?? 0 };
+}
+
+/** Every completed and cancelled work order at once. */
+export async function archiveAllFinishedJobs(): Promise<{ archived: number }> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  const { data, error } = await createAdminClient()
+    .from("scheduled_jobs")
+    .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", org.orgId)
+    .in("status", DONE)
+    .is("archived_at", null)
+    .select("id");
+  if (error) throw new Error("Couldn't archive work orders.");
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+  return { archived: data?.length ?? 0 };
+}
+
+export async function restoreJob(jobId: string): Promise<void> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  const { error } = await createAdminClient()
+    .from("scheduled_jobs")
+    .update({ archived_at: null, updated_at: new Date().toISOString() })
+    .eq("org_id", org.orgId)
+    .eq("id", jobId);
+  if (error) throw new Error("Couldn't restore that work order.");
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+}
+
+/**
+ * Permanently deletes a CANCELLED work order (owners and admins). Completed
+ * ones are archive-only: deleting them would erase the install from the
+ * customer's history.
+ */
+export async function deleteCancelledJob(jobId: string): Promise<void> {
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  if (!["owner", "admin"].includes((org.role || "").toLowerCase())) {
+    throw new Error("Only owners and admins can delete work orders.");
+  }
+  const { data, error } = await createAdminClient()
+    .from("scheduled_jobs")
+    .delete()
+    .eq("org_id", org.orgId)
+    .eq("id", jobId)
+    .eq("status", "cancelled")
+    .select("id");
+  if (error) throw new Error("Couldn't delete that work order.");
+  if (!data?.length) throw new Error("Only cancelled work orders can be deleted. Archive completed ones instead.");
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+}
+
+// ── Schedule the install for an invoice ────────────────────────────────────
+
+/**
+ * Creates the install work order for an invoice: same customer, the
+ * customer's address, linked to the invoice so it shows on both. It lands on
+ * the Work Orders calendar, the Crew Schedule and any synced calendars.
+ */
+export async function scheduleInvoiceJob(input: {
+  invoiceId: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  crewId?: string;
+  jobType?: "install" | "removal";
+}): Promise<{ ok: true; jobId: string } | { ok: false; error: string }> {
+  const org = await getCurrentOrg();
+  if (!org) return { ok: false, error: "Not signed in." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date ?? "")) return { ok: false, error: "Pick a date." };
+  const start = /^\d{2}:\d{2}/.test(input.startTime ?? "") ? input.startTime! : "09:00";
+  const end = /^\d{2}:\d{2}/.test(input.endTime ?? "") ? input.endTime! : "12:00";
+  if (end <= start) return { ok: false, error: "The end time needs to be after the start time." };
+
+  const db = createAdminClient();
+  const { data: invoice } = await db
+    .from("invoices")
+    .select("id, customer_id, location_id, estimate_id, title")
+    .eq("id", input.invoiceId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!invoice?.customer_id) return { ok: false, error: "Invoice not found." };
+  const { data: customer } = await db
+    .from("customers")
+    .select("full_name, first_name, last_name, address, city, state, zip_code, location_id")
+    .eq("id", invoice.customer_id)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  const crew = await resolveCrew(db, org.orgId, { crewId: input.crewId });
+  const type = input.jobType === "removal" ? "removal" : "install";
+  const name = customer?.full_name || [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Customer";
+
+  const { data, error } = await db
+    .from("scheduled_jobs")
+    .insert({
+      org_id: org.orgId,
+      customer_id: invoice.customer_id,
+      invoice_id: invoice.id,
+      estimate_id: invoice.estimate_id ?? null,
+      location_id: invoice.location_id ?? customer?.location_id ?? null,
+      title: `${type === "install" ? "Install" : "Removal"} – ${name}`,
+      job_type: type,
+      scheduled_date: input.date,
+      start_time: start,
+      end_time: end,
+      address: customer?.address ?? null,
+      city: customer?.city ?? null,
+      state: customer?.state ?? null,
+      zip_code: customer?.zip_code ?? null,
+      crew_id: crew?.id ?? null,
+      crew_name: crew?.name ?? null,
+      job_size: "standard",
+      season_year: Number(input.date.slice(0, 4)),
+      status: "scheduled",
+      status_key: "scheduled",
+      created_by: org.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: "Couldn't create the work order." };
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+  revalidatePath("/mapping");
+  revalidatePath(`/invoices/${invoice.id}`);
+  return { ok: true, jobId: data.id };
+}

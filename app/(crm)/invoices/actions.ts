@@ -21,6 +21,7 @@ const workOrderSchema = z.object({
   state: z.string().optional(),
   zipCode: z.string().optional(),
   crewName: z.string().optional(),
+  crewId: z.string().optional(),
   assignedEmployees: z.array(z.string()).optional(),
   notes: z.string().optional(),
   seasonYear: z.number().int().min(2000).max(2100).optional(),
@@ -221,7 +222,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       state,
       zip_code: zipCode,
       ...(await (async () => {
-        const crew = await resolveCrew(createAdminClient(), org.orgId, { crewName: wo.crewName });
+        const crew = await resolveCrew(createAdminClient(), org.orgId, { crewId: wo.crewId, crewName: wo.crewName });
         return { crew_id: crew?.id ?? null, crew_name: crew?.name ?? null };
       })()),
       assigned_employees: wo.assignedEmployees ?? [],

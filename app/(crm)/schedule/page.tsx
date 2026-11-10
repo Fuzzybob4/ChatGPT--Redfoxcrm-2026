@@ -28,6 +28,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .gte("scheduled_date", start)
       .lte("scheduled_date", end)
       .neq("status", "cancelled")
+      .is("archived_at", null)
       .order("scheduled_date"),
   ]);
 

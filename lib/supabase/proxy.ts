@@ -67,6 +67,7 @@ export async function updateSession(request: NextRequest) {
     '/api/cron/',        // Vercel cron jobs (CRON_SECRET verified)
     '/api/portal/',      // customer portal actions (token verified)
     '/api/newsletter/',  // public newsletter signup
+    '/api/calendar/',    // calendar subscription feeds (secret token in the URL)
   ]
   const isPublicEndpoint = PUBLIC_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p))
 

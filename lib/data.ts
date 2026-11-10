@@ -125,6 +125,7 @@ export interface Job {
   startedAt?: string;
   completedAt?: string;
   seasonYear?: number;
+  archivedAt?: string;
 }
 
 export interface EstimateLineItem {
