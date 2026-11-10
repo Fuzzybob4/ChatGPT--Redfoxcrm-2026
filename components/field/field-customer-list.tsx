@@ -21,7 +21,7 @@ export function FieldCustomerList({ customers }: { customers: FieldCustomer[] })
     <div className="flex flex-col gap-4 px-4 pb-6 pt-5">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Customers</h1>
-        <p className="text-sm text-muted-foreground">Customers on jobs you&apos;re assigned to.</p>
+        <p className="text-sm text-muted-foreground">Customers on your jobs. Tap one for phone, photos and what to install.</p>
       </div>
 
       {customers.length > 0 && (
@@ -53,10 +53,13 @@ export function FieldCustomerList({ customers }: { customers: FieldCustomer[] })
             return (
               <li key={c.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className="truncate font-semibold text-foreground">{c.name}</p>
+                  <Link href={`/field/customers/${c.id}`} className="truncate font-semibold text-foreground underline-offset-2 hover:underline">
+                    {c.name}
+                  </Link>
+                  {c.phone && <p className="text-sm text-foreground">{c.phone}</p>}
                   {c.address && <p className="text-sm leading-snug text-muted-foreground">{c.address}</p>}
                   {job && (
-                    <Link href={`/field/jobs/${job.id}`} className="mt-1 text-sm font-medium text-primary">
+                    <Link href={`/field/customers/${c.id}`} className="mt-1 text-sm font-medium text-primary">
                       {c.nextJob ? "Next" : "Last"}: {jobTypeLabel(job.jobType)} · {formatDay(job.scheduledDate)}
                     </Link>
                   )}

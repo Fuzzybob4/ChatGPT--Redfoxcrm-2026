@@ -14,9 +14,7 @@ const TODAY_COLOR = "#c8102e";
 const LATER_COLOR = "#1f2937";
 
 export function FieldMap({ stops, unmappedCount }: { stops: FieldMapStop[]; unmappedCount: number }) {
-  const [range, setRange] = useState<"today" | "all">(() =>
-    stops.some((s) => s.job.scheduledDate === localToday()) ? "today" : "all",
-  );
+  const [range, setRange] = useState<"today" | "all">("today");
   const [selected, setSelected] = useState<FieldMapStop | null>(null);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -76,7 +74,7 @@ export function FieldMap({ stops, unmappedCount }: { stops: FieldMapStop[]; unma
 
       {visible.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {range === "today" ? "No mapped jobs today." : "No assigned jobs with a mapped address yet."}
+          {range === "today" ? "No jobs on your schedule today." : "No upcoming jobs with a mapped address yet."}
         </p>
       )}
       {unmappedCount > 0 && (

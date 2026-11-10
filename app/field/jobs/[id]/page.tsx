@@ -68,11 +68,11 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
       <div className="flex flex-col gap-5 px-4 pb-44 pt-4">
         <div className="flex items-center justify-between gap-2">
           <Link
-            href={assigned || !canManageWorkOrders ? "/field" : "/field/homes"}
+            href="/field"
             className="-ml-2 flex min-h-11 w-fit items-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            {assigned || !canManageWorkOrders ? "My jobs" : "Homes"}
+            My jobs
           </Link>
           {canEditWorkOrders && job.status !== "completed" && job.status !== "cancelled" && (
             <Link
@@ -92,7 +92,20 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
               {STATUS_LABEL[job.status] ?? job.status}
             </span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">{job.customerName}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">
+            {job.customerId ? (
+              <Link href={`/field/customers/${job.customerId}`} className="underline-offset-4 hover:underline">
+                {job.customerName}
+              </Link>
+            ) : (
+              job.customerName
+            )}
+          </h1>
+          {job.customerId && (
+            <Link href={`/field/customers/${job.customerId}`} className="w-fit text-sm font-medium text-primary">
+              What we&apos;re installing, notes &amp; photos →
+            </Link>
+          )}
           <p className="text-sm text-muted-foreground">
             {job.title} · {formatDay(job.scheduledDate)}
             {job.startTime ? ` · ${formatClock(job.startTime)}` : ""}

@@ -37,7 +37,7 @@ export interface OpenTimeEntry {
 }
 
 const JOB_COLUMNS =
-  "id, location_id, title, job_type, status, scheduled_date, start_time, end_time, address, city, state, zip_code, notes, description, customer_id, property_id, assigned_employees, started_at, completed_at, customers(full_name, first_name, last_name, phone)";
+  "id, location_id, title, job_type, status, scheduled_date, start_time, end_time, address, city, state, zip_code, notes, description, customer_id, property_id, assigned_employees, crew_id, crew_name, archived_at, started_at, completed_at, customers(full_name, first_name, last_name, phone)";
 
 /** Resolve the signed-in user, their business, and their employee record. */
 export async function getFieldContext() {
@@ -78,6 +78,18 @@ export async function getFieldContext() {
 
 type JobRow = Record<string, any>;
 
+/** The crew this employee belongs to (jobs assigned to that crew are theirs too). */
+async function crewIdOf(employeeId: string | null): Promise<string | null> {
+  if (!employeeId) return null;
+  const { data } = await createAdminClient().from("employees").select("crew_id").eq("id", employeeId).maybeSingle();
+  return (data?.crew_id as string | null) ?? null;
+}
+
+/** PostgREST filter: assigned by name, or the job is on their crew. */
+function mineFilter(employeeId: string, crewId: string | null) {
+  return crewId ? `assigned_employees.cs.{${employeeId}},crew_id.eq.${crewId}` : `assigned_employees.cs.{${employeeId}}`;
+}
+
 export function toFieldJob(row: JobRow): FieldJob {
   const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
   const customerName =
@@ -109,14 +121,16 @@ function daysAgo(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Jobs assigned to this employee: anything in progress plus recent and upcoming work. */
+/** Jobs for this employee (theirs or their crew's): anything in progress plus recent and upcoming work. */
 export async function getAssignedJobs(orgId: string, employeeId: string): Promise<FieldJob[]> {
   const admin = createAdminClient();
+  const crewId = await crewIdOf(employeeId);
   const { data } = await admin
     .from("scheduled_jobs")
     .select(JOB_COLUMNS)
     .eq("org_id", orgId)
-    .contains("assigned_employees", [employeeId])
+    .or(mineFilter(employeeId, crewId))
+    .is("archived_at", null)
     .neq("status", "cancelled")
     .or(`scheduled_date.gte.${daysAgo(3)},status.in.(en_route,in_progress)`)
     .order("scheduled_date", { ascending: true })
@@ -145,7 +159,10 @@ export async function getAccessibleJob(
     .maybeSingle();
   if (!data) return null;
 
-  const assigned = employeeId != null && (data.assigned_employees ?? []).includes(employeeId);
+  const crewId = await crewIdOf(employeeId);
+  const assigned =
+    employeeId != null &&
+    ((data.assigned_employees ?? []).includes(employeeId) || (crewId != null && data.crew_id === crewId));
   const office = OFFICE_ROLES.includes(role) || canManageWorkOrders;
   if (!assigned && !office) return null;
 
@@ -212,14 +229,15 @@ export async function getAssignedMapStops(jobs: FieldJob[]): Promise<FieldMapSto
   });
 }
 
-/** Customers this employee has been assigned to, with their next and most recent visit. */
+/** Customers on this employee's (or their crew's) jobs, with their next and most recent visit. */
 export async function getAssignedCustomers(orgId: string, employeeId: string): Promise<FieldCustomer[]> {
   const admin = createAdminClient();
+  const crewId = await crewIdOf(employeeId);
   const { data } = await admin
     .from("scheduled_jobs")
     .select(JOB_COLUMNS)
     .eq("org_id", orgId)
-    .contains("assigned_employees", [employeeId])
+    .or(mineFilter(employeeId, crewId))
     .neq("status", "cancelled")
     .not("customer_id", "is", null)
     .order("scheduled_date", { ascending: true })
@@ -251,4 +269,21 @@ export async function getAssignedCustomers(orgId: string, employeeId: string): P
 
 export function isOpenStatus(status: string): boolean {
   return ["scheduled", "en_route", "in_progress"].includes(status);
+}
+
+/**
+ * True when this customer is on one of the employee's (or their crew's) jobs,
+ * so a crew member can only open customers they are actually working for.
+ */
+export async function canSeeCustomer(orgId: string, employeeId: string | null, customerId: string): Promise<boolean> {
+  if (!employeeId) return false;
+  const crewId = await crewIdOf(employeeId);
+  const { data } = await createAdminClient()
+    .from("scheduled_jobs")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .or(mineFilter(employeeId, crewId))
+    .limit(1);
+  return Boolean(data?.length);
 }
