@@ -11,7 +11,7 @@ export type ServiceType =
   | "Removal & Storage"
   | "Design Consultation";
 
-export type JobStatus = "Scheduled" | "En Route" | "In Progress" | "Completed" | "Cancelled";
+export type JobStatus = "Scheduled" | "En Route" | "In Progress" | "Needs Return" | "Completed" | "Cancelled";
 export type JobType = "install" | "removal" | "other";
 export type InvoiceStatus = "Draft" | "Sent" | "Paid" | "Overdue";
 export type CustomerStatus = "Active" | "Inactive" | "Lead";

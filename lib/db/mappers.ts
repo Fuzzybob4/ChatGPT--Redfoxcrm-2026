@@ -191,6 +191,7 @@ export function mapJob(row: Record<string, any>): Job {
   let status: JobStatus = 'Scheduled';
   if (rawStatus === 'en_route' || rawStatus === 'en route') status = 'En Route';
   else if (rawStatus === 'in_progress' || rawStatus === 'in progress') status = 'In Progress';
+  else if (rawStatus === 'needs_return') status = 'Needs Return';
   else if (rawStatus === 'completed') status = 'Completed';
   else if (rawStatus === 'cancelled') status = 'Cancelled';
 

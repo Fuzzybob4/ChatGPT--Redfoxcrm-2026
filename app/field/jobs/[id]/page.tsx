@@ -11,7 +11,7 @@ import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel, mean
 
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, employee, admin, canManageWorkOrders, canEditWorkOrders } = await getFieldContext();
+  const { org, employee, admin, canManageWorkOrders, canEditWorkOrders, canRunJobs } = await getFieldContext();
   const crewSafeText = await crewTextFilter(org.orgId);
 
   const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, canManageWorkOrders);
@@ -190,6 +190,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           loggedMs={loggedMs}
           busyElsewhereJobId={busyElsewhereJobId}
           nextJobId={nextJobId}
+          canRun={canRunJobs}
         />
       ) : (
         <p className="px-4 pb-8 text-center text-sm text-muted-foreground">

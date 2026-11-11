@@ -35,12 +35,13 @@ import { CalendarSyncDialog } from "@/components/schedule/calendar-sync-dialog";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const ALL_STATUSES: JobStatus[] = ["Scheduled", "En Route", "In Progress", "Completed", "Cancelled"];
+const ALL_STATUSES: JobStatus[] = ["Scheduled", "En Route", "In Progress", "Needs Return", "Completed", "Cancelled"];
 
 const STATUS_STYLES: Record<JobStatus, { dot: string; badge: string; label: string }> = {
   Scheduled:     { dot: "bg-blue-500",    badge: "bg-blue-50 text-blue-700 border-blue-200",       label: "Scheduled" },
   "En Route":    { dot: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border-amber-200",    label: "En Route" },
   "In Progress": { dot: "bg-orange-500",  badge: "bg-orange-50 text-orange-700 border-orange-200", label: "In Progress" },
+  "Needs Return": { dot: "bg-fuchsia-500", badge: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", label: "Needs return visit" },
   Completed:     { dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed" },
   Cancelled:     { dot: "bg-red-400",     badge: "bg-red-50 text-red-600 border-red-200",           label: "Cancelled" },
 };
@@ -553,7 +554,7 @@ function CalendarView({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 const STATUS_ORDER: Record<JobStatus, number> = {
-  "En Route": 0, "In Progress": 1, Scheduled: 2, Completed: 3, Cancelled: 4,
+  "Needs Return": 0, "En Route": 1, "In Progress": 2, Scheduled: 3, Completed: 4, Cancelled: 5,
 };
 
 export default function JobsPage() {
@@ -608,6 +609,7 @@ export default function JobsPage() {
     Scheduled: jobs.filter((j) => j.status === "Scheduled").length,
     "En Route": jobs.filter((j) => j.status === "En Route").length,
     "In Progress": jobs.filter((j) => j.status === "In Progress").length,
+    "Needs Return": jobs.filter((j) => j.status === "Needs Return").length,
     Completed: jobs.filter((j) => j.status === "Completed").length,
     Cancelled: jobs.filter((j) => j.status === "Cancelled").length,
     Archived: archivedJobs.length,

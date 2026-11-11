@@ -25,6 +25,10 @@ const statusConfig: Record<
     label: "In Progress",
     className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300",
   },
+  "Needs Return": {
+    label: "Needs return visit",
+    className: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200 dark:bg-fuchsia-900/30 dark:text-fuchsia-300",
+  },
   Completed: {
     label: "Completed",
     className: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300",

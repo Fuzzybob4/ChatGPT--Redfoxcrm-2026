@@ -8,6 +8,9 @@ export interface FieldEmployee {
   locationId: string | null;
   /** Crew leads (or anyone granted work-order access) can see every home and manage work orders. */
   canManageWorkOrders: boolean;
+  /** Crew lead: runs the job (on my way, start/pause the crew's time, finish or return visit). */
+  isLead: boolean;
+  crewId: string | null;
 }
 
 export const OFFICE_ROLES = ["owner", "admin", "manager"];
@@ -28,6 +31,7 @@ export interface FieldJob {
   customerPhone: string;
   startedAt: string | null;
   completedAt: string | null;
+  crewId: string | null;
 }
 
 export interface OpenTimeEntry {
@@ -47,7 +51,7 @@ export async function getFieldContext() {
   const admin = createAdminClient();
   const { data: employee } = await admin
     .from("employees")
-    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id")
+    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id, crew_id")
     .eq("org_id", org.orgId)
     .eq("user_id", org.userId)
     .maybeSingle();
@@ -65,6 +69,8 @@ export async function getFieldContext() {
           employee.role === "crew_lead" ||
           employee.can_access_work_orders === true ||
           /\blead\b/i.test(employee.position ?? ""),
+        isLead: employee.role === "crew_lead" || /\blead\b/i.test(employee.position ?? ""),
+        crewId: (employee.crew_id as string | null) ?? null,
       }
     : null;
 
@@ -73,7 +79,10 @@ export async function getFieldContext() {
   /** Editing or cancelling an existing work order is reserved for the owner and office managers. */
   const canEditWorkOrders = OFFICE_ROLES.includes(org.role);
 
-  return { org, employee: fieldEmployee, admin, canManageWorkOrders, canEditWorkOrders };
+  /** Who can run a job's clock and status: crew leads and the office. Installers just view and add photos. */
+  const canRunJobs = OFFICE_ROLES.includes(org.role) || Boolean(fieldEmployee?.isLead);
+
+  return { org, employee: fieldEmployee, admin, canManageWorkOrders, canEditWorkOrders, canRunJobs };
 }
 
 type JobRow = Record<string, any>;
@@ -112,6 +121,7 @@ export function toFieldJob(row: JobRow): FieldJob {
     customerPhone: customer?.phone ?? "",
     startedAt: row.started_at ?? null,
     completedAt: row.completed_at ?? null,
+    crewId: row.crew_id ?? null,
   };
 }
 

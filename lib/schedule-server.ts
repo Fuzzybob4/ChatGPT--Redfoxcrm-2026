@@ -125,7 +125,12 @@ export async function loadNeedsScheduling(db: Db, orgId: string, since?: string)
   }
   const hasInstall = new Set(
     jobs
-      .filter((j: any) => j.customer_id && !String(j.job_type ?? "").toLowerCase().includes("remov") && String(j.status ?? "").toLowerCase() !== "cancelled")
+      .filter(
+        (j: any) =>
+          j.customer_id &&
+          !String(j.job_type ?? "").toLowerCase().includes("remov") &&
+          !["cancelled", "needs_return"].includes(String(j.status ?? "").toLowerCase()),
+      )
       .map((j: any) => j.customer_id as string),
   );
   const ids = [...booked.keys()].filter((id: string) => !hasInstall.has(id));

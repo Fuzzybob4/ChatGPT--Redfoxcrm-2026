@@ -442,7 +442,7 @@ function MobileDayView({
                       <span className="block truncate text-xs text-muted-foreground">
                         {j.jobType.includes("remov") ? "Removal · " : ""}
                         {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
-                        {j.status === "completed" ? "Done · " : ""}
+                        {j.status === "completed" ? "Done · " : j.status === "needs_return" ? "Return needed · " : ""}
                         {j.address}
                       </span>
                     </span>
@@ -505,7 +505,7 @@ function Row({
                 <span className="block truncate text-muted-foreground">
                   {j.jobType.includes("remov") ? "Removal · " : ""}
                   {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
-                  {j.status === "completed" ? "Done · " : ""}
+                  {j.status === "completed" ? "Done · " : j.status === "needs_return" ? "Return needed · " : ""}
                   {j.address}
                 </span>
               </button>

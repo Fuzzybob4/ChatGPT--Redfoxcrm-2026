@@ -32,6 +32,7 @@ export const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
   en_route: "On the way",
   in_progress: "In progress",
+  needs_return: "Needs return visit",
   completed: "Completed",
   cancelled: "Cancelled",
 };
@@ -47,3 +48,14 @@ export function meaningfulTitle(title: string, customerName: string): string {
   if (!t || bare === (customerName ?? "").trim().toLowerCase() || /^(work order|job)$/i.test(t)) return "";
   return t;
 }
+
+/** Why a crew stopped a job and has to come back. */
+export const RETURN_REASONS = {
+  materials: "Ran out of materials",
+  equipment: "Need different equipment (ladder, lift…)",
+  weather: "Weather",
+  customer: "Customer asked us to stop / not home",
+  time: "Ran out of time today",
+  other: "Other",
+} as const;
+export type ReturnReason = keyof typeof RETURN_REASONS;

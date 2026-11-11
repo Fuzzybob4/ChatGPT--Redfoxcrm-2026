@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { getAccessibleJob, getAssignedJobs, getFieldContext, isOpenStatus } from "@/lib/field";
+import { createNotification } from "@/lib/notifications-server";
+import { RETURN_REASONS, type ReturnReason } from "@/components/field/format";
 
 type ActionResult = { error: string } | { ok: true; nextJobId?: string | null };
 
 async function loadMyJob(jobId: string) {
-  const { org, employee, admin } = await getFieldContext();
+  const { org, employee, admin, canRunJobs } = await getFieldContext();
   if (!employee) {
     return {
       ok: false as const,
@@ -16,6 +18,9 @@ async function loadMyJob(jobId: string) {
 
   const access = await getAccessibleJob(org.orgId, employee.id, org.role, jobId);
   if (!access?.assigned) return { ok: false as const, error: "This job isn't assigned to you." };
+  if (!canRunJobs) {
+    return { ok: false as const, error: "Your crew lead starts, pauses and finishes jobs. You can still add photos." };
+  }
 
   return { ok: true as const, org, employee, admin, job: access.job };
 }
@@ -61,18 +66,29 @@ export async function startJob(jobId: string, location?: string | null): Promise
   if (otherOpen) return { error: "You're still clocked in on another job. Complete it first." };
 
   const now = new Date().toISOString();
-  const alreadyClockedIn = (openEntries ?? []).some((e) => e.scheduled_job_id === jobId);
 
-  if (!alreadyClockedIn) {
-    const { error: entryError } = await admin.from("time_entries").insert({
+  // The lead starts the clock for the whole crew: themselves plus everyone on
+  // the job's crew who isn't already on the clock somewhere else.
+  const crewId = job.crewId ?? employee.crewId;
+  const { data: crewMates } = crewId
+    ? await admin.from("employees").select("id").eq("org_id", org.orgId).eq("crew_id", crewId).eq("is_active", true)
+    : { data: [] as { id: string }[] };
+  const ids = [...new Set([employee.id, ...(crewMates ?? []).map((m: { id: string }) => m.id)])];
+  const { data: busy } = await admin.from("time_entries").select("employee_id, scheduled_job_id").in("employee_id", ids).is("clock_out", null);
+  const busyIds = new Set((busy ?? []).map((b: { employee_id: string }) => b.employee_id));
+  const rows = ids
+    .filter((id) => !busyIds.has(id))
+    .map((id) => ({
       org_id: org.orgId,
-      employee_id: employee.id,
+      employee_id: id,
       scheduled_job_id: jobId,
       clock_in: now,
       break_minutes: 0,
-      location_clock_in: location?.slice(0, 120) ?? null,
-    });
-    if (entryError) return { error: "Could not start your timer. Please try again." };
+      location_clock_in: id === employee.id ? location?.slice(0, 120) ?? null : null,
+    }));
+  if (rows.length) {
+    const { error: entryError } = await admin.from("time_entries").insert(rows);
+    if (entryError) return { error: "Could not start the timer. Please try again." };
   }
 
   const { error } = await admin
@@ -158,6 +174,101 @@ export async function completeJob(
   revalidatePath("/customers");
   if (job.customerId) revalidatePath(`/customers/${job.customerId}`);
 
+  return { ok: true, nextJobId: await findNextJob(org.orgId, employee.id, jobId) };
+}
+
+
+/** Stop every running timer on this job (the whole crew). */
+async function clockOutJob(admin: any, jobId: string, leadId: string, location?: string | null) {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const { data: openEntries } = await admin
+    .from("time_entries")
+    .select("id, employee_id, clock_in, break_minutes")
+    .eq("scheduled_job_id", jobId)
+    .is("clock_out", null);
+  for (const entry of openEntries ?? []) {
+    const workedMs = now.getTime() - new Date(entry.clock_in).getTime();
+    const hours = Math.max(0, workedMs / 3_600_000 - (entry.break_minutes ?? 0) / 60);
+    await admin
+      .from("time_entries")
+      .update({
+        clock_out: nowIso,
+        total_hours: Math.round(hours * 100) / 100,
+        location_clock_out: entry.employee_id === leadId ? location?.slice(0, 120) ?? null : null,
+        updated_at: nowIso,
+      })
+      .eq("id", entry.id);
+  }
+}
+
+/** Pause the crew's clock (lunch, supply run). The job stays in progress. */
+export async function pauseJob(jobId: string, location?: string | null): Promise<ActionResult> {
+  const ctx = await loadMyJob(jobId);
+  if (!ctx.ok) return { error: ctx.error };
+  if (ctx.job.status !== "in_progress") return { error: "This job isn't in progress." };
+  await clockOutJob(ctx.admin, jobId, ctx.employee.id, location);
+  refreshViews(jobId);
+  return { ok: true };
+}
+
+
+
+/** Stop for today: the crew has to come back to finish. The office reschedules it. */
+export async function needsReturnVisit(
+  jobId: string,
+  reason: ReturnReason,
+  details?: string,
+  location?: string | null,
+): Promise<ActionResult> {
+  const ctx = await loadMyJob(jobId);
+  if (!ctx.ok) return { error: ctx.error };
+  const { admin, org, employee, job } = ctx;
+  if (!(reason in RETURN_REASONS)) return { error: "Pick a reason." };
+  const note = details?.trim().slice(0, 1000) ?? "";
+  if (reason === "other" && !note) return { error: "Add a quick note about why." };
+  if (job.status === "completed") return { error: "This job is already completed." };
+
+  await clockOutJob(admin, jobId, employee.id, location);
+
+  const now = new Date();
+  const label = RETURN_REASONS[reason];
+  const line = `${employee.name} (${now.toLocaleDateString("en-US")}): Needs return visit, ${label}${note ? `: ${note}` : ""}`;
+  const { data: current } = await admin.from("scheduled_jobs").select("internal_notes").eq("id", jobId).single();
+  const { error } = await admin
+    .from("scheduled_jobs")
+    .update({
+      status: "needs_return",
+      status_key: "needs_return",
+      return_reason: note ? `${label}: ${note}` : label,
+      return_requested_at: now.toISOString(),
+      internal_notes: [current?.internal_notes, line].filter(Boolean).join("\n"),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", jobId)
+    .eq("org_id", org.orgId);
+  if (error) return { error: "Could not update the job. Please try again." };
+
+  let customerName = "A customer";
+  if (job.customerId) {
+    const { data: c } = await admin.from("customers").select("full_name, first_name, last_name").eq("id", job.customerId).maybeSingle();
+    customerName = c?.full_name || [c?.first_name, c?.last_name].filter(Boolean).join(" ") || customerName;
+  }
+  try {
+    await createNotification({
+      orgId: org.orgId,
+      type: "job_needs_return",
+      title: `Return visit needed: ${customerName}`,
+      message: `${employee.name}: ${label}${note ? ` (${note})` : ""}. It's back on the Needs scheduling list.`,
+      relatedId: jobId,
+      customerId: job.customerId ?? undefined,
+    });
+  } catch {
+    // The status change is what matters; the alert is best effort.
+  }
+
+  refreshViews(jobId);
+  revalidatePath("/schedule");
   return { ok: true, nextJobId: await findNextJob(org.orgId, employee.id, jobId) };
 }
 
