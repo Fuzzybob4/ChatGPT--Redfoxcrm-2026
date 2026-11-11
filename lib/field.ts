@@ -243,7 +243,8 @@ export async function getAssignedCustomers(orgId: string, employeeId: string): P
     .order("scheduled_date", { ascending: true })
     .limit(300);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { today } = await loadBusinessRules(createAdminClient(), orgId);
   const customers = new Map<string, FieldCustomer>();
   for (const row of data ?? []) {
     const job = toFieldJob(row);
@@ -300,9 +301,10 @@ export interface InstallItem {
  */
 export async function getInstallItems(orgId: string, customerId: string): Promise<InstallItem[]> {
   const admin = createAdminClient();
-  const { currentSeasonStart } = await import("@/lib/lifecycle");
-  const { crewSafeText } = await import("@/lib/field-privacy");
-  const season = currentSeasonStart();
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const rules = await loadBusinessRules(admin, orgId);
+  const crewSafeText = await crewTextFilter(orgId, rules.crewHidePrices);
+  const season = rules.seasonStart;
   const [{ data: estimates }, { data: invoices }] = await Promise.all([
     admin
       .from("estimates")
@@ -333,4 +335,17 @@ export async function getInstallItems(orgId: string, customerId: string): Promis
     // Item names stay; any sentence about money inside an item's note is dropped.
     .map((i: any) => ({ description: crewSafeText(i.description), quantity: Number(i.quantity ?? 1) }))
     .filter((i: InstallItem) => i.description);
+}
+
+/**
+ * Text filter for crew screens. Most businesses hide money from installers
+ * (Settings → Season & crews); when they don't, notes show as written.
+ */
+export async function crewTextFilter(orgId: string, hide?: boolean): Promise<(text: string | null | undefined) => string> {
+  if (hide === undefined) {
+    const { loadBusinessRules } = await import("@/lib/schedule-server");
+    hide = (await loadBusinessRules(createAdminClient(), orgId)).crewHidePrices;
+  }
+  const { crewSafeText } = await import("@/lib/field-privacy");
+  return hide ? crewSafeText : (text) => String(text ?? "").trim();
 }

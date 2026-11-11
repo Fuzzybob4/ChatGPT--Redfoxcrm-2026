@@ -17,8 +17,25 @@ export const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5, 6]; // Mon–Sat
 
 export const OPEN_JOB_STATUSES = ["scheduled", "en_route", "in_progress"];
 
-export function jobPoints(size: string | null | undefined): number {
-  return JOB_SIZES[(size as JobSize) ?? "standard"]?.points ?? 1;
+export type SizePoints = Record<JobSize, number>;
+export const DEFAULT_SIZE_POINTS: SizePoints = { small: 0.75, standard: 1, large: 1.5 };
+/** Default install windows for a crew's day, in order. */
+export const DEFAULT_DAY_SLOTS: [string, string][] = [["08:00", "11:00"], ["11:00", "14:00"], ["14:00", "17:00"]];
+
+/** Points for a job size, using the business's own weights when given. */
+export function jobPoints(size: string | null | undefined, points?: Partial<SizePoints>): number {
+  const key = ((size as JobSize) in JOB_SIZES ? size : "standard") as JobSize;
+  const custom = points?.[key];
+  return typeof custom === "number" && custom > 0 ? custom : JOB_SIZES[key].points;
+}
+
+/** Today's date (YYYY-MM-DD) in the business's time zone. */
+export function todayIn(timeZone: string | null | undefined, now: Date = new Date()): string {
+  try {
+    return now.toLocaleDateString("en-CA", { timeZone: timeZone || "America/Chicago" });
+  } catch {
+    return now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  }
 }
 
 /** YYYY-MM-DD for a Date, in local time. */

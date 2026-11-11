@@ -8,6 +8,8 @@ import { LocationProvider } from "@/lib/location-context";
 import { DataProvider } from "@/lib/data-context";
 import { OrgProvider } from "@/lib/org-context";
 import { getCurrentOrg } from "@/lib/org";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { loadBusinessRules } from "@/lib/schedule-server";
 import { SubscriptionGate } from "@/components/subscription/subscription-gate";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -24,8 +26,10 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
     await maybeAutoSyncSquare(org.orgId);
   });
 
+  const rules = await loadBusinessRules(createAdminClient(), org.orgId);
+
   return (
-    <OrgProvider org={org}>
+    <OrgProvider org={{ ...org, seasonStart: rules.seasonStart, timezone: rules.timezone }}>
       <DataProvider>
         <LocationProvider>
           <SidebarProvider defaultOpen>

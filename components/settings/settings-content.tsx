@@ -35,6 +35,8 @@ import { saveBusinessProfile, setInvoiceRemindersEnabled } from "@/app/(crm)/set
 import { HubspotIntegration, type HubspotStatus } from "@/components/settings/hubspot-integration";
 import { SquareIntegration, type SquareStatus } from "@/components/settings/square-integration";
 import { InstantQuoteSettings } from "@/components/settings/instant-quote-settings";
+import { BusinessRulesSettings } from "@/components/settings/business-rules-settings";
+import type { BusinessRulesInput } from "@/app/(crm)/settings/business-rules-actions";
 import type { QuoteSettings } from "@/lib/quotes/pricing";
 
 // Display shape derived from the shared pricing source of truth.
@@ -135,6 +137,8 @@ export interface SettingsContentProps {
   quoteSuggestedSlug?: string;
   mapboxToken?: string;
   initialTab?: string;
+  businessRules?: BusinessRulesInput | null;
+  canEditRules?: boolean;
 }
 
 export function SettingsContent({
@@ -148,6 +152,8 @@ export function SettingsContent({
   quoteSuggestedSlug = "",
   mapboxToken = "",
   initialTab,
+  businessRules = null,
+  canEditRules = false,
 }: SettingsContentProps) {
   // Add-ons already paid for and active on the account.
   const [persistedAddons, setPersistedAddons] = useState<Set<string>>(
@@ -240,6 +246,7 @@ export function SettingsContent({
         <Tabs defaultValue={initialTab === "integrations" || initialTab === "quote" || initialTab === "addons" || initialTab === "danger" ? initialTab : "business"} className="space-y-6">
           <TabsList className="h-9">
             <TabsTrigger value="business" className="text-xs px-3">Business</TabsTrigger>
+            <TabsTrigger value="season" className="text-xs px-3">Season & crews</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs px-3">Integrations</TabsTrigger>
             <TabsTrigger value="quote" className="text-xs px-3">Online Quote</TabsTrigger>
             <TabsTrigger value="addons" className="text-xs px-3">Add-Ons</TabsTrigger>
@@ -532,6 +539,10 @@ export function SettingsContent({
           </TabsContent>
 
           {/* ── Instant online quote ─────────────────────────── */}
+          <TabsContent value="season">
+            {businessRules && <BusinessRulesSettings initial={businessRules} canEdit={canEditRules} />}
+          </TabsContent>
+
           <TabsContent value="quote">
             <InstantQuoteSettings initial={quoteSettings} suggestedSlug={quoteSuggestedSlug} mapboxToken={mapboxToken} />
           </TabsContent>

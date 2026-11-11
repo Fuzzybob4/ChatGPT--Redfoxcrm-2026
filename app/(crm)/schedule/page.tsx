@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { ScheduleBoard, type BoardJob } from "@/components/schedule/schedule-board";
 import { isEmailConfigured } from "@/lib/email/resend";
-import { addDays, weekStart, ymd } from "@/lib/schedule";
+import { addDays, jobPoints, weekStart } from "@/lib/schedule";
 import { loadNeedsScheduling, loadScheduleSettings } from "@/lib/schedule-server";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +14,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const org = await getCurrentOrg();
   if (!org) redirect("/onboarding");
   const { week } = await searchParams;
-  const start = weekStart(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : ymd(new Date()));
+  const db = createAdminClient();
+  const settings = await loadScheduleSettings(db, org.orgId);
+  const start = weekStart(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : settings.today);
   const end = addDays(start, 6);
 
-  const db = createAdminClient();
-  const [settings, needs, { data: jobs }] = await Promise.all([
-    loadScheduleSettings(db, org.orgId),
-    loadNeedsScheduling(db, org.orgId),
+  const [needs, { data: jobs }] = await Promise.all([
+    loadNeedsScheduling(db, org.orgId, settings.seasonStart),
     db
       .from("scheduled_jobs")
       .select("id, customer_id, title, job_type, scheduled_date, start_time, status, crew_id, crew_name, job_size, address, city")
@@ -52,6 +52,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       startTime: j.start_time ? String(j.start_time).slice(0, 5) : null,
       crewId: j.crew_id ?? (j.crew_name ? crewByName.get(String(j.crew_name).toLowerCase()) ?? null : null),
       size: (j.job_size ?? "standard") as BoardJob["size"],
+      points: jobPoints(j.job_size, settings.sizePoints),
       status: String(j.status ?? "scheduled").toLowerCase(),
       jobType: String(j.job_type ?? "install").toLowerCase(),
     };
@@ -63,7 +64,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <div className="flex-1 overflow-y-auto">
         <ScheduleBoard
           weekStart={start}
-          today={ymd(new Date())}
+          today={settings.today}
           crews={settings.crews}
           workDays={settings.workDays}
           daysOff={settings.daysOff.map((d) => d.day)}

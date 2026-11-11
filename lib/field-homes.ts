@@ -69,7 +69,9 @@ export async function getLeadHomes(
       .eq("org_id", orgId),
   ]);
 
-  const stageOf = buildStageResolver({ customers: customers ?? [], jobs: jobs ?? [], invoices: invoices ?? [] });
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { seasonStart } = await loadBusinessRules(admin, orgId);
+  const stageOf = buildStageResolver({ customers: customers ?? [], jobs: jobs ?? [], invoices: invoices ?? [], seasonStart });
 
   const primaryProperty = new Map<string, Record<string, any>>();
   for (const p of properties ?? []) {

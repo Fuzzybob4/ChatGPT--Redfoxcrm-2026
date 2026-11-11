@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessageSquare, Navigation, Phone } from "lucide-react";
 
-import { OFFICE_ROLES, canSeeCustomer, getFieldContext, getInstallItems, isOpenStatus, toFieldJob } from "@/lib/field";
-import { crewSafeText } from "@/lib/field-privacy";
+import { OFFICE_ROLES, canSeeCustomer, getFieldContext, getInstallItems, isOpenStatus, toFieldJob, crewTextFilter } from "@/lib/field";
 import { InstallItems } from "@/components/field/install-items";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
 import { directionsUrl, formatClock, formatDay, jobTypeLabel } from "@/components/field/format";
@@ -16,6 +15,7 @@ import { directionsUrl, formatClock, formatDay, jobTypeLabel } from "@/component
 export default async function FieldCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org, employee, admin } = await getFieldContext();
+  const crewSafeText = await crewTextFilter(org.orgId);
   const office = OFFICE_ROLES.includes(org.role);
   if (!office && !(await canSeeCustomer(org.orgId, employee?.id ?? null, id))) notFound();
 
@@ -57,7 +57,9 @@ export default async function FieldCustomerPage({ params }: { params: Promise<{ 
   const name = customer.full_name?.trim() || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "Customer";
   const address = [customer.address, customer.city, customer.state, customer.zip_code].filter(Boolean).join(", ");
   const fieldJobs = (jobs ?? []).map(toFieldJob);
-  const today = new Date().toISOString().slice(0, 10);
+  const { todayIn } = await import("@/lib/schedule");
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const today = todayIn((await loadBusinessRules(admin, org.orgId)).timezone);
   const nextJob = fieldJobs.find((j) => isOpenStatus(j.status) && j.scheduledDate >= today) ?? null;
 
   // Money never shows on crew screens (see crewSafeText).

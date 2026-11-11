@@ -12,7 +12,10 @@ export function buildStageResolver({
   jobs,
   invoices,
   estimates = [],
+  seasonStart,
 }: {
+  /** The business's current season start (defaults to May 1). */
+  seasonStart?: string;
   customers: Row[];
   jobs: Row[];
   invoices: Row[];
@@ -31,7 +34,7 @@ export function buildStageResolver({
   }
 
   const paymentsByCustomer = new Map<string, { paid: boolean; deposit: boolean; unpaid: boolean }>();
-  const season = currentSeasonStart();
+  const season = seasonStart ?? currentSeasonStart();
   for (const inv of invoices) {
     if (!inv.customer_id) continue;
     // Last season's invoices don't make someone a pending install this year.

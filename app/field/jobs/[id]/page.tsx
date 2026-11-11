@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
 
-import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus } from "@/lib/field";
-import { crewSafeText } from "@/lib/field-privacy";
+import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter } from "@/lib/field";
 import { InstallItems } from "@/components/field/install-items";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
@@ -13,6 +12,7 @@ import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel, mean
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org, employee, admin, canManageWorkOrders, canEditWorkOrders } = await getFieldContext();
+  const crewSafeText = await crewTextFilter(org.orgId);
 
   const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, canManageWorkOrders);
   if (!access) notFound();

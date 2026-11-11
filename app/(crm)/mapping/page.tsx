@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { CustomerMap, type MapPin } from "@/components/mapping/customer-map";
 import { PageHeader } from "@/components/page-header";
 import { buildStageResolver } from "@/lib/customer-stages";
+import { getCurrentOrg } from "@/lib/org";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { loadBusinessRules } from "@/lib/schedule-server";
 
 export const metadata = {
   title: "Mapping - RedFox CRM",
@@ -12,6 +15,8 @@ export const dynamic = "force-dynamic";
 
 export default async function MappingPage() {
   const supabase = await createClient();
+  const currentOrg = await getCurrentOrg();
+  const seasonStart = currentOrg ? (await loadBusinessRules(createAdminClient(), currentOrg.orgId)).seasonStart : undefined;
   const locationId = (await cookies()).get("redfox_selected_location")?.value;
 
   // Page through results: the database API returns at most 1,000 rows per request.
@@ -90,6 +95,7 @@ export default async function MappingPage() {
     jobs: jobs ?? [],
     invoices: invoices ?? [],
     estimates: estimates ?? [],
+    seasonStart,
   });
 
   // "Past customers": anyone who has booked before (completed job, paid

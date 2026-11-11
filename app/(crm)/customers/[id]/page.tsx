@@ -31,6 +31,7 @@ import { CustomerPortalLinkCard } from "@/components/customers/customer-portal-l
 import { CustomerProperties } from "@/components/customers/customer-properties";
 import { deriveLifecycleStatus, estimateSignal, inCurrentSeason, invoicePaymentSignal, LIFECYCLE_META } from "@/lib/lifecycle";
 import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-control";
+import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 
 interface Props {
@@ -44,6 +45,7 @@ export default function CustomerDetailPage({ params }: Props) {
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
   const [editOpen, setEditOpen] = useState(false);
+  const { seasonStart } = useOrgContext();
 
   if (loading) {
     return (
@@ -61,7 +63,7 @@ export default function CustomerDetailPage({ params }: Props) {
   // Derive the live pipeline status from real invoices + jobs so it stays in
   // sync with the mapping page (both use lib/lifecycle).
   const paymentSignals = invs
-    .filter((i) => inCurrentSeason((i as { issueDate?: string; createdAt?: string }).issueDate || (i as { createdAt?: string }).createdAt))
+    .filter((i) => inCurrentSeason((i as { issueDate?: string; createdAt?: string }).issueDate || (i as { createdAt?: string }).createdAt, seasonStart))
     .map((i) =>
     invoicePaymentSignal({
       status: i.status,

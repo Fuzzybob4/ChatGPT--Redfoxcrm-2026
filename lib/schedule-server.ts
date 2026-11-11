@@ -1,11 +1,15 @@
 import "server-only";
 import { invoicePaymentSignal } from "@/lib/lifecycle";
-import { DEFAULT_WORK_DAYS, type PlanCustomer } from "@/lib/schedule";
+import { DEFAULT_DAY_SLOTS, DEFAULT_SIZE_POINTS, DEFAULT_WORK_DAYS, todayIn, type PlanCustomer, type SizePoints } from "@/lib/schedule";
 
 type Db = any;
 
-export { currentSeasonStart as seasonStart } from "@/lib/lifecycle";
-import { currentSeasonStart as seasonStart } from "@/lib/lifecycle";
+import { currentSeasonStart } from "@/lib/lifecycle";
+
+/** Start of the current season for a business (its own season start and time zone). */
+export function seasonStart(rules?: { timezone?: string; seasonStartMonth?: number; seasonStartDay?: number }): string {
+  return currentSeasonStart(todayIn(rules?.timezone), rules?.seasonStartMonth ?? 5, rules?.seasonStartDay ?? 1);
+}
 
 async function readAll<T = any>(build: (from: number, to: number) => any): Promise<T[]> {
   const out: T[] = [];
@@ -17,7 +21,53 @@ async function readAll<T = any>(build: (from: number, to: number) => any): Promi
   return out;
 }
 
-export interface ScheduleSettings {
+export interface BusinessRules {
+  timezone: string;
+  seasonStartMonth: number;
+  seasonStartDay: number;
+  /** YYYY-MM-DD the current season started, in the business's time zone. */
+  seasonStart: string;
+  /** Today in the business's time zone. */
+  today: string;
+  daySlots: [string, string][];
+  sizePoints: SizePoints;
+  crewHidePrices: boolean;
+}
+
+const RULE_COLUMNS = "timezone, season_start_month, season_start_day, day_slots, job_size_points, crew_hide_prices";
+
+function rulesFromRow(s: any): BusinessRules {
+  const timezone = typeof s?.timezone === "string" && s.timezone ? s.timezone : "America/Chicago";
+  const seasonStartMonth = Number(s?.season_start_month) || 5;
+  const seasonStartDay = Number(s?.season_start_day) || 1;
+  const slots = Array.isArray(s?.day_slots)
+    ? (s.day_slots as unknown[]).filter((x): x is [string, string] => Array.isArray(x) && x.length === 2 && /^\d\d:\d\d$/.test(String(x[0])) && /^\d\d:\d\d$/.test(String(x[1])))
+    : [];
+  const pts = (s?.job_size_points ?? {}) as Partial<SizePoints>;
+  const num = (v: unknown, d: number) => (typeof v === "number" && v > 0 && v <= 10 ? v : d);
+  return {
+    timezone,
+    seasonStartMonth,
+    seasonStartDay,
+    seasonStart: currentSeasonStart(todayIn(timezone), seasonStartMonth, seasonStartDay),
+    today: todayIn(timezone),
+    daySlots: slots.length ? slots : DEFAULT_DAY_SLOTS,
+    sizePoints: {
+      small: num(pts.small, DEFAULT_SIZE_POINTS.small),
+      standard: num(pts.standard, DEFAULT_SIZE_POINTS.standard),
+      large: num(pts.large, DEFAULT_SIZE_POINTS.large),
+    },
+    crewHidePrices: s?.crew_hide_prices !== false,
+  };
+}
+
+/** The business's own rules (season, time zone, time slots, job sizes, crew privacy). */
+export async function loadBusinessRules(db: Db, orgId: string): Promise<BusinessRules> {
+  const { data } = await db.from("schedule_settings").select(RULE_COLUMNS).eq("org_id", orgId).maybeSingle();
+  return rulesFromRow(data);
+}
+
+export interface ScheduleSettings extends BusinessRules {
   workDays: number[];
   notifyOnMove: boolean;
   daysOff: { day: string; reason: string }[];
@@ -25,12 +75,18 @@ export interface ScheduleSettings {
 }
 
 export async function loadScheduleSettings(db: Db, orgId: string): Promise<ScheduleSettings> {
-  const [{ data: s }, { data: off }, { data: crews }] = await Promise.all([
-    db.from("schedule_settings").select("work_days, notify_customers_on_move").eq("org_id", orgId).maybeSingle(),
-    db.from("schedule_days_off").select("day, reason").eq("org_id", orgId).gte("day", seasonStart()),
+  const { data: s } = await db
+    .from("schedule_settings")
+    .select(`work_days, notify_customers_on_move, ${RULE_COLUMNS}`)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const rules = rulesFromRow(s);
+  const [{ data: off }, { data: crews }] = await Promise.all([
+    db.from("schedule_days_off").select("day, reason").eq("org_id", orgId).gte("day", rules.seasonStart),
     db.from("crews").select("id, name, color, daily_capacity, active, sort_order").eq("org_id", orgId).order("sort_order").order("name"),
   ]);
   return {
+    ...rules,
     workDays: (s?.work_days as number[] | undefined)?.length ? (s!.work_days as number[]) : DEFAULT_WORK_DAYS,
     notifyOnMove: Boolean(s?.notify_customers_on_move),
     daysOff: (off ?? []) as { day: string; reason: string }[],
@@ -48,8 +104,8 @@ export async function loadScheduleSettings(db: Db, orgId: string): Promise<Sched
  * Customers who have paid a deposit (or in full) this season but have no
  * install on the calendar yet: the "needs scheduling" list.
  */
-export async function loadNeedsScheduling(db: Db, orgId: string): Promise<(PlanCustomer & { phone: string | null })[]> {
-  const since = seasonStart();
+export async function loadNeedsScheduling(db: Db, orgId: string, since?: string): Promise<(PlanCustomer & { phone: string | null })[]> {
+  if (!since) since = (await loadBusinessRules(db, orgId)).seasonStart;
   const [invoices, jobs] = await Promise.all([
     readAll((a, b) =>
       db.from("invoices").select("customer_id, status, payment_state, amount_paid, created_at").eq("org_id", orgId).gte("created_at", since).range(a, b),

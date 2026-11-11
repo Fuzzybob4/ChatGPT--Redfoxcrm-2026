@@ -224,9 +224,11 @@ export function deriveLifecycleStatus(input: {
  * don't drive this season's pipeline stage (they still count toward "past
  * customer").
  */
-export function currentSeasonStart(today: Date = new Date()): string {
-  const y = today.getMonth() >= 4 ? today.getFullYear() : today.getFullYear() - 1;
-  return `${y}-05-01`;
+export function currentSeasonStart(today: Date | string = new Date(), month = 5, day = 1): string {
+  const t = typeof today === "string" ? today.slice(0, 10) : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const year = Number(t.slice(0, 4));
+  const start = (y: number) => `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return t >= start(year) ? start(year) : start(year - 1);
 }
 
 /** True when a timestamp/date is in the current season (missing dates count as current). */

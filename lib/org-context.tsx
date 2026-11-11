@@ -15,6 +15,9 @@ export interface OrgContextType {
   cardBrand: string | null;
   cardLast4: string | null;
   addonIds: string[];
+  /** YYYY-MM-DD the business's current season started. */
+  seasonStart?: string;
+  timezone?: string;
 }
 
 const OrgContext = createContext<OrgContextType | undefined>(undefined);

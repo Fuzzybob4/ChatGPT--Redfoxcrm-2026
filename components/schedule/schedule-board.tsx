@@ -42,6 +42,8 @@ export interface BoardJob {
   startTime?: string | null;
   crewId: string | null;
   size: JobSize;
+  /** Load points for this job, using the business's job-size weights. */
+  points?: number;
   status: string;
   jobType: string;
 }
@@ -186,7 +188,7 @@ export function ScheduleBoard({
           {days.map((d) => {
             const isOff = offSet.has(d);
             const dayJobs = jobs.filter((j) => j.date === d);
-            const pts = dayJobs.reduce((s, j) => s + jobPoints(j.size), 0);
+            const pts = dayJobs.reduce((s, j) => s + (j.points ?? jobPoints(j.size)), 0);
             const cap = activeCrews.filter((c) => c.active).reduce((s, c) => s + c.capacity, 0);
             return (
               <div key={d} className={`p-2 ${isOff ? "bg-sky-50 dark:bg-sky-950/40" : "bg-muted/60"}`}>
@@ -408,7 +410,7 @@ function MobileDayView({
       {rows.map((crew) => {
         const list = cellJobs(day, crew?.id ?? null);
         if (!crew && list.length === 0) return null;
-        const pts = list.reduce((s, j) => s + jobPoints(j.size), 0);
+        const pts = list.reduce((s, j) => s + (j.points ?? jobPoints(j.size)), 0);
         const over = crew ? pts > crew.capacity : false;
         return (
           <Card key={crew?.id ?? "none"}>
@@ -480,7 +482,7 @@ function Row({
       </div>
       {days.map((d) => {
         const list = cellJobs(d, crew?.id ?? null);
-        const pts = list.reduce((s, j) => s + jobPoints(j.size), 0);
+        const pts = list.reduce((s, j) => s + (j.points ?? jobPoints(j.size)), 0);
         const over = crew ? pts > crew.capacity : false;
         return (
           <div key={d} className={`min-h-20 space-y-1 p-1.5 ${offSet.has(d) ? "bg-sky-50/60 dark:bg-sky-950/20" : "bg-background"}`}>

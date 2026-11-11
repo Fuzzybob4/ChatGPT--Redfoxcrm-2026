@@ -21,6 +21,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
+import { useOrgContext } from "@/lib/org-context";
 import { sendInvoiceToCustomer } from "../actions";
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
 export default function InvoiceDetailPage({ params }: Props) {
   const { id } = use(params);
   const { loading, invoices, jobs, getCustomerById, refresh } = useData();
+  const { businessName } = useOrgContext();
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
   const [sendNote, setSendNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -124,13 +126,10 @@ export default function InvoiceDetailPage({ params }: Props) {
                 <div>
                   <div className="flex items-center gap-2.5 mb-3">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-                      RF
+                      {(businessName || "RF").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                     </span>
                     <div>
-                      <p className="font-semibold text-sm">RedFox CRM</p>
-                      <p className="text-xs text-muted-foreground">
-                        Austin, TX 78701
-                      </p>
+                      <p className="font-semibold text-sm">{businessName || "Your business"}</p>
                     </div>
                   </div>
                   <CardTitle className="text-xl font-bold">

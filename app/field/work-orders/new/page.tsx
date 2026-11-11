@@ -3,11 +3,9 @@ import { getFieldContext } from "@/lib/field";
 import { getCrewOptions, getWorkOrderCustomer } from "@/lib/field-homes";
 import { NotAllowed, WorkOrderForm } from "@/components/field/work-order-form";
 
-function tomorrow(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
-}
+import { addDays, todayIn } from "@/lib/schedule";
+import { loadBusinessRules } from "@/lib/schedule-server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function NewFieldWorkOrderPage({
   searchParams,
@@ -16,6 +14,8 @@ export default async function NewFieldWorkOrderPage({
 }) {
   const { customer: customerId, type } = await searchParams;
   const { org, employee, canManageWorkOrders } = await getFieldContext();
+  const tomorrowDay = addDays(todayIn((await loadBusinessRules(createAdminClient(), org.orgId)).timezone), 1);
+  const tomorrow = () => tomorrowDay;
   if (!canManageWorkOrders) return <NotAllowed />;
   if (!customerId) notFound();
 

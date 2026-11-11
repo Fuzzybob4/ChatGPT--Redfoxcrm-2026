@@ -7,6 +7,7 @@ import { getCurrentOrg } from "@/lib/org";
 import { settingsFromRow } from "@/lib/quotes/pricing";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { PageHeader } from "@/components/page-header";
+import { loadBusinessRules } from "@/lib/schedule-server";
 
 export const maxDuration = 300;
 
@@ -74,6 +75,16 @@ export default async function SettingsPage({
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 
+  const rules = await loadBusinessRules(createAdminClient(), org.orgId);
+  const businessRules = {
+    timezone: rules.timezone,
+    seasonStartMonth: rules.seasonStartMonth,
+    seasonStartDay: rules.seasonStartDay,
+    daySlots: rules.daySlots,
+    sizePoints: rules.sizePoints,
+    crewHidePrices: rules.crewHidePrices,
+  };
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader
@@ -93,6 +104,8 @@ export default async function SettingsPage({
           quoteSuggestedSlug={quoteSuggestedSlug}
           mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""}
           initialTab={tab ?? (hubspot || square ? "integrations" : undefined)}
+          businessRules={businessRules}
+          canEditRules={["owner", "admin"].includes(String(org.role ?? "").toLowerCase())}
         />
       </div>
     </div>

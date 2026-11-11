@@ -235,7 +235,7 @@ export async function previewAutoSchedule(startDate: string): Promise<{ ok: true
   if (!org) return { ok: false, error: "Only owners, admins and managers can schedule crews." };
   if (!isDay(startDate)) return { ok: false, error: "Pick a start date." };
   const db = createAdminClient();
-  const [{ workDays, daysOff, crews }, customers] = await Promise.all([
+  const [{ workDays, daysOff, crews, sizePoints }, customers] = await Promise.all([
     loadScheduleSettings(db, org.orgId),
     loadNeedsScheduling(db, org.orgId),
   ]);
@@ -252,7 +252,7 @@ export async function previewAutoSchedule(startDate: string): Promise<{ ok: true
   const booked = new Map<string, number>();
   for (const j of existing ?? []) {
     const k = `${j.scheduled_date}|${j.crew_id}`;
-    booked.set(k, (booked.get(k) ?? 0) + jobPoints(j.job_size));
+    booked.set(k, (booked.get(k) ?? 0) + jobPoints(j.job_size, sizePoints));
   }
 
   const plan = planAutoSchedule({
@@ -275,7 +275,7 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
 
   // Re-check against the live list so nobody gets double-booked.
   const needs = new Map((await loadNeedsScheduling(db, org.orgId)).map((c) => [c.id, c] as const));
-  const { crews } = await loadScheduleSettings(db, org.orgId);
+  const { crews, daySlots } = await loadScheduleSettings(db, org.orgId);
   const crewById = new Map(crews.map((c) => [c.id, c] as const));
   const ids = plan.map((p) => p.customerId).filter((id: string) => needs.has(id));
   if (!ids.length) return { ok: false, error: "Those customers are already scheduled." };
@@ -288,9 +288,9 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
   const byId = new Map<string, any>((customers ?? []).map((c: any) => [c.id, c]));
   const year = new Date().getFullYear();
 
-  // Stops in a crew's day get back-to-back 3-hour windows starting at 8 am.
+  // Stops in a crew's day get the business's time windows, in order.
   const slotIndex = new Map<string, number>();
-  const SLOTS = [["08:00", "11:00"], ["11:00", "14:00"], ["14:00", "17:00"], ["15:00", "17:00"]];
+  const SLOTS = daySlots;
   const rows = plan
     .filter((p) => byId.has(p.customerId) && crewById.has(p.crewId) && isDay(p.date))
     .map((p) => {
