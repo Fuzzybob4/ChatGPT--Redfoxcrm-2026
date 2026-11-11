@@ -19,7 +19,6 @@ import {
   getPlan,
 } from '@/lib/pricing';
 import { getTrialState } from '@/lib/trial';
-import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -344,28 +343,12 @@ function PaymentMethodSection({ org, isTrialing, daysLeft }: {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAddPaymentMethod = async () => {
+  const handleAddPaymentMethod = () => {
     setIsLoading(true);
     setError(null);
-    
-    try {
-      // Use orgId as a safe email-like identifier (Stripe accepts UUIDs in email field)
-      const result = await createSignupCheckoutSession(`${org.orgId}@redfoxcrm.app`);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-
-      // Open Stripe card setup modal in a new window/tab
-      // In production, you'd want to use Stripe.js Elements for a better UX
-      const setupUrl = `${window.location.origin}/payment-setup?clientSecret=${result.clientSecret}&customerId=${result.customerId}`;
-      window.open(setupUrl, '_blank');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start payment setup');
-    } finally {
-      setIsLoading(false);
-    }
+    window.location.href = '/billing/add-card';
   };
+
 
   return (
     <Card>

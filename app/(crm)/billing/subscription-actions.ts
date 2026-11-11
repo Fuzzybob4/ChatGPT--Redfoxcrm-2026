@@ -7,6 +7,7 @@ import { getCurrentOrg } from '@/lib/org';
 import { stripe } from '@/lib/stripe';
 import { ensurePlanPrice } from '@/lib/stripe/plans';
 import { getPlanChargeCents, getPlan, getPlanLocationLimit, type BillingInterval, type PlanId } from '@/lib/pricing';
+import { periodEndIso, reconcileSubscriptionToDb } from '@/lib/billing-server';
 
 /**
  * Creates a TRUE Stripe Subscription for the org using the card saved at
@@ -151,73 +152,3 @@ export async function cancelSubscription(): Promise<{ ok: true } | { ok: false; 
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Reads the current-period end from a Stripe subscription as an ISO string.
- * In recent Stripe API versions the period lives on the subscription ITEM, so
- * we check the item first and fall back to the (legacy) top-level field.
- */
-function periodEndIso(sub: unknown): string | null {
-  const s = sub as {
-    current_period_end?: number | null;
-    items?: { data?: Array<{ current_period_end?: number | null }> };
-  };
-  const end = s.items?.data?.[0]?.current_period_end ?? s.current_period_end ?? null;
-  return end ? new Date(end * 1000).toISOString() : null;
-}
-
-/**
- * Upserts a Stripe subscription into our `subscriptions` table (source of
- * truth stays Stripe; this is our local mirror keyed on stripe_subscription_id).
- * Uses the admin client so it works from both user actions and webhooks.
- */
-async function reconcileSubscriptionToDb(
-  subInput: unknown,
-  orgId: string,
-  userId: string,
-  planId: PlanId,
-  interval: BillingInterval,
-) {
-  const sub = subInput as {
-    id: string;
-    status: string;
-    customer: string | { id: string };
-    current_period_start?: number | null;
-    current_period_end?: number | null;
-    trial_start?: number | null;
-    trial_end?: number | null;
-    items?: { data: Array<{ price?: { id?: string }; current_period_start?: number | null; current_period_end?: number | null }> };
-  };
-  const admin = createAdminClient();
-  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
-  const item = sub.items?.data?.[0];
-  const priceId = item?.price?.id ?? null;
-  const periodStart = item?.current_period_start ?? sub.current_period_start ?? null;
-  const periodEnd = item?.current_period_end ?? sub.current_period_end ?? null;
-  const toIso = (s?: number | null) => (s ? new Date(s * 1000).toISOString() : null);
-
-  await admin
-    .from('subscriptions')
-    .upsert(
-      {
-        org_id: orgId,
-        user_id: userId,
-        plan_type: planId,
-        billing_period: interval,
-        status: sub.status,
-        stripe_subscription_id: sub.id,
-        stripe_customer_id: customerId,
-        stripe_price_id: priceId,
-        amount: getPlanChargeCents(planId, interval) / 100,
-        currency: 'USD',
-        current_period_start: toIso(periodStart),
-        current_period_end: toIso(periodEnd),
-        trial_start: toIso(sub.trial_start),
-        trial_end: toIso(sub.trial_end),
-        renewal_date: toIso(periodEnd),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'stripe_subscription_id' },
-    );
-}

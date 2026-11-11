@@ -21,8 +21,12 @@ interface SignupCardStepProps {
   clientSecret: string;
   customerId: string;
   onComplete: (card: SavedCard) => void;
-  onBack: () => void;
+  onBack?: () => void;
   submitting: boolean;
+  /** Overrides for screens other than signup (e.g. adding a card later). */
+  title?: string;
+  note?: string;
+  buttonLabel?: string;
 }
 
 function CardForm({
@@ -30,6 +34,9 @@ function CardForm({
   onComplete,
   onBack,
   submitting,
+  title,
+  note,
+  buttonLabel,
 }: Omit<SignupCardStepProps, 'clientSecret'>) {
   const checkoutState = useCheckoutElements();
   const [error, setError] = useState('');
@@ -83,11 +90,11 @@ function CardForm({
         <ShieldCheck className="size-5 text-primary shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">
-            Free for 30 days, then billed automatically
+            {title ?? 'Free for 30 days, then billed automatically'}
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            You won&apos;t be charged today. We keep your card securely on file and
-            start your subscription when the trial ends. Cancel anytime before then.
+            {note ??
+              "You won't be charged today. We keep your card securely on file and start your subscription when the trial ends. Cancel anytime before then."}
           </p>
         </div>
       </div>
@@ -112,17 +119,13 @@ function CardForm({
           disabled={busy || checkoutState.type !== 'success'}
           className="w-full bg-primary hover:bg-primary/90"
         >
-          {busy ? 'Saving card...' : 'Start Free Trial'}
+          {busy ? 'Saving card...' : buttonLabel ?? 'Start Free Trial'}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onBack}
-          disabled={busy}
-          className="w-full"
-        >
-          Back
-        </Button>
+        {onBack && (
+          <Button type="button" variant="ghost" onClick={onBack} disabled={busy} className="w-full">
+            Back
+          </Button>
+        )}
       </div>
     </div>
   );

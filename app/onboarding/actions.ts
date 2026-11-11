@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stripe } from '@/lib/stripe';
 import { getCurrentOrg } from '@/lib/org';
+import { startSubscriptionForOrg } from '@/lib/billing-server';
 
 async function getOrigin() {
   const h = await headers();
@@ -58,6 +59,31 @@ export async function createOrganization(
     const maxLocations = plan === 'starter' ? 1 : plan === 'professional' ? requestedLocations : requestedLocations;
     const subscriptionInterval = meta.billing_interval === 'yearly' ? 'yearly' : 'monthly';
 
+    // Only trust the card from signup if that Stripe customer was really created
+    // for this person's email (signup details live in user-editable metadata).
+    let stripeCustomerId: string | null = null;
+    let paymentMethodId: string | null = null;
+    if (meta.stripe_customer_id && meta.default_payment_method_id) {
+      try {
+        const customer = await stripe.customers.retrieve(meta.stripe_customer_id);
+        const pm = await stripe.paymentMethods.retrieve(meta.default_payment_method_id);
+        const pmCustomer = typeof pm.customer === 'string' ? pm.customer : pm.customer?.id;
+        const sameEmail =
+          !('deleted' in customer && customer.deleted) &&
+          (customer as { email?: string | null }).email?.toLowerCase() === user.email?.toLowerCase();
+        const { count } = await createAdminClient()
+          .from('organizations')
+          .select('id', { count: 'exact', head: true })
+          .eq('stripe_customer_id', meta.stripe_customer_id);
+        if (sameEmail && pmCustomer === meta.stripe_customer_id && !count) {
+          stripeCustomerId = meta.stripe_customer_id;
+          paymentMethodId = meta.default_payment_method_id;
+        }
+      } catch {
+        /* card can be added later from Billing */
+      }
+    }
+
     const { data: org, error: orgErr } = await supabase
       .from('organizations')
       .insert({
@@ -70,10 +96,10 @@ export async function createOrganization(
         subscription_interval: subscriptionInterval,
         trial_ends_at: trialEndsAt,
         subscription_status: 'trialing',
-        stripe_customer_id: meta.stripe_customer_id ?? null,
-        default_payment_method_id: meta.default_payment_method_id ?? null,
-        card_brand: meta.card_brand ?? null,
-        card_last4: meta.card_last4 ?? null,
+        stripe_customer_id: stripeCustomerId,
+        default_payment_method_id: paymentMethodId,
+        card_brand: paymentMethodId ? meta.card_brand ?? null : null,
+        card_last4: paymentMethodId ? meta.card_last4 ?? null : null,
       })
       .select('id')
       .single();
@@ -86,6 +112,13 @@ export async function createOrganization(
       role: 'owner',
     });
     if (memErr) return { ok: false, error: memErr.message };
+
+    // Start the Stripe subscription now with the 30-day trial built in, so the
+    // card is charged automatically when the trial ends (as the Terms say).
+    if (stripeCustomerId && paymentMethodId) {
+      const started = await startSubscriptionForOrg(orgId!, user.id, subscriptionInterval);
+      if (!started.ok) console.error('[onboarding] subscription not started:', started.error);
+    }
   }
 
   // Upsert business profile for this org.
