@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Map as MapIcon, Users } from "lucide-react";
+import { ClipboardList, Clock, Map as MapIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/field", label: "My jobs", icon: ClipboardList, match: (p: string) => p === "/field", leadOnly: false },
   { href: "/field/map", label: "Map", icon: MapIcon, match: (p: string) => p.startsWith("/field/map"), leadOnly: false },
+  { href: "/field/hours", label: "My hours", icon: Clock, match: (p: string) => p.startsWith("/field/hours"), leadOnly: false },
   { href: "/field/customers", label: "Customers", icon: Users, match: (p: string) => p.startsWith("/field/customers"), leadOnly: false },
 ];
 

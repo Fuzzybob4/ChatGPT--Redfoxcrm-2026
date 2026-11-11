@@ -99,6 +99,11 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
             const dayHours = r.shifts.reduce((s, e) => s + hrs(e), 0);
             const jobHours = r.jobs.reduce((s, e) => s + hrs(e), 0);
             const open = r.shifts.some((e) => !e.clock_out);
+            let lunchMin = 0;
+            for (let i = 1; i < r.shifts.length; i++) {
+              const prevOut = r.shifts[i - 1].clock_out;
+              if (prevOut) lunchMin += Math.max(0, (new Date(r.shifts[i].clock_in).getTime() - new Date(prevOut).getTime()) / 60_000);
+            }
             const startMap = mapLink(shift?.location_clock_in ?? r.jobs[0]?.location_clock_in ?? null);
             const endMap = mapLink(lastShift?.location_clock_out ?? r.jobs[r.jobs.length - 1]?.location_clock_out ?? null);
             return (
@@ -110,6 +115,7 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
                       {new Date(`${r.day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                       {" · "}
                       {shift ? `${timeOf(shift.clock_in)} – ${open ? "still on" : timeOf(lastShift.clock_out)}` : "No Start day (job time only)"}
+                      {lunchMin > 0 ? ` · ${Math.round(lunchMin)} min lunch` : ""}
                     </p>
                     <p className="text-xs">
                       {startMap && <a className="text-primary underline" href={startMap} target="_blank" rel="noreferrer">Start spot</a>}

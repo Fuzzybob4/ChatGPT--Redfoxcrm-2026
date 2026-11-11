@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sun, Moon } from "lucide-react";
+import { Loader2, Sun, Moon, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { endDay, startDay } from "@/app/field/actions";
+import { endDay, startDay, startLunch } from "@/app/field/actions";
 import { ElapsedTimer } from "./elapsed-timer";
 
 function currentLocation(): Promise<string | null> {
@@ -19,7 +19,15 @@ function currentLocation(): Promise<string | null> {
 }
 
 /** Start/end the work day: the payroll clock, from the shop or storage to the end of the day. */
-export function DayClock({ since, forCrew }: { since: string | null; forCrew: boolean }) {
+export function DayClock({
+  since,
+  lunchSince = null,
+  forCrew,
+}: {
+  since: string | null;
+  lunchSince?: string | null;
+  forCrew: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +51,25 @@ export function DayClock({ since, forCrew }: { since: string | null; forCrew: bo
             <ElapsedTimer since={since} baseMs={0} className="font-mono text-xl font-bold tabular-nums text-foreground" />
           </div>
           <Button variant="outline" className="h-12" disabled={pending}
+            onClick={() => run(startLunch, forCrew ? "Clock your whole crew out for lunch? Any job timer pauses too." : "Clock out for lunch?")}>
+            <Utensils className="size-4" />
+            Lunch
+          </Button>
+          <Button variant="outline" className="h-12" disabled={pending}
             onClick={() => run(endDay, forCrew ? "End the day for your whole crew?" : "End your work day?")}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Moon className="size-4" />}
             End day
+          </Button>
+        </div>
+      ) : lunchSince ? (
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <p className="text-xs font-medium uppercase tracking-wider text-amber-600">At lunch</p>
+            <ElapsedTimer since={lunchSince} baseMs={0} className="font-mono text-xl font-bold tabular-nums text-foreground" />
+          </div>
+          <Button className="h-12" disabled={pending} onClick={() => run(startDay)}>
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Sun className="size-4" />}
+            Back from lunch
           </Button>
         </div>
       ) : (

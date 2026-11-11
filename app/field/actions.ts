@@ -251,6 +251,41 @@ export async function endDay(location?: string | null): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Out to lunch: stops the day clock (and any job timer) for the crew, or just
+ * this person if they aren't a lead. "Back from lunch" starts the clock again,
+ * so lunch is never counted as paid time.
+ */
+export async function startLunch(location?: string | null): Promise<ActionResult> {
+  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const { data: open } = await admin
+    .from("time_entries")
+    .select("id, employee_id, scheduled_job_id, clock_in, break_minutes")
+    .in("employee_id", ids)
+    .is("clock_out", null);
+  if (!(open ?? []).some((e: any) => !e.scheduled_job_id)) return { error: "Start your day first." };
+  for (const e of open ?? []) {
+    const hours = Math.max(0, (now.getTime() - new Date(e.clock_in).getTime()) / 3_600_000 - (e.break_minutes ?? 0) / 60);
+    await admin
+      .from("time_entries")
+      .update({
+        clock_out: nowIso,
+        total_hours: Math.round(hours * 100) / 100,
+        location_clock_out: e.employee_id === employee.id ? location?.slice(0, 120) ?? null : null,
+        ...(e.scheduled_job_id ? {} : { notes: "Lunch" }),
+        updated_at: nowIso,
+      })
+      .eq("id", e.id);
+  }
+  revalidatePath("/field", "layout");
+  revalidatePath("/timesheets");
+  return { ok: true };
+}
+
 /** Stop every running timer on this job (the whole crew). */
 async function clockOutJob(admin: any, jobId: string, leadId: string, location?: string | null) {
   const now = new Date();

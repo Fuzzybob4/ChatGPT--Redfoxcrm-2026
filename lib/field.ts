@@ -387,3 +387,87 @@ export async function jobsForViewer(orgId: string, jobs: FieldJob[], canRunJobs:
     (j) => j.status === "in_progress" || j.status === "en_route" || j.scheduledDate === today,
   );
 }
+
+export interface DayStatus {
+  /** Clock running since (current segment). */
+  since: string | null;
+  /** On lunch since (clock stopped for lunch, day not ended). */
+  lunchSince: string | null;
+}
+
+/** Where the person is in their work day: on the clock, at lunch, or neither. */
+export async function getDayStatus(orgId: string, employeeId: string): Promise<DayStatus> {
+  const open = await getOpenShift(employeeId);
+  if (open) return { since: open.clockIn, lunchSince: null };
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { timezone } = await loadBusinessRules(createAdminClient(), orgId);
+  const { data } = await createAdminClient()
+    .from("time_entries")
+    .select("clock_out, notes")
+    .eq("employee_id", employeeId)
+    .is("scheduled_job_id", null)
+    .not("clock_out", "is", null)
+    .order("clock_out", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: timezone });
+  if (data?.notes === "Lunch" && data.clock_out && day(data.clock_out) === day(new Date().toISOString())) {
+    return { since: null, lunchSince: data.clock_out };
+  }
+  return { since: null, lunchSince: null };
+}
+
+export interface HoursDay {
+  day: string;
+  start: string | null;
+  end: string | null;
+  open: boolean;
+  workedHours: number;
+  lunchMinutes: number;
+  jobHours: number;
+  segments: { in: string; out: string | null }[];
+}
+
+/** One person's clock history, newest day first. */
+export async function getMyHours(orgId: string, employeeId: string, days = 14): Promise<{ timezone: string; days: HoursDay[] }> {
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const db = createAdminClient();
+  const { timezone } = await loadBusinessRules(db, orgId);
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data } = await db
+    .from("time_entries")
+    .select("scheduled_job_id, clock_in, clock_out, total_hours")
+    .eq("employee_id", employeeId)
+    .gte("clock_in", since)
+    .order("clock_in", { ascending: true });
+  const now = Date.now();
+  const hrs = (e: any) => (e.clock_out ? Number(e.total_hours ?? 0) : Math.max(0, (now - new Date(e.clock_in).getTime()) / 3_600_000));
+  const byDay = new Map<string, { shifts: any[]; jobs: any[] }>();
+  for (const e of data ?? []) {
+    const d = new Date(e.clock_in).toLocaleDateString("en-CA", { timeZone: timezone });
+    const r = byDay.get(d) ?? { shifts: [], jobs: [] };
+    (e.scheduled_job_id ? r.jobs : r.shifts).push(e);
+    byDay.set(d, r);
+  }
+  const out: HoursDay[] = [...byDay.entries()].map(([day, r]) => {
+    const segs = r.shifts.length ? r.shifts : r.jobs;
+    let lunch = 0;
+    for (let i = 1; i < r.shifts.length; i++) {
+      const prevOut = r.shifts[i - 1].clock_out;
+      if (prevOut) lunch += Math.max(0, (new Date(r.shifts[i].clock_in).getTime() - new Date(prevOut).getTime()) / 60_000);
+    }
+    const last = segs[segs.length - 1];
+    return {
+      day,
+      start: segs[0]?.clock_in ?? null,
+      end: last?.clock_out ?? null,
+      open: segs.some((e: any) => !e.clock_out),
+      workedHours: segs.reduce((s: number, e: any) => s + hrs(e), 0),
+      lunchMinutes: Math.round(lunch),
+      jobHours: r.jobs.reduce((s: number, e: any) => s + hrs(e), 0),
+      segments: segs.map((e: any) => ({ in: e.clock_in, out: e.clock_out })),
+    };
+  });
+  out.sort((a, b) => b.day.localeCompare(a.day));
+  return { timezone, days: out };
+}
