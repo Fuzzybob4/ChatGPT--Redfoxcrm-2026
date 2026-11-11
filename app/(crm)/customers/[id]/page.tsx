@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   MapPin, Phone, Mail, CalendarDays, FileText,
-  ArrowLeft, Plus, Pencil, Tag, StickyNote,
+  ArrowLeft, Plus, Pencil, Tag, StickyNote, MessageSquare,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -168,13 +168,18 @@ export default function CustomerDetailPage({ params }: Props) {
                     </a>
                   )}
                   {customer.phone && (
-                    <a
-                      href={`tel:${customer.phone}`}
-                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
+                    <div className="flex items-center gap-2">
                       <Phone className="size-4 shrink-0 text-primary" />
-                      {customer.phone}
-                    </a>
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">{customer.phone}</span>
+                      <Button size="sm" variant="outline" className="h-8 gap-1 px-2.5" render={<a href={`tel:${customer.phone}`} />}>
+                        <Phone className="size-3.5" />
+                        Call
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1 px-2.5" render={<a href={`sms:${customer.phone}`} />}>
+                        <MessageSquare className="size-3.5" />
+                        Text
+                      </Button>
+                    </div>
                   )}
                   <span className="flex items-center gap-2 text-muted-foreground">
                     <CalendarDays className="size-4 shrink-0 text-primary" />

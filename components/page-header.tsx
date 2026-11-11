@@ -17,7 +17,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
       <Separator orientation="vertical" className="mr-2 h-4" />
       <div className="flex flex-1 items-center justify-between gap-4 min-w-0">
         <div className="min-w-0 flex items-center gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="font-semibold text-foreground text-base leading-none truncate">
               {title}
             </h1>
@@ -25,8 +25,11 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
               <p className="text-xs text-muted-foreground mt-0.5 truncate">{description}</p>
             )}
           </div>
-          <Separator orientation="vertical" className="h-6" />
-          <LocationSelector />
+          {/* On phones there's no room beside the page buttons; the location picker shows on wider screens. */}
+          <div className="hidden items-center gap-4 md:flex">
+            <Separator orientation="vertical" className="h-6" />
+            <LocationSelector />
+          </div>
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
