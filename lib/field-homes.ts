@@ -51,7 +51,7 @@ export async function getLeadHomes(
   let jobQuery = admin.from("scheduled_jobs").select("*").eq("org_id", orgId).order("scheduled_date", { ascending: true });
   let invoiceQuery = admin
     .from("invoices")
-    .select("customer_id, status, payment_state, amount_paid, amount_paid_cents")
+    .select("customer_id, status, payment_state, amount_paid, amount_paid_cents, created_at, season_year")
     .eq("org_id", orgId);
   if (locationId) {
     customerQuery = customerQuery.eq("location_id", locationId);

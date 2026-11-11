@@ -73,6 +73,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           emailConfigured={isEmailConfigured()}
           jobs={boardJobs}
           needs={needs.map((n) => ({ id: n.id, name: n.name, address: n.address, phone: n.phone }))}
+          removalStart={settings.removalStart}
           removals={removals.map((n) => ({ id: n.id, name: n.name, address: n.address, phone: n.phone }))}
           canManage={["owner", "admin", "manager"].includes((org.role || "").toLowerCase())}
         />

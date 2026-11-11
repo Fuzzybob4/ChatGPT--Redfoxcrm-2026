@@ -331,7 +331,7 @@ export async function getInstallItems(orgId: string, customerId: string): Promis
       .eq("org_id", orgId)
       .eq("customer_id", customerId)
       .neq("status", "cancelled")
-      .gte("created_at", season)
+      .or(`created_at.gte.${season},season_year.eq.${Number(season.slice(0, 4))}`)
       .order("created_at", { ascending: false })
       .limit(1),
   ]);

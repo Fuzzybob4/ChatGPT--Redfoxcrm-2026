@@ -1,6 +1,16 @@
 {
   "crons": [
-    { "path": "/api/cron/hubspot-sync", "schedule": "17 9 * * *" },
-    { "path": "/api/cron/send-invoice-reminders", "schedule": "7 15 * * *" }
+    {
+      "path": "/api/cron/hubspot-sync",
+      "schedule": "17 9 * * *"
+    },
+    {
+      "path": "/api/cron/send-invoice-reminders",
+      "schedule": "7 15 * * *"
+    },
+    {
+      "path": "/api/cron/season-automation",
+      "schedule": "41 14 * * *"
+    }
   ]
 }

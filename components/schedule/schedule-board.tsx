@@ -71,6 +71,7 @@ export function ScheduleBoard({
   jobs,
   needs,
   removals = [],
+  removalStart,
   canManage,
 }: {
   weekStart: string;
@@ -84,6 +85,8 @@ export function ScheduleBoard({
   needs: { id: string; name: string; address: string; phone: string | null }[];
   /** Installed this season with no takedown booked yet. */
   removals?: { id: string; name: string; address: string; phone: string | null }[];
+  /** First takedown day from Settings. */
+  removalStart?: string;
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -328,6 +331,7 @@ export function ScheduleBoard({
       <AutoScheduleDialog open={autoOpen} onClose={() => setAutoOpen(false)} needs={needs} today={today} onDone={() => router.refresh()} />
       <AutoScheduleDialog
         kind="removal"
+        defaultStart={removalStart && removalStart > today ? removalStart : undefined}
         open={removalOpen}
         onClose={() => setRemovalOpen(false)}
         needs={removals}
@@ -617,6 +621,7 @@ function EditJobDialog({
 
 function AutoScheduleDialog({
   kind = "install",
+  defaultStart,
   open,
   onClose,
   needs,
@@ -624,13 +629,14 @@ function AutoScheduleDialog({
   onDone,
 }: {
   kind?: "install" | "removal";
+  defaultStart?: string;
   open: boolean;
   onClose: () => void;
   needs: { id: string; name: string; address: string }[];
   today: string;
   onDone: () => void;
 }) {
-  const [startDate, setStartDate] = useState(addDays(today, 1));
+  const [startDate, setStartDate] = useState(defaultStart ?? addDays(today, 1));
   const [plan, setPlan] = useState<PlanSlot[] | null>(null);
   const [unplaced, setUnplaced] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);

@@ -83,6 +83,10 @@ export default async function SettingsPage({
     daySlots: rules.daySlots,
     sizePoints: rules.sizePoints,
     crewHidePrices: rules.crewHidePrices,
+    removalStartMonth: rules.removalStartMonth,
+    removalStartDay: rules.removalStartDay,
+    rebookAuto: rules.rebookAuto,
+    rebookDepositPercent: rules.rebookDepositPercent,
   };
 
   return (

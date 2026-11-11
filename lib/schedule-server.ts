@@ -32,9 +32,18 @@ export interface BusinessRules {
   daySlots: [string, string][];
   sizePoints: SizePoints;
   crewHidePrices: boolean;
+  /** Season label: the year the current season started in. */
+  seasonYear: number;
+  removalStartMonth: number;
+  removalStartDay: number;
+  /** First takedown day for the current season (YYYY-MM-DD). */
+  removalStart: string;
+  rebookAuto: boolean;
+  rebookDepositPercent: number;
 }
 
-const RULE_COLUMNS = "timezone, season_start_month, season_start_day, day_slots, job_size_points, crew_hide_prices";
+const RULE_COLUMNS =
+  "timezone, season_start_month, season_start_day, day_slots, job_size_points, crew_hide_prices, removal_start_month, removal_start_day, rebook_auto, rebook_deposit_percent";
 
 function rulesFromRow(s: any): BusinessRules {
   const timezone = typeof s?.timezone === "string" && s.timezone ? s.timezone : "America/Chicago";
@@ -45,11 +54,23 @@ function rulesFromRow(s: any): BusinessRules {
     : [];
   const pts = (s?.job_size_points ?? {}) as Partial<SizePoints>;
   const num = (v: unknown, d: number) => (typeof v === "number" && v > 0 && v <= 10 ? v : d);
+  const seasonStartDate = currentSeasonStart(todayIn(timezone), seasonStartMonth, seasonStartDay);
+  const seasonYear = Number(seasonStartDate.slice(0, 4));
+  const removalStartMonth = Number(s?.removal_start_month) || 1;
+  const removalStartDay = Number(s?.removal_start_day) || 2;
+  const md = `${String(removalStartMonth).padStart(2, "0")}-${String(removalStartDay).padStart(2, "0")}`;
+  const removalStart = `${seasonYear}-${md}` > seasonStartDate ? `${seasonYear}-${md}` : `${seasonYear + 1}-${md}`;
   return {
+    seasonYear,
+    removalStartMonth,
+    removalStartDay,
+    removalStart,
+    rebookAuto: Boolean(s?.rebook_auto),
+    rebookDepositPercent: Math.min(100, Math.max(0, Number(s?.rebook_deposit_percent ?? 50))),
     timezone,
     seasonStartMonth,
     seasonStartDay,
-    seasonStart: currentSeasonStart(todayIn(timezone), seasonStartMonth, seasonStartDay),
+    seasonStart: seasonStartDate,
     today: todayIn(timezone),
     daySlots: slots.length ? slots : DEFAULT_DAY_SLOTS,
     sizePoints: {
@@ -108,7 +129,12 @@ export async function loadNeedsScheduling(db: Db, orgId: string, since?: string)
   if (!since) since = (await loadBusinessRules(db, orgId)).seasonStart;
   const [invoices, jobs] = await Promise.all([
     readAll((a, b) =>
-      db.from("invoices").select("customer_id, status, payment_state, amount_paid, created_at").eq("org_id", orgId).gte("created_at", since).range(a, b),
+      db
+        .from("invoices")
+        .select("customer_id, status, payment_state, amount_paid, created_at, season_year")
+        .eq("org_id", orgId)
+        .or(`created_at.gte.${since},season_year.eq.${Number(since.slice(0, 4))}`)
+        .range(a, b),
     ),
     readAll((a, b) =>
       db.from("scheduled_jobs").select("customer_id, job_type, status").eq("org_id", orgId).gte("scheduled_date", since).range(a, b),
@@ -116,8 +142,11 @@ export async function loadNeedsScheduling(db: Db, orgId: string, since?: string)
   ]);
 
   const booked = new Map<string, string>();
+  const thisSeason = Number(since.slice(0, 4));
   for (const inv of invoices) {
     if (!inv.customer_id) continue;
+    // Next season's rebook deposits don't need an install this season.
+    if (inv.season_year != null && Number(inv.season_year) !== thisSeason) continue;
     const sig = invoicePaymentSignal({ status: inv.status, paymentState: inv.payment_state, amountPaid: Number(inv.amount_paid ?? 0) });
     if (!sig.paid && !sig.deposit) continue;
     const prev = booked.get(inv.customer_id);

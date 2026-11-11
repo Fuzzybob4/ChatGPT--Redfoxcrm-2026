@@ -38,7 +38,8 @@ export function buildStageResolver({
   for (const inv of invoices) {
     if (!inv.customer_id) continue;
     // Last season's invoices don't make someone a pending install this year.
-    if (!inCurrentSeason(inv.issue_date ?? inv.created_at, season)) continue;
+    // Invoices tagged for a season (e.g. next season's rebook) count only in that season.
+    if (inv.season_year != null ? Number(inv.season_year) !== Number(season.slice(0, 4)) : !inCurrentSeason(inv.issue_date ?? inv.created_at, season)) continue;
     const amountPaid =
       inv.amount_paid != null
         ? Number(inv.amount_paid)

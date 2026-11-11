@@ -79,6 +79,51 @@ export function BusinessRulesSettings({ initial, canEdit }: { initial: BusinessR
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Removal season & rebooking</CardTitle>
+          <CardDescription>
+            The first takedown day. The Removals planner on the schedule starts here, and (if turned on) every customer
+            you installed gets an email that day offering the same setup next season at this season&apos;s price.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs">Removals start</Label>
+            <div className="flex gap-2">
+              <select className={selectCls} disabled={!canEdit} value={rules.removalStartMonth} onChange={(e) => set("removalStartMonth", Number(e.target.value))}>
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select className={`${selectCls} w-20`} disabled={!canEdit} value={rules.removalStartDay} onChange={(e) => set("removalStartDay", Number(e.target.value))}>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              <span className="block font-medium">Send rebook offers automatically</span>
+              <span className="block text-xs text-muted-foreground">
+                On the first removal day: next season&apos;s invoice at this season&apos;s price, emailed with a deposit link.
+                Skips Do-not-contact customers, anyone unsubscribed, and contract customers. Needs email set up.
+              </span>
+            </span>
+            <Switch checked={rules.rebookAuto} disabled={!canEdit} onCheckedChange={(v: boolean) => set("rebookAuto", v)} />
+          </label>
+          {rules.rebookAuto && (
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Deposit to rebook</Label>
+              <Input type="number" min="0" max="100" step="5" className="h-9 w-24" disabled={!canEdit}
+                value={rules.rebookDepositPercent} onChange={(e) => set("rebookDepositPercent", Number(e.target.value))} />
+              <span className="text-sm text-muted-foreground">%</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Install time windows</CardTitle>
           <CardDescription>The windows auto-schedule gives each crew's stops, in order (1st job, 2nd job, …).</CardDescription>
         </CardHeader>

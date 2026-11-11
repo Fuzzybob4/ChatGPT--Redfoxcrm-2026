@@ -12,6 +12,10 @@ export type BusinessRulesInput = {
   daySlots: [string, string][];
   sizePoints: { small: number; standard: number; large: number };
   crewHidePrices: boolean;
+  removalStartMonth: number;
+  removalStartDay: number;
+  rebookAuto: boolean;
+  rebookDepositPercent: number;
 };
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -46,6 +50,14 @@ export async function saveBusinessRules(input: BusinessRulesInput): Promise<{ ok
     if (!(typeof v === "number" && v > 0 && v <= 10)) return { ok: false, error: "Job sizes must be between 0 and 10." };
   }
 
+  const rMonth = Math.round(Number(input.removalStartMonth));
+  const rDay = Math.round(Number(input.removalStartDay));
+  if (!(rMonth >= 1 && rMonth <= 12) || !(rDay >= 1 && rDay <= 28)) {
+    return { ok: false, error: "Removal start must be a real date (day 1–28)." };
+  }
+  const depositPct = Number(input.rebookDepositPercent);
+  if (!(depositPct >= 0 && depositPct <= 100)) return { ok: false, error: "Deposit must be 0–100%." };
+
   const { error } = await createAdminClient()
     .from("schedule_settings")
     .upsert(
@@ -57,6 +69,10 @@ export async function saveBusinessRules(input: BusinessRulesInput): Promise<{ ok
         day_slots: slots,
         job_size_points: { small: pts.small, standard: pts.standard, large: pts.large },
         crew_hide_prices: Boolean(input.crewHidePrices),
+        removal_start_month: rMonth,
+        removal_start_day: rDay,
+        rebook_auto: Boolean(input.rebookAuto),
+        rebook_deposit_percent: depositPct,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "org_id" },

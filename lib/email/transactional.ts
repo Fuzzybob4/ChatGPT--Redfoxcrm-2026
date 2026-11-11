@@ -13,7 +13,9 @@ export type TransactionalKind =
   | "overdue_2"
   | "overdue_3"
   | "estimate_sent"
-  | "payment_receipt";
+  | "payment_receipt"
+  | "rebook_offer"
+  | "contract_installment";
 
 export function appBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL || "https://www.redfoxcrm.com").replace(/\/$/, "");
@@ -137,7 +139,7 @@ export async function sendInvoiceEmail(
   const { invoice, customer } = await loadInvoiceContext(db, invoiceId, orgId);
   const to = (customer?.billing_email || customer?.email || "").trim();
   if (!to) throw new Error("This customer has no email address.");
-  if (kind !== "invoice_sent" && kind !== "payment_receipt" && customer?.invoice_reminders_opt_out) {
+  if (!["invoice_sent", "payment_receipt", "rebook_offer", "contract_installment"].includes(kind) && customer?.invoice_reminders_opt_out) {
     throw new Error("This customer has turned off reminders.");
   }
 
@@ -187,6 +189,18 @@ export async function sendInvoiceEmail(
         `If you've already sent payment, thank you! Otherwise you can pay securely online in a minute.`,
       ];
       footerNote = reminderFooter;
+      break;
+    case "rebook_offer":
+      subject = `Book your holiday lights again with ${business.name}`;
+      paragraphs = [
+        `Thank you for letting ${business.name} light up your home this season! We're taking your lights down soon.`,
+        `Want the same setup next season? We've saved your spot at this year's price. Pay the deposit to lock in your install date early.`,
+      ];
+      button = { text: "Rebook & pay deposit", url: portalUrl };
+      break;
+    case "contract_installment":
+      subject = `Your monthly invoice from ${business.name}`;
+      paragraphs = [`Here's this month's payment for your lighting contract with ${business.name}. You can view it and pay securely online.`];
       break;
     case "payment_receipt":
       subject = `Payment received — thank you!`;
