@@ -106,6 +106,7 @@ interface InvoiceForEmail {
   amount_paid: number | string | null;
   deposit_amount: number | string | null;
   due_date: string | null;
+  contract_id?: string | null;
 }
 
 async function loadInvoiceContext(db: Db, invoiceId: string, orgId: string) {
