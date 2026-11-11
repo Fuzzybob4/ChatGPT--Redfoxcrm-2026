@@ -592,7 +592,7 @@ export default function CustomerPortalPage() {
                     <Mail className="size-4 text-primary shrink-0" />
                     <div>
                       <p className="text-sm font-medium">Email Support</p>
-                      <p className="text-xs text-muted-foreground">support@redfoxcrm.com</p>
+                      <p className="text-xs text-muted-foreground">redfoxcrm1@gmail.com</p>
                     </div>
                   </div>
                 </CardContent>

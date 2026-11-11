@@ -26,11 +26,11 @@ export function isEmailConfigured(): boolean {
 
 /**
  * Address every business sends from. Customers see the business's own name
- * ("Lone Star Lighting Displays <billing@mail.redfoxcrm.com>") and replies go
+ * ("Lone Star Lighting Displays <billing@redfoxcrm.com>") and replies go
  * to the business's email via reply_to.
  */
 export function defaultFromAddress(): string {
-  return process.env.RESEND_FROM_EMAIL || "billing@mail.redfoxcrm.com";
+  return process.env.RESEND_FROM_EMAIL || "billing@redfoxcrm.com";
 }
 
 function cleanDisplayName(name: string): string {

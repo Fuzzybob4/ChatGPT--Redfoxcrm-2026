@@ -5,8 +5,8 @@
  */
 export const LEGAL_VERSION = "2026-11-11";
 export const LEGAL_UPDATED = "November 11, 2026";
-export const LEGAL_EMAIL = "legal@redfoxcrm.com";
-export const PRIVACY_EMAIL = "privacy@redfoxcrm.com";
+export const LEGAL_EMAIL = "redfoxcrm1@gmail.com";
+export const PRIVACY_EMAIL = "redfoxcrm1@gmail.com";
 
 export type LegalBlock = string | { list: string[] };
 export interface LegalSection {
