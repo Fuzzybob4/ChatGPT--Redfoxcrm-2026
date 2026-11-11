@@ -125,7 +125,7 @@ export function CrewList({ members }: { members: CrewMember[] }) {
           id: member.id,
           message:
             "existingAccount" in result && result.existingAccount
-              ? `${member.email} already has an account — they can sign in with it now.`
+              ? `Sign-in link sent to ${member.email}. They already have a login, so the email says "Magic link" — tap it to finish joining.`
               : `Login invite sent to ${member.email}.`,
           isError: false,
         });

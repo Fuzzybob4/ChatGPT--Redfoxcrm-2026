@@ -24,13 +24,20 @@ export async function inviteEmployee(formData: FormData) {
   // Reuse the employee record if one already exists for this email.
   const { data: existing } = await adminClient
     .from("employees")
-    .select("id, user_id")
+    .select("id, user_id, is_active")
     .eq("org_id", org.orgId)
     .eq("email", email)
     .maybeSingle();
 
-  if (existing?.user_id) {
+  if (existing?.user_id && existing.is_active) {
     return { error: "This employee already has a login. They can sign in with this email." };
+  }
+  if (existing && !existing.is_active) {
+    // Bring back someone who was removed so the invite can link them again.
+    await adminClient
+      .from("employees")
+      .update({ role, position: position || role, invite_accepted_at: null })
+      .eq("id", existing.id);
   }
 
   let employeeId = existing?.id as string | undefined;
@@ -117,10 +124,9 @@ export async function addEmployee(formData: FormData) {
   const org = await getCurrentOrg();
   if (!org) return { error: "Organization not found." };
 
-  const crew = await resolveCrew(createAdminClient(), org.orgId, { crewId: crewIdRaw });
-  const supabase = await createClient();
-  const { error } = await supabase.from("employees").insert({
-    org_id: org.orgId,
+  const admin = createAdminClient();
+  const crew = await resolveCrew(admin, org.orgId, { crewId: crewIdRaw });
+  const fields = {
     first_name: firstName,
     last_name: lastName,
     full_name: `${firstName} ${lastName}`,
@@ -133,10 +139,43 @@ export async function addEmployee(formData: FormData) {
     is_active: true,
     can_access_work_orders: canWorkOrders,
     can_access_mapping: canMapping,
-  });
+  };
 
-  if (error) {
-    return { error: error.message };
+  // Someone removed earlier keeps their record (so past jobs still show who did
+  // the work). Adding the same email again brings that record back.
+  const { data: existing } = await admin
+    .from("employees")
+    .select("id, is_active, user_id")
+    .eq("org_id", org.orgId)
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing?.is_active) {
+    return { error: "Someone on your crew already uses this email." };
+  }
+
+  if (existing) {
+    const { error } = await admin
+      .from("employees")
+      .update({ ...fields, invite_accepted_at: null })
+      .eq("id", existing.id)
+      .eq("org_id", org.orgId);
+    if (error) return { error: "Couldn't add this crew member back. Please try again." };
+    if (existing.user_id) {
+      // They already have a login: give their access back right away.
+      await admin
+        .from("user_memberships")
+        .upsert(
+          { user_id: existing.user_id, org_id: org.orgId, role: membershipRoleFor(fields.role) },
+          { onConflict: "user_id,org_id", ignoreDuplicates: true },
+        );
+    }
+  } else {
+    const supabase = await createClient();
+    const { error } = await supabase.from("employees").insert({ org_id: org.orgId, ...fields });
+    if (error) {
+      return { error: /duplicate key/i.test(error.message) ? "Someone on your crew already uses this email." : error.message };
+    }
   }
 
   revalidatePath("/crew");

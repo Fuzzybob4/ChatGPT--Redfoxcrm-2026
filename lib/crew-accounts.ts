@@ -110,7 +110,26 @@ export async function sendEmployeeLoginInvite(
 
   if (error) {
     const alreadyRegistered = /already (been )?registered|already exists/i.test(error.message);
-    if (alreadyRegistered) return { success: true, existingAccount: true };
+    if (alreadyRegistered) {
+      // They already made a RedFox login before. Email them a sign-in link so they
+      // actually get something; signing in links them to the business.
+      const { error: linkError } = await admin.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(`/crew-setup?employee_id=${employeeId}`)}`,
+        },
+      });
+      if (linkError) {
+        console.error("[crew-invite] sign-in link failed:", linkError.message);
+        if (/rate limit|security purposes/i.test(linkError.message)) {
+          return { error: "Too many emails sent recently. Wait a minute and try again." };
+        }
+        return { error: "Could not send the sign-in email. Please try again." };
+      }
+      await admin.from("employees").update({ invited_at: new Date().toISOString() }).eq("id", employeeId);
+      return { success: true, existingAccount: true };
+    }
     console.error("[crew-invite] inviteUserByEmail failed:", error.message);
     if (/rate limit/i.test(error.message)) {
       return { error: "Too many emails sent recently. Wait a few minutes and try again." };
