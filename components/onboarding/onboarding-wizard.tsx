@@ -199,7 +199,7 @@ export function OnboardingWizard() {
                   id="businessName"
                   value={details.businessName}
                   onChange={(e) => update('businessName', e.target.value)}
-                  placeholder="RedFox Lighting Co."
+                  placeholder="Your business name"
                 />
               </div>
 

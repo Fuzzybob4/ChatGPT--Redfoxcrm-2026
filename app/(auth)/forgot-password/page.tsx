@@ -59,8 +59,8 @@ export default function ForgotPasswordPage() {
             className="h-16 w-auto"
           />
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-foreground">RedFox Lighting</h1>
-            <p className="text-sm text-muted-foreground mt-1">Holiday Lighting CRM</p>
+            <h1 className="text-2xl font-bold text-foreground">RedFox CRM</h1>
+            <p className="text-sm text-muted-foreground mt-1">CRM for holiday lighting pros</p>
           </div>
         </div>
 

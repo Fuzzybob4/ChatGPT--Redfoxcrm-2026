@@ -22,13 +22,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 
-const stats = [
-  { icon: Users, value: '1000+', label: 'Active Companies' },
-  { icon: DollarSign, value: '$250M+', label: 'Revenue Managed', accent: true },
-  { icon: CheckCircle2, value: '50,000+', label: 'Jobs Completed' },
-  { icon: Star, value: '4.9/5', label: 'Average Rating', accent: true },
-  { icon: Clock, value: '10,000+', label: 'Hours Saved' },
-];
+
 
 const features = [
   {
@@ -63,41 +57,10 @@ const features = [
   },
 ];
 
-const testimonials = [
-  {
-    quote: '"RedFox CRM has completely transformed how we run our business. We save hours every week and our customers love the professional experience."',
-    name: 'Luke C.',
-    company: 'Lone Star Lighting Displays',
-    initials: 'LC',
-  },
-  {
-    quote: '"Finally, a CRM built specifically for our industry. The scheduling and routing features are game changers."',
-    name: 'Emily L.',
-    company: 'Enchanted Lighting Co.',
-    initials: 'EL',
-  },
-  {
-    quote: '"The customer portal and automated payments have been huge for our cash flow. I wish we had switched sooner!"',
-    name: 'Justin G.',
-    company: 'J&J Outdoor Services',
-    initials: 'JG',
-  },
-  {
-    quote: '"We run 4 crews across 2 cities and RedFox keeps everything coordinated. The multi-location feature alone is worth it."',
-    name: 'Maria T.',
-    company: 'Premier Holiday Lights',
-    initials: 'MT',
-  },
-];
+
 
 export default function LandingPage() {
-  const [testimonialIndex, setTestimonialIndex] = useState(0);
 
-  const visibleTestimonials = [
-    testimonials[testimonialIndex % testimonials.length],
-    testimonials[(testimonialIndex + 1) % testimonials.length],
-    testimonials[(testimonialIndex + 2) % testimonials.length],
-  ];
 
   return (
     <div className="overflow-hidden">
@@ -184,26 +147,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TRUST BAR — hidden until we have real numbers ─────────── */}
-      <section className="bg-white border-y border-gray-200 py-12 hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest mb-10">
-            Trusted by Outdoor Service Professionals
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-8">
-            {stats.map(({ icon: Icon, value, label, accent }) => (
-              <div key={label} className="flex flex-col items-center text-center gap-2">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${accent ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700'}`}>
-                  <Icon className="w-6 h-6" />
-                </div>
-                <p className="text-2xl font-extrabold text-gray-900">{value}</p>
-                <p className="text-xs text-gray-500">{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── FEATURES ─────────────────────────────────────────────── */}
       <section className="bg-white py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -238,56 +181,6 @@ export default function LandingPage() {
               ))}
             </div>
 
-          </div>
-        </div>
-      </section>
-
-      {/* ── TESTIMONIALS — hidden until we have real reviews ──────── */}
-      <section className="bg-[#0f0f0f] py-24 hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-extrabold text-white mb-3">Loved by Business Owners</h2>
-            <div className="w-12 h-1 bg-primary rounded mx-auto" />
-          </div>
-
-          <div className="relative flex items-center gap-4">
-            <button
-              onClick={() => setTestimonialIndex((i) => (i - 1 + testimonials.length) % testimonials.length)}
-              className="shrink-0 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
-              aria-label="Previous testimonial"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div className="grid sm:grid-cols-3 gap-4 flex-1 overflow-hidden">
-              {visibleTestimonials.map((t, i) => (
-                <div key={i} className="bg-[#1a1a1a] rounded-xl p-6 border border-white/10 space-y-4">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, s) => (
-                      <Star key={s} className="w-4 h-4 fill-primary text-primary" />
-                    ))}
-                  </div>
-                  <p className="text-sm text-gray-300 leading-relaxed">{t.quote}</p>
-                  <div className="flex items-center gap-3 pt-2">
-                    <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {t.initials}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">{t.name}</p>
-                      <p className="text-xs text-gray-500">{t.company}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setTestimonialIndex((i) => (i + 1) % testimonials.length)}
-              className="shrink-0 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
-              aria-label="Next testimonial"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </section>
