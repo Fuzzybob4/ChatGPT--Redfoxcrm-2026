@@ -159,3 +159,62 @@ export async function loadNeedsScheduling(db: Db, orgId: string, since?: string)
     }))
     .sort((a, b) => a.bookedAt.localeCompare(b.bookedAt));
 }
+
+/**
+ * Installed this season but no takedown on the calendar yet: the removal list.
+ * First installed, first taken down.
+ */
+export async function loadNeedsRemoval(
+  db: Db,
+  orgId: string,
+  since?: string,
+): Promise<(PlanCustomer & { phone: string | null; size: string })[]> {
+  if (!since) since = (await loadBusinessRules(db, orgId)).seasonStart;
+  const jobs = await readAll((a, b) =>
+    db
+      .from("scheduled_jobs")
+      .select("customer_id, job_type, status, scheduled_date, completed_at, job_size")
+      .eq("org_id", orgId)
+      .gte("scheduled_date", since)
+      .is("archived_at", null)
+      .range(a, b),
+  );
+  const installed = new Map<string, { at: string; size: string }>();
+  const hasRemoval = new Set<string>();
+  for (const j of jobs as any[]) {
+    if (!j.customer_id) continue;
+    const type = String(j.job_type ?? "").toLowerCase();
+    const status = String(j.status ?? "").toLowerCase();
+    if (type.includes("remov")) {
+      if (status !== "cancelled") hasRemoval.add(j.customer_id);
+    } else if (status === "completed") {
+      const at = String(j.completed_at ?? j.scheduled_date ?? "");
+      const prev = installed.get(j.customer_id);
+      if (!prev || at < prev.at) installed.set(j.customer_id, { at, size: j.job_size ?? "standard" });
+    }
+  }
+  const ids = [...installed.keys()].filter((id) => !hasRemoval.has(id));
+  if (!ids.length) return [];
+  const customers: any[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await db
+      .from("customers")
+      .select("id, full_name, first_name, last_name, address, city, phone, lat, lng, install_status, tags")
+      .eq("org_id", orgId)
+      .in("id", ids.slice(i, i + 200));
+    customers.push(...(data ?? []));
+  }
+  return customers
+    .filter((c) => String(c.install_status ?? "").toLowerCase() !== "removed" && !(c.tags ?? []).includes("vendor"))
+    .map((c) => ({
+      id: c.id,
+      name: c.full_name || [c.first_name, c.last_name].filter(Boolean).join(" ") || "Customer",
+      address: [c.address, c.city].filter(Boolean).join(", "),
+      phone: c.phone ?? null,
+      lat: c.lat ?? null,
+      lng: c.lng ?? null,
+      bookedAt: installed.get(c.id)?.at ?? "",
+      size: installed.get(c.id)?.size ?? "standard",
+    }))
+    .sort((a, b) => a.bookedAt.localeCompare(b.bookedAt));
+}

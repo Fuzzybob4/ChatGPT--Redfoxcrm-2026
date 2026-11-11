@@ -70,6 +70,7 @@ export function ScheduleBoard({
   emailConfigured,
   jobs,
   needs,
+  removals = [],
   canManage,
 }: {
   weekStart: string;
@@ -81,6 +82,8 @@ export function ScheduleBoard({
   emailConfigured: boolean;
   jobs: BoardJob[];
   needs: { id: string; name: string; address: string; phone: string | null }[];
+  /** Installed this season with no takedown booked yet. */
+  removals?: { id: string; name: string; address: string; phone: string | null }[];
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -90,6 +93,7 @@ export function ScheduleBoard({
   const [rainConfirm, setRainConfirm] = useState<string | null>(null);
   const [rainResult, setRainResult] = useState<{ day: string; batchId: string; moved: MovedJob[] } | null>(null);
   const [autoOpen, setAutoOpen] = useState(false);
+  const [removalOpen, setRemovalOpen] = useState(false);
   const [crewsOpen, setCrewsOpen] = useState(false);
 
   const days = useMemo(
@@ -148,6 +152,11 @@ export function ScheduleBoard({
           {canManage && (
             <Button size="sm" className="gap-1" onClick={() => setAutoOpen(true)} disabled={!needs.length}>
               <Sparkles className="size-3.5" /> Needs scheduling ({needs.length})
+            </Button>
+          )}
+          {canManage && removals.length > 0 && (
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => setRemovalOpen(true)}>
+              <Sparkles className="size-3.5" /> Removals ({removals.length})
             </Button>
           )}
         </div>
@@ -317,6 +326,14 @@ export function ScheduleBoard({
       </Dialog>
 
       <AutoScheduleDialog open={autoOpen} onClose={() => setAutoOpen(false)} needs={needs} today={today} onDone={() => router.refresh()} />
+      <AutoScheduleDialog
+        kind="removal"
+        open={removalOpen}
+        onClose={() => setRemovalOpen(false)}
+        needs={removals}
+        today={today}
+        onDone={() => router.refresh()}
+      />
       <CrewsDialog
         open={crewsOpen}
         onClose={() => setCrewsOpen(false)}
@@ -599,12 +616,14 @@ function EditJobDialog({
 }
 
 function AutoScheduleDialog({
+  kind = "install",
   open,
   onClose,
   needs,
   today,
   onDone,
 }: {
+  kind?: "install" | "removal";
   open: boolean;
   onClose: () => void;
   needs: { id: string; name: string; address: string }[];
@@ -630,10 +649,14 @@ function AutoScheduleDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setPlan(null); setMsg(null); } }}>
       <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{needs.length} paid customers need an install day</DialogTitle>
+          <DialogTitle>
+            {kind === "removal" ? `${needs.length} installed homes need a takedown day` : `${needs.length} paid customers need an install day`}
+          </DialogTitle>
           <DialogDescription>
-            Red Fox fills each crew up to its daily limit, first come first served, and keeps each crew&apos;s day in one neighborhood. You
-            review it before anything is saved.
+            {kind === "removal"
+              ? "Pick the first takedown day (usually early January). Red Fox fills each crew up to its daily limit, first installed first removed, and keeps each crew's day in one neighborhood. Rain days push removals back the same way."
+              : "Red Fox fills each crew up to its daily limit, first come first served, and keeps each crew's day in one neighborhood."}{" "}
+            You review it before anything is saved.
           </DialogDescription>
         </DialogHeader>
         {!plan ? (
@@ -656,7 +679,7 @@ function AutoScheduleDialog({
                 onClick={() =>
                   start(async () => {
                     setMsg(null);
-                    const r = await previewAutoSchedule(startDate);
+                    const r = await previewAutoSchedule(startDate, kind);
                     if (!r.ok) return setMsg(r.error);
                     setPlan(r.plan);
                     setUnplaced(r.unplaced);
@@ -688,7 +711,7 @@ function AutoScheduleDialog({
                 disabled={pending || !plan.length}
                 onClick={() =>
                   start(async () => {
-                    const r = await applyAutoSchedule(plan);
+                    const r = await applyAutoSchedule(plan, kind);
                     if (!r.ok) return setMsg(r.error);
                     setPlan(null);
                     onClose();
@@ -696,7 +719,7 @@ function AutoScheduleDialog({
                   })
                 }
               >
-                {pending ? "Saving…" : `Schedule ${plan.length} installs`}
+                {pending ? "Saving…" : `Schedule ${plan.length} ${kind === "removal" ? "removals" : "installs"}`}
               </Button>
             </div>
           </div>

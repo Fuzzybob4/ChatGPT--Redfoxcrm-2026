@@ -243,8 +243,10 @@ export function SettingsContent({
   return (
     <div className="p-4 md:p-6">
       <div className="max-w-2xl mx-auto">
-        <Tabs defaultValue={initialTab === "integrations" || initialTab === "quote" || initialTab === "addons" || initialTab === "danger" ? initialTab : "business"} className="space-y-6">
-          <TabsList className="h-9">
+        <Tabs defaultValue={initialTab && ["integrations", "season", "quote", "addons", "danger"].includes(initialTab) ? initialTab : "business"} className="space-y-6">
+          {/* Six tabs don't fit a phone: let the row scroll sideways. */}
+          <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <TabsList className="h-9 w-max">
             <TabsTrigger value="business" className="text-xs px-3">Business</TabsTrigger>
             <TabsTrigger value="season" className="text-xs px-3">Season & crews</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs px-3">Integrations</TabsTrigger>
@@ -252,6 +254,7 @@ export function SettingsContent({
             <TabsTrigger value="addons" className="text-xs px-3">Add-Ons</TabsTrigger>
             <TabsTrigger value="danger" className="text-xs px-3">Advanced</TabsTrigger>
           </TabsList>
+          </div>
 
           {/* ── Business Info ─────────────────────────────────── */}
           <TabsContent value="business" className="space-y-5">

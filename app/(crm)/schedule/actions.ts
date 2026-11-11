@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendEmail } from "@/lib/email/resend";
 import { getBusinessSender, renderEmail } from "@/lib/email/transactional";
 import { JOB_SIZES, OPEN_JOB_STATUSES, jobPoints, nextWorkDay, planAutoSchedule, type JobSize, type PlanSlot } from "@/lib/schedule";
-import { loadNeedsScheduling, loadScheduleSettings } from "@/lib/schedule-server";
+import { loadNeedsRemoval, loadNeedsScheduling, loadScheduleSettings } from "@/lib/schedule-server";
 
 type Fail = { ok: false; error: string };
 
@@ -91,18 +91,25 @@ export async function rainOutDay(day: string): Promise<{ ok: true; batchId: stri
 
   const { data: jobs, error } = await db
     .from("scheduled_jobs")
-    .select("id, customer_id, scheduled_date, status")
+    .select("id, customer_id, scheduled_date, status, job_type")
     .eq("org_id", org.orgId)
     .gte("scheduled_date", day)
     .in("status", OPEN_JOB_STATUSES)
     .order("scheduled_date", { ascending: false });
   if (error) return { ok: false, error: "Couldn't load the schedule." };
+  // A rain day pushes back the kind of work booked that day: November rain
+  // moves installs, not January takedowns (and the reverse).
+  const isRemoval = (t: unknown) => String(t ?? "").toLowerCase().includes("remov");
+  const todays = (jobs ?? []).filter((j: any) => j.scheduled_date === day);
+  const moveRemovals = todays.some((j: any) => isRemoval(j.job_type));
+  const moveInstalls = !todays.length || todays.some((j: any) => !isRemoval(j.job_type));
+  const affected = (jobs ?? []).filter((j: any) => (isRemoval(j.job_type) ? moveRemovals : moveInstalls));
 
   await db.from("schedule_days_off").upsert({ org_id: org.orgId, day, reason: "rain" }, { onConflict: "org_id,day" });
 
   const batchId = randomUUID();
   const moves: { jobId: string; customerId: string | null; from: string; to: string; changeIds: string[] }[] = [];
-  for (const j of jobs ?? []) {
+  for (const j of affected) {
     const from = j.scheduled_date as string;
     const to = nextWorkDay(from, workDays, off);
     const { error: upErr } = await db.from("scheduled_jobs").update({ scheduled_date: to, updated_at: new Date().toISOString() }).eq("id", j.id).eq("org_id", org.orgId);
@@ -230,14 +237,17 @@ export async function updateScheduledJob(
 }
 
 /** Preview: who would land on which day and crew. Nothing is saved. */
-export async function previewAutoSchedule(startDate: string): Promise<{ ok: true; plan: PlanSlot[]; unplaced: number } | Fail> {
+export async function previewAutoSchedule(
+  startDate: string,
+  kind: "install" | "removal" = "install",
+): Promise<{ ok: true; plan: PlanSlot[]; unplaced: number } | Fail> {
   const org = await requireOrg(true);
   if (!org) return { ok: false, error: "Only owners, admins and managers can schedule crews." };
   if (!isDay(startDate)) return { ok: false, error: "Pick a start date." };
   const db = createAdminClient();
   const [{ workDays, daysOff, crews, sizePoints }, customers] = await Promise.all([
     loadScheduleSettings(db, org.orgId),
-    loadNeedsScheduling(db, org.orgId),
+    kind === "removal" ? loadNeedsRemoval(db, org.orgId) : loadNeedsScheduling(db, org.orgId),
   ]);
   const active = crews.filter((c: { active: boolean }) => c.active);
   if (!active.length) return { ok: false, error: "Add a crew first." };
@@ -267,14 +277,19 @@ export async function previewAutoSchedule(startDate: string): Promise<{ ok: true
 }
 
 /** Save an approved preview as scheduled install jobs. */
-export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; created: number } | Fail> {
+export async function applyAutoSchedule(
+  plan: PlanSlot[],
+  kind: "install" | "removal" = "install",
+): Promise<{ ok: true; created: number } | Fail> {
   const org = await requireOrg(true);
   if (!org) return { ok: false, error: "Only owners, admins and managers can schedule crews." };
   if (!Array.isArray(plan) || !plan.length) return { ok: false, error: "Nothing to schedule." };
   const db = createAdminClient();
 
   // Re-check against the live list so nobody gets double-booked.
-  const needs = new Map((await loadNeedsScheduling(db, org.orgId)).map((c) => [c.id, c] as const));
+  const needList: { id: string; size?: string }[] =
+    kind === "removal" ? await loadNeedsRemoval(db, org.orgId) : await loadNeedsScheduling(db, org.orgId);
+  const needs = new Map(needList.map((c) => [c.id, c] as const));
   const { crews, daySlots } = await loadScheduleSettings(db, org.orgId);
   const crewById = new Map(crews.map((c) => [c.id, c] as const));
   const ids = plan.map((p) => p.customerId).filter((id: string) => needs.has(id));
@@ -303,8 +318,8 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
       return {
         org_id: org.orgId,
         customer_id: c.id,
-        title: "Holiday lighting installation",
-        job_type: "install",
+        title: kind === "removal" ? "Holiday lighting removal" : "Holiday lighting installation",
+        job_type: kind,
         scheduled_date: p.date,
         start_time,
         end_time,
@@ -318,8 +333,8 @@ export async function applyAutoSchedule(plan: PlanSlot[]): Promise<{ ok: true; c
         priority: "normal",
         crew_id: crew.id,
         crew_name: crew.name,
-        job_size: "standard",
-        season_year: year,
+        job_size: kind === "removal" ? needs.get(c.id)?.size ?? "standard" : "standard",
+        season_year: kind === "removal" ? Number(p.date.slice(0, 4)) - (Number(p.date.slice(5, 7)) <= 6 ? 1 : 0) : year,
       };
     });
   const { error } = await db.from("scheduled_jobs").insert(rows);

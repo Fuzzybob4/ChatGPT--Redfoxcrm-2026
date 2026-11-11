@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { ScheduleBoard, type BoardJob } from "@/components/schedule/schedule-board";
 import { isEmailConfigured } from "@/lib/email/resend";
 import { addDays, jobPoints, weekStart } from "@/lib/schedule";
-import { loadNeedsScheduling, loadScheduleSettings } from "@/lib/schedule-server";
+import { loadNeedsRemoval, loadNeedsScheduling, loadScheduleSettings } from "@/lib/schedule-server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Schedule - RedFox CRM" };
@@ -19,8 +19,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const start = weekStart(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : settings.today);
   const end = addDays(start, 6);
 
-  const [needs, { data: jobs }] = await Promise.all([
+  const [needs, removals, { data: jobs }] = await Promise.all([
     loadNeedsScheduling(db, org.orgId, settings.seasonStart),
+    loadNeedsRemoval(db, org.orgId, settings.seasonStart),
     db
       .from("scheduled_jobs")
       .select("id, customer_id, title, job_type, scheduled_date, start_time, status, crew_id, crew_name, job_size, address, city")
@@ -72,6 +73,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           emailConfigured={isEmailConfigured()}
           jobs={boardJobs}
           needs={needs.map((n) => ({ id: n.id, name: n.name, address: n.address, phone: n.phone }))}
+          removals={removals.map((n) => ({ id: n.id, name: n.name, address: n.address, phone: n.phone }))}
           canManage={["owner", "admin", "manager"].includes((org.role || "").toLowerCase())}
         />
       </div>
