@@ -36,7 +36,7 @@ export async function inviteEmployee(formData: FormData) {
     // Bring back someone who was removed so the invite can link them again.
     await adminClient
       .from("employees")
-      .update({ role, position: position || role, invite_accepted_at: null })
+      .update({ role, position: position || POSITION_LABELS[role] || role, invite_accepted_at: null })
       .eq("id", existing.id);
   }
 
@@ -53,7 +53,7 @@ export async function inviteEmployee(formData: FormData) {
         full_name: "",
         email,
         role,
-        position: position || role,
+        position: position || POSITION_LABELS[role] || role,
         is_active: false,
         can_access_work_orders: true,
         can_access_mapping: false,
@@ -112,7 +112,10 @@ export async function addEmployee(formData: FormData) {
   const lastName = String(formData.get("lastName") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const phone = String(formData.get("phone") ?? "").trim();
-  const position = String(formData.get("position") ?? "").trim();
+  const roleRaw = String(formData.get("role") ?? "").trim();
+  const legacyPosition = String(formData.get("position") ?? "").trim();
+  const role = ROLE_VALUES.has(roleRaw) ? roleRaw : legacyPosition.toLowerCase().includes("lead") ? "crew_lead" : "installer";
+  const position = POSITION_LABELS[role] ?? (legacyPosition || role);
   const crewIdRaw = String(formData.get("crewId") ?? "").trim();
   const canWorkOrders = formData.get("canWorkOrders") === "on";
   const canMapping = formData.get("canMapping") === "on";
@@ -135,7 +138,7 @@ export async function addEmployee(formData: FormData) {
     position: position || null,
     crew_id: crew?.id ?? null,
     crew_name: crew?.name ?? null,
-    role: position.toLowerCase().includes("lead") ? "crew_lead" : "technician",
+    role,
     is_active: true,
     can_access_work_orders: canWorkOrders,
     can_access_mapping: canMapping,
@@ -216,6 +219,17 @@ const ROLE_VALUES = new Set([
   "office",
 ]);
 
+const POSITION_LABELS: Record<string, string> = {
+  technician: "Installer",
+  crew_lead: "Crew Lead",
+  installer: "Installer",
+  driver: "Driver",
+  manager: "Manager",
+  supervisor: "Supervisor",
+  sales: "Sales",
+  office: "Office Staff",
+};
+
 export interface EmployeeUpdateInput {
   firstName: string;
   lastName: string;
@@ -234,8 +248,8 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
   const lastName = input.lastName.trim().slice(0, 80);
   const email = input.email.trim().toLowerCase().slice(0, 254);
   const phone = input.phone.trim().slice(0, 40);
-  const position = input.position.trim().slice(0, 80);
   const role = input.role.trim();
+  const position = POSITION_LABELS[role] ?? input.position.trim().slice(0, 80);
 
   if (!firstName || !lastName) return { error: "First and last name are required." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };

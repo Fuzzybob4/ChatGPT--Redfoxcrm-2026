@@ -25,16 +25,53 @@ import {
 import { removeEmployee, updateEmployee } from "@/app/(crm)/crew/actions";
 import type { CrewMember } from "@/components/crew/crew-list";
 
+/** Position picks what someone sees when they sign in. */
 export const CREW_ROLES = [
-  { value: "technician", label: "Technician" },
-  { value: "crew_lead", label: "Crew Lead" },
-  { value: "installer", label: "Installer" },
-  { value: "driver", label: "Driver" },
-  { value: "manager", label: "Manager" },
-  { value: "supervisor", label: "Supervisor" },
-  { value: "sales", label: "Sales" },
-  { value: "office", label: "Office Staff" },
+  { value: "crew_lead", label: "Crew Lead", help: "Crew app. Runs jobs: start, pause, finish, and clocks the crew in and out." },
+  { value: "installer", label: "Installer", help: "Crew app. Sees their jobs and adds photos." },
+  { value: "driver", label: "Driver", help: "Crew app. Sees their jobs and adds photos." },
+  { value: "sales", label: "Sales", help: "Crew app. Sees their jobs and adds photos." },
+  { value: "manager", label: "Manager", help: "Office CRM: customers, schedule, invoices." },
+  { value: "supervisor", label: "Supervisor", help: "Office CRM: customers, schedule, invoices." },
+  { value: "office", label: "Office Staff", help: "Office CRM: customers, schedule, invoices." },
 ];
+
+/** Older records used a typed title; map them onto the dropdown. */
+export function positionFor(role: string | null | undefined, title?: string | null): string {
+  const r = (role ?? "").toLowerCase();
+  if (r === "crew_lead" || /\blead\b/i.test(title ?? "")) return "crew_lead";
+  if (CREW_ROLES.some((x) => x.value === r)) return r;
+  return "installer";
+}
+
+export function PositionSelect({
+  value,
+  onChange,
+  id,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  id?: string;
+}) {
+  const help = CREW_ROLES.find((r) => r.value === value)?.help;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue placeholder="Pick a position..." />
+        </SelectTrigger>
+        <SelectContent>
+          {CREW_ROLES.map((r) => (
+            <SelectItem key={r.value} value={r.value}>
+              {r.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
+    </div>
+  );
+}
 
 export function CrewMemberActions({ member }: { member: CrewMember }) {
   const [editOpen, setEditOpen] = useState(false);
@@ -76,14 +113,14 @@ function EditMemberDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [role, setRole] = useState(member.role);
+  const [role, setRole] = useState(positionFor(member.role, member.position));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const emailLocked = member.loginStatus === "active";
 
   function handleOpenChange(next: boolean) {
     if (next) {
-      setRole(member.role);
+      setRole(positionFor(member.role, member.position));
       setError(null);
     }
     onOpenChange(next);
@@ -99,7 +136,7 @@ function EditMemberDialog({
         lastName: String(form.get("lastName") ?? ""),
         email: emailLocked ? member.email : String(form.get("email") ?? ""),
         phone: String(form.get("phone") ?? ""),
-        position: String(form.get("position") ?? ""),
+        position: CREW_ROLES.find((r) => r.value === role)?.label ?? "",
         crewId: String(form.get("crewId") ?? ""),
         role,
       });
@@ -174,29 +211,8 @@ function EditMemberDialog({
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`position-${member.id}`}>Position / title</Label>
-            <Input
-              id={`position-${member.id}`}
-              name="position"
-              defaultValue={member.position}
-              placeholder="Installer, Crew Lead..."
-              className="text-base md:text-sm"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Role / access level</Label>
-            <Select value={role} onValueChange={(v) => setRole(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a role..." />
-              </SelectTrigger>
-              <SelectContent>
-                {CREW_ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor={`position-${member.id}`}>Position</Label>
+            <PositionSelect id={`position-${member.id}`} value={role} onChange={setRole} />
           </div>
           {error && (
             <p role="alert" className="text-sm text-destructive">

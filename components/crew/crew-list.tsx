@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Mail, HardHat, Map } from "lucide-react";
-import { CrewMemberActions, CREW_ROLES } from "@/components/crew/crew-member-actions";
+import { CrewMemberActions, CREW_ROLES, PositionSelect } from "@/components/crew/crew-member-actions";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +94,8 @@ export function CrewList({ members }: { members: CrewMember[] }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSent, setInviteSent] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("");
+  const [inviteRole, setInviteRole] = useState("installer");
+  const [addRole, setAddRole] = useState("installer");
   const [error, setError] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -218,17 +219,8 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Job role / Access level</Label>
-                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v ?? '')} required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CREW_ROLES.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Position</Label>
+                    <PositionSelect value={inviteRole} onChange={setInviteRole} />
                   </div>
                   {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
                   <p className="text-xs text-muted-foreground">
@@ -273,13 +265,14 @@ export function CrewList({ members }: { members: CrewMember[] }) {
                   <Input id="phone" name="phone" type="tel" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="position">Position</Label>
-                  <Input id="position" name="position" placeholder="Installer, Crew Lead..." />
+                  <Label htmlFor="crewId">Crew</Label>
+                  <CrewSelect id="crewId" name="crewId" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="crewId">Crew</Label>
-                <CrewSelect id="crewId" name="crewId" />
+                <Label htmlFor="add-position">Position</Label>
+                <PositionSelect id="add-position" value={addRole} onChange={setAddRole} />
+                <input type="hidden" name="role" value={addRole} />
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">Access</p>
