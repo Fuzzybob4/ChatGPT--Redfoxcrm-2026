@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { handleGeofenceStateChange } from '@/lib/geofence';
 import { z } from 'zod';
 
@@ -29,7 +30,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const locationData = locationUpdateSchema.parse(body);
 
+    // Only the signed-in employee can report their own location.
+    const { data: { user } } = await (await createClient()).auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
     const supabase = createAdminClient();
+    const { data: me } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('id', locationData.employee_id)
+      .eq('org_id', locationData.org_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!me) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    }
+    if (locationData.work_order_id) {
+      const { data: wo } = await supabase
+        .from('work_orders')
+        .select('id')
+        .eq('id', locationData.work_order_id)
+        .eq('org_id', locationData.org_id)
+        .maybeSingle();
+      if (!wo) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+      }
+    }
 
     // Store the location update
     const { data: location, error: insertError } = await supabase

@@ -19,10 +19,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete from database first
-    const { error: dbError } = await supabase
+    // Row level security limits this to the user's own business. Only remove
+    // the stored file if one of their rows actually pointed at it.
+    const { data: deleted, error: dbError } = await supabase
       .from('customer_photos')
       .delete()
-      .eq('photo_url', pathname);
+      .eq('photo_url', pathname)
+      .select('id');
 
     if (dbError) {
       console.error('Failed to delete photo from database:', dbError);
@@ -32,6 +35,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    if (!deleted || deleted.length === 0) {
+      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+    }
     await deletePhoto(pathname);
 
     return NextResponse.json({ success: true });

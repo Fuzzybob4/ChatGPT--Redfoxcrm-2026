@@ -19,10 +19,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete from database first
-    const { error: dbError } = await supabase
+    const { data: deleted, error: dbError } = await supabase
       .from('property_photos')
       .delete()
-      .eq('id', photoId);
+      .eq('id', photoId)
+      .eq('photo_url', pathname)
+      .select('id');
 
     if (dbError) {
       console.error('Failed to delete photo from database:', dbError);
@@ -32,6 +34,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    if (!deleted || deleted.length === 0) {
+      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+    }
     await deletePhoto(pathname);
 
     return NextResponse.json({ success: true });

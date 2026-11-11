@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyPortalToken } from '@/app/(crm)/customers/portal-actions';
 import { type NextRequest, NextResponse } from 'next/server';
+import { createNotification } from '@/lib/notifications-server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,21 +40,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trigger notification to admin
+    // Notify the business (org comes from the verified portal token).
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notifications/work-order-created`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workOrderId: workOrder.id,
-          customerId,
-          orgId: customer.org_id,
-          customerName,
-          title,
-        }),
-      }).catch((err) => console.error('Notification failed:', err));
+      await createNotification({
+        orgId: customer.org_id,
+        type: 'work_order_created',
+        title: `New Work Order from ${customerName}`,
+        message: `${customerName} submitted a work order: "${title}"`,
+        relatedId: workOrder.id,
+        customerId,
+      });
     } catch (err) {
-      console.error('Failed to trigger notification:', err);
+      console.error('Failed to create notification:', err);
     }
 
     return NextResponse.json({ success: true, workOrderId: workOrder.id });

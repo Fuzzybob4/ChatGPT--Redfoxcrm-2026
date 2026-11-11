@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyPortalToken } from '@/app/(crm)/customers/portal-actions';
 import { type NextRequest, NextResponse } from 'next/server';
+import { createNotification } from '@/lib/notifications-server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,21 +41,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trigger notification to admin
+    // Notify the business (org comes from the verified portal token).
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notifications/ticket-created`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticketId: ticket.id,
-          customerId,
-          orgId: customer.org_id,
-          customerName,
-          subject,
-        }),
-      }).catch((err) => console.error('Notification failed:', err));
+      await createNotification({
+        orgId: customer.org_id,
+        type: 'ticket_created',
+        title: `New Support Ticket from ${customerName}`,
+        message: `${customerName} submitted a support ticket: "${subject}"`,
+        relatedId: ticket.id,
+        customerId,
+      });
     } catch (err) {
-      console.error('Failed to trigger notification:', err);
+      console.error('Failed to create notification:', err);
     }
 
     return NextResponse.json({ success: true, ticketId: ticket.id });
