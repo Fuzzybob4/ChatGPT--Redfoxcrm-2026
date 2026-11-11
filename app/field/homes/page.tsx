@@ -1,12 +1,7 @@
-import { getFieldContext } from "@/lib/field";
-import { getLeadHomes } from "@/lib/field-homes";
-import { HomesView } from "@/components/field/homes-view";
-import { NotAllowed } from "@/components/field/work-order-form";
+import { redirect } from "next/navigation";
 
-export default async function FieldHomesPage() {
-  const { org, employee, canManageWorkOrders } = await getFieldContext();
-  if (!canManageWorkOrders) return <NotAllowed />;
-
-  const homes = await getLeadHomes(org.orgId, employee?.locationId ?? null, employee?.id ?? null);
-  return <HomesView homes={homes} />;
+// The old "Homes" list showed every home in the business. Crews now only see
+// their own jobs and customers, so this page sends them to My jobs.
+export default function FieldHomesPage() {
+  redirect("/field");
 }

@@ -79,7 +79,7 @@ export function WorkOrderForm(props: Props) {
         setError(result.error);
         return;
       }
-      router.push("/field/homes");
+      router.push("/field");
       router.refresh();
     });
   }
