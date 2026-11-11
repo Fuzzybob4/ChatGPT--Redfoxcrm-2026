@@ -374,3 +374,16 @@ export async function crewTextFilter(orgId: string, hide?: boolean): Promise<(te
   const { crewSafeText } = await import("@/lib/field-privacy");
   return hide ? crewSafeText : (text) => String(text ?? "").trim();
 }
+
+/**
+ * Installers only see the day's work (plus anything already underway), so
+ * future jobs don't confuse them. Crew leads and the office see everything.
+ */
+export async function jobsForViewer(orgId: string, jobs: FieldJob[], canRunJobs: boolean): Promise<FieldJob[]> {
+  if (canRunJobs) return jobs;
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { today } = await loadBusinessRules(createAdminClient(), orgId);
+  return jobs.filter(
+    (j) => j.status === "in_progress" || j.status === "en_route" || j.scheduledDate === today,
+  );
+}

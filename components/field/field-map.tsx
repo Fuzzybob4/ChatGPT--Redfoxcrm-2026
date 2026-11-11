@@ -13,7 +13,15 @@ import { directionsUrl, formatClock, formatDay, jobTypeLabel, localToday } from 
 const TODAY_COLOR = "#c8102e";
 const LATER_COLOR = "#1f2937";
 
-export function FieldMap({ stops, unmappedCount }: { stops: FieldMapStop[]; unmappedCount: number }) {
+export function FieldMap({
+  stops,
+  unmappedCount,
+  todayOnly = false,
+}: {
+  stops: FieldMapStop[];
+  unmappedCount: number;
+  todayOnly?: boolean;
+}) {
   const [range, setRange] = useState<"today" | "all">("today");
   const [selected, setSelected] = useState<FieldMapStop | null>(null);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -50,6 +58,7 @@ export function FieldMap({ stops, unmappedCount }: { stops: FieldMapStop[]; unma
     <div className="flex flex-1 flex-col gap-3 px-4 pt-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Job map</h1>
+        {!todayOnly && (
         <div role="tablist" aria-label="Which jobs" className="flex rounded-lg border border-border bg-muted p-0.5">
           {(["today", "all"] as const).map((r) => (
             <button
@@ -70,6 +79,7 @@ export function FieldMap({ stops, unmappedCount }: { stops: FieldMapStop[]; unma
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {visible.length === 0 && (
