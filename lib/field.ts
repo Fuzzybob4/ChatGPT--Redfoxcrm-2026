@@ -255,21 +255,35 @@ export async function getAssignedMapStops(jobs: FieldJob[]): Promise<FieldMapSto
 }
 
 /** Customers on this employee's (or their crew's) jobs, with their next and most recent visit. */
-export async function getAssignedCustomers(orgId: string, employeeId: string): Promise<FieldCustomer[]> {
+/**
+ * Which days of customers a crew member can look up: installers just today's
+ * homes, crew leads today plus the coming week so they can plan ahead.
+ */
+async function customerWindow(orgId: string, canRunJobs: boolean) {
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { addDays } = await import("@/lib/schedule");
+  const { today } = await loadBusinessRules(createAdminClient(), orgId);
+  return { today, from: today, to: canRunJobs ? addDays(today, 7) : today };
+}
+
+const windowFilter = (from: string, to: string) =>
+  `and(scheduled_date.gte.${from},scheduled_date.lte.${to}),status.in.(en_route,in_progress)`;
+
+export async function getAssignedCustomers(orgId: string, employeeId: string, canRunJobs = false): Promise<FieldCustomer[]> {
   const admin = createAdminClient();
   const crewId = await crewIdOf(employeeId);
+  const { today, from, to } = await customerWindow(orgId, canRunJobs);
   const { data } = await admin
     .from("scheduled_jobs")
     .select(JOB_COLUMNS)
     .eq("org_id", orgId)
     .or(mineFilter(employeeId, crewId))
+    .or(windowFilter(from, to))
     .neq("status", "cancelled")
     .not("customer_id", "is", null)
     .order("scheduled_date", { ascending: true })
     .limit(300);
 
-  const { loadBusinessRules } = await import("@/lib/schedule-server");
-  const { today } = await loadBusinessRules(createAdminClient(), orgId);
   const customers = new Map<string, FieldCustomer>();
   for (const row of data ?? []) {
     const job = toFieldJob(row);
@@ -301,15 +315,23 @@ export function isOpenStatus(status: string): boolean {
  * True when this customer is on one of the employee's (or their crew's) jobs,
  * so a crew member can only open customers they are actually working for.
  */
-export async function canSeeCustomer(orgId: string, employeeId: string | null, customerId: string): Promise<boolean> {
+export async function canSeeCustomer(
+  orgId: string,
+  employeeId: string | null,
+  customerId: string,
+  canRunJobs = false,
+): Promise<boolean> {
   if (!employeeId) return false;
   const crewId = await crewIdOf(employeeId);
+  const { from, to } = await customerWindow(orgId, canRunJobs);
   const { data } = await createAdminClient()
     .from("scheduled_jobs")
     .select("id")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .or(mineFilter(employeeId, crewId))
+    .or(windowFilter(from, to))
+    .neq("status", "cancelled")
     .limit(1);
   return Boolean(data?.length);
 }

@@ -8,7 +8,7 @@ import type { FieldCustomer } from "@/lib/field";
 import { Input } from "@/components/ui/input";
 import { directionsUrl, formatDay, jobTypeLabel } from "./format";
 
-export function FieldCustomerList({ customers }: { customers: FieldCustomer[] }) {
+export function FieldCustomerList({ customers, lead = false }: { customers: FieldCustomer[]; lead?: boolean }) {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -21,7 +21,7 @@ export function FieldCustomerList({ customers }: { customers: FieldCustomer[] })
     <div className="flex flex-col gap-4 px-4 pb-6 pt-5">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Customers</h1>
-        <p className="text-sm text-muted-foreground">Customers on your jobs. Tap one for phone, photos and what to install.</p>
+        <p className="text-sm text-muted-foreground">{lead ? "Your crew's customers for today and the next 7 days." : "Today's customers."} Tap one for notes, photos and what to install.</p>
       </div>
 
       {customers.length > 0 && (
@@ -39,9 +39,9 @@ export function FieldCustomerList({ customers }: { customers: FieldCustomer[] })
 
       {customers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
-          <p className="font-medium text-foreground">No customers yet</p>
+          <p className="font-medium text-foreground">{lead ? "No customers this week" : "No customers today"}</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground text-pretty">
-            Customers appear here once the office assigns you to one of their work orders.
+            Customers show up here on the days your crew is scheduled at their home.
           </p>
         </div>
       ) : filtered.length === 0 ? (

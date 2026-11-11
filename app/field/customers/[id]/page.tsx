@@ -14,10 +14,10 @@ import { directionsUrl, formatClock, formatDay, jobTypeLabel } from "@/component
  */
 export default async function FieldCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, employee, admin } = await getFieldContext();
+  const { org, employee, admin, canRunJobs } = await getFieldContext();
   const crewSafeText = await crewTextFilter(org.orgId);
   const office = OFFICE_ROLES.includes(org.role);
-  if (!office && !(await canSeeCustomer(org.orgId, employee?.id ?? null, id))) notFound();
+  if (!office && !(await canSeeCustomer(org.orgId, employee?.id ?? null, id, canRunJobs))) notFound();
 
   const [{ data: customer }, { data: jobs }, items, { data: propertyPhotos }, { data: customerPhotos }] =
     await Promise.all([
