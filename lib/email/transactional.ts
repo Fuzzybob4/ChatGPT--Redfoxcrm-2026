@@ -111,7 +111,7 @@ interface InvoiceForEmail {
 async function loadInvoiceContext(db: Db, invoiceId: string, orgId: string) {
   const { data: invoice } = await db
     .from("invoices")
-    .select("id, org_id, customer_id, invoice_number, title, total_amount, amount_paid, deposit_amount, due_date")
+    .select("id, org_id, customer_id, invoice_number, title, total_amount, amount_paid, deposit_amount, due_date, contract_id")
     .eq("id", invoiceId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -159,7 +159,7 @@ export async function sendInvoiceEmail(
     ["For", label],
     ["Amount due", usd(balance)],
   ];
-  if (deposit > paid) details.push(["Deposit to book", usd(deposit - paid)]);
+  if (deposit > paid) details.push([invoice.contract_id ? "Due this month" : "Deposit to book", usd(deposit - paid)]);
   if (invoice.due_date) details.push(["Due", day(invoice.due_date)]);
 
   const unsubscribeUrl = `${appBaseUrl()}/unsubscribe/reminders/${encodeURIComponent(portalToken)}`;
@@ -199,8 +199,12 @@ export async function sendInvoiceEmail(
       button = { text: "Rebook & pay deposit", url: portalUrl };
       break;
     case "contract_installment":
-      subject = `Your monthly invoice from ${business.name}`;
-      paragraphs = [`Here's this month's payment for your lighting contract with ${business.name}. You can view it and pay securely online.`];
+      subject = `This month's contract payment for ${business.name}`;
+      paragraphs = [
+        `A friendly reminder that this month's payment on your lighting contract with ${business.name} is due.`,
+        `You can pay this month's amount, or pay ahead, securely online.`,
+      ];
+      button = { text: "View & pay", url: portalUrl };
       break;
     case "payment_receipt":
       subject = `Payment received — thank you!`;

@@ -128,7 +128,13 @@ export async function runRebookOffers(db: Db, orgId: string, rules: BusinessRule
   return { created, emailed };
 }
 
-/** Contract customers billed a set % of the yearly total each listed month. */
+/**
+ * Contract customers: on the first billing month of each contract year, one
+ * invoice for the whole year goes out, split into equal monthly installments
+ * (e.g. 10% a month Jan–Oct). Each later month, the amount due so far is
+ * raised by one installment and the customer gets a reminder if they're
+ * behind. They can always pay ahead, up to the full balance.
+ */
 export async function runContractBilling(db: Db): Promise<{ created: number; emailed: number }> {
   const { data: contracts } = await db
     .from("contracts")
@@ -148,12 +154,14 @@ export async function runContractBilling(db: Db): Promise<{ created: number; ema
     const year = Number(today.slice(0, 4));
     const month = Number(today.slice(5, 7));
     const ym = today.slice(0, 7);
-    const months: number[] = (k.billing_months as number[] | null) ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const months: number[] = ((k.billing_months as number[] | null) ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).slice().sort((a, b) => a - b);
     const start = Number(k.term_start_year);
     const end = start + Number(k.term_years ?? 1) - 1;
     if (year < start || year > end || !months.includes(month) || k.last_billed_month === ym) continue;
-    const amount = Math.round(Number(k.contract_value ?? 0) * (Number(k.installment_percent ?? 10) / 100) * 100) / 100;
-    if (!(amount > 0)) continue;
+    const total = Math.round(Number(k.contract_value ?? 0) * 100) / 100;
+    const pct = Number(k.installment_percent ?? 10);
+    if (!(total > 0)) continue;
+
     // Claim this month first so a second run can't bill twice.
     const { data: claimed } = await db
       .from("contracts")
@@ -162,47 +170,75 @@ export async function runContractBilling(db: Db): Promise<{ created: number; ema
       .or(`last_billed_month.is.null,last_billed_month.neq.${ym}`)
       .select("id");
     if (!claimed?.length) continue;
+
     const n = months.filter((m) => m <= month).length;
-    const monthName = new Date(`${ym}-15T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    const due = `${ym}-${String(Math.min(28, Number(today.slice(8, 10)) + 14)).padStart(2, "0")}`;
-    const { data: inv, error } = await db
+    const dueSoFar = Math.min(total, Math.round(total * (pct / 100) * n * 100) / 100);
+    const lastMonth = months[months.length - 1];
+    const finalDue = `${year}-${String(lastMonth).padStart(2, "0")}-28`;
+
+    const { data: existing } = await db
       .from("invoices")
-      .insert({
+      .select("id, amount_paid")
+      .eq("org_id", k.org_id)
+      .eq("contract_id", k.id)
+      .gte("created_at", `${year}-01-01`)
+      .lt("created_at", `${year + 1}-01-01`)
+      .neq("status", "cancelled")
+      .maybeSingle();
+
+    let invoiceId: string | null = existing?.id ?? null;
+    let isNew = false;
+    if (!invoiceId) {
+      const installment = Math.round(total * (pct / 100) * 100) / 100;
+      const schedule = months
+        .map((m) => new Date(`${year}-${String(m).padStart(2, "0")}-15T12:00:00`).toLocaleDateString("en-US", { month: "short" }))
+        .join(", ");
+      const { data: inv, error } = await db
+        .from("invoices")
+        .insert({
+          org_id: k.org_id,
+          customer_id: k.customer_id,
+          invoice_number: invoiceNumber("CT"),
+          title: `Lighting contract ${year}`,
+          description: `Contract year ${year - start + 1} of ${end - start + 1}. Billed in ${months.length} monthly payments of ${installment.toFixed(2)} (${pct}% each): ${schedule}. You can pay ahead or pay the full year any time.`,
+          subtotal: total,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: total,
+          amount_paid: 0,
+          balance_due: total,
+          deposit_amount: dueSoFar,
+          due_date: finalDue,
+          status: "sent",
+          payment_state: "unpaid",
+          sent_at: new Date().toISOString(),
+          contract_id: k.id,
+          invoice_type: "standard",
+        })
+        .select("id")
+        .single();
+      if (error || !inv) continue;
+      invoiceId = inv.id;
+      isNew = true;
+      created++;
+      await db.from("invoice_line_items").insert({
         org_id: k.org_id,
-        customer_id: k.customer_id,
-        invoice_number: invoiceNumber("CT"),
-        title: `Lighting contract: ${monthName} (${n} of ${months.length})`,
-        description: `Contract year ${year - start + 1} of ${end - start + 1}. ${Number(k.installment_percent ?? 10)}% of the yearly total.`,
-        subtotal: amount,
-        tax_rate: 0,
-        tax_amount: 0,
-        total_amount: amount,
-        amount_paid: 0,
-        balance_due: amount,
-        deposit_amount: 0,
-        due_date: due,
-        status: "sent",
-        payment_state: "unpaid",
-        sent_at: new Date().toISOString(),
-        contract_id: k.id,
-        invoice_type: "standard",
-      })
-      .select("id")
-      .single();
-    if (error || !inv) continue;
-    created++;
-    await db.from("invoice_line_items").insert({
-      org_id: k.org_id,
-      invoice_id: inv.id,
-      description: `Holiday lighting contract, ${monthName} installment`,
-      quantity: 1,
-      unit_price: amount,
-      line_total: amount,
-      sort_order: 0,
-    });
-    if (isEmailConfigured()) {
+        invoice_id: inv.id,
+        description: `Holiday lighting contract, ${year}`,
+        quantity: 1,
+        unit_price: total,
+        line_total: total,
+        sort_order: 0,
+      });
+    } else {
+      // Raise the amount due so far by this month's installment.
+      await db.from("invoices").update({ deposit_amount: dueSoFar, updated_at: new Date().toISOString() }).eq("id", invoiceId);
+    }
+
+    const behind = isNew || Number(existing?.amount_paid ?? 0) < dueSoFar - 0.005;
+    if (behind && isEmailConfigured()) {
       try {
-        await sendInvoiceEmail(db, k.org_id, inv.id, "contract_installment");
+        await sendInvoiceEmail(db, k.org_id, invoiceId, isNew ? "invoice_sent" : "contract_installment");
         emailed++;
       } catch {
         // Logged; the invoice is in the portal either way.
