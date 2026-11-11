@@ -236,7 +236,7 @@ export async function runContractBilling(db: Db): Promise<{ created: number; ema
     }
 
     const behind = isNew || Number(existing?.amount_paid ?? 0) < dueSoFar - 0.005;
-    if (behind && isEmailConfigured()) {
+    if (behind && invoiceId && isEmailConfigured()) {
       try {
         await sendInvoiceEmail(db, k.org_id, invoiceId, isNew ? "invoice_sent" : "contract_installment");
         emailed++;
