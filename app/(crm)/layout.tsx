@@ -11,6 +11,9 @@ import { getCurrentOrg } from "@/lib/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadBusinessRules } from "@/lib/schedule-server";
 import { SubscriptionGate } from "@/components/subscription/subscription-gate";
+import { TermsGate } from "@/components/legal/terms-gate";
+import { needsTermsAcceptance } from "@/lib/legal-server";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
   const org = await getCurrentOrg();
@@ -26,7 +29,10 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
     await maybeAutoSyncSquare(org.orgId);
   });
 
-  const rules = await loadBusinessRules(createAdminClient(), org.orgId);
+  const admin = createAdminClient();
+  const rules = await loadBusinessRules(admin, org.orgId);
+  const { data: { user } } = await (await createClient()).auth.getUser();
+  const mustAcceptTerms = await needsTermsAcceptance(admin, org.orgId, org.role, user);
 
   return (
     <OrgProvider org={{ ...org, seasonStart: rules.seasonStart, timezone: rules.timezone }}>
@@ -39,6 +45,7 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
                 {children}
               </main>
             </div>
+            {mustAcceptTerms && <TermsGate />}
             <SubscriptionGate
               plan={org.plan}
               trialEndsAt={org.trialEndsAt}

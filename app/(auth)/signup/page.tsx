@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import { createSignupCheckoutSession } from '@/app/(auth)/signup/actions';
+import { LEGAL_VERSION } from '@/lib/legal';
 import { SignupCardStep, type SavedCard } from '@/components/signup/signup-card-step';
 
 type Step = 'details' | 'card' | 'success';
@@ -22,6 +23,7 @@ export default function SignupPage() {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [locationCount, setLocationCount] = useState('1');
   const [error, setError] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [successEmail, setSuccessEmail] = useState('');
 
@@ -33,6 +35,10 @@ export default function SignupPage() {
   const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!agreed) {
+      setError('Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -65,6 +71,8 @@ export default function SignupPage() {
         location_count: locationCount,
         card_brand: card.brand,
         card_last4: card.last4,
+        terms_version: LEGAL_VERSION,
+        terms_accepted_at: new Date().toISOString(),
       });
       setSuccessEmail(email);
       setStep('success');
@@ -242,9 +250,25 @@ export default function SignupPage() {
               />
             </div>
 
+                <label className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={(e) => setAgreed(e.target.checked)}
+                    className="mt-0.5 size-4 accent-primary"
+                    required
+                  />
+                  <span>
+                    I agree to the{' '}
+                    <a href="/landing/terms" target="_blank" className="underline hover:text-foreground">Terms of Service</a>{' '}
+                    and{' '}
+                    <a href="/landing/privacy" target="_blank" className="underline hover:text-foreground">Privacy Policy</a>{' '}
+                    on behalf of my business.
+                  </span>
+                </label>
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !agreed}
                   className="w-full bg-primary hover:bg-primary/90"
                 >
                   {isLoading ? 'Please wait...' : 'Continue'}
@@ -262,8 +286,8 @@ export default function SignupPage() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          By creating an account you agree to our{' '}
-          <a href="/landing/terms" className="underline hover:text-foreground">Terms of Service</a>
+          RedFox never sells your data or markets to your customers.{' '}
+          <a href="/landing/privacy" className="underline hover:text-foreground">Privacy Policy</a>
         </p>
       </div>
     </div>
