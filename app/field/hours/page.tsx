@@ -1,10 +1,14 @@
 import { getFieldContext, getMyHours } from "@/lib/field";
+import Link from "next/link";
 import { NoEmployeeProfile } from "@/components/field/no-employee-profile";
+import { ShareHours } from "@/components/field/share-hours";
 
 export const dynamic = "force-dynamic";
 
 /** The crew member's own clock in / clock out history. */
-export default async function MyHoursPage() {
+export default async function MyHoursPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+  const { week } = await searchParams;
+  const lastWeek = week === "last";
   const { org, employee } = await getFieldContext();
   if (!employee) return <NoEmployeeProfile role={org.role} />;
 
@@ -24,25 +28,60 @@ export default async function MyHoursPage() {
   const monday = new Date(t);
   monday.setDate(t.getDate() - ((t.getDay() + 6) % 7));
   const mondayStr = monday.toLocaleDateString("en-CA");
-  const weekHours = days.filter((d) => d.day >= mondayStr).reduce((s, d) => s + d.workedHours, 0);
+  const prevMonday = new Date(monday);
+  prevMonday.setDate(monday.getDate() - 7);
+  const prevMondayStr = prevMonday.toLocaleDateString("en-CA");
+  const weekStart = lastWeek ? prevMondayStr : mondayStr;
+  const weekDays = days.filter((d) => d.day >= weekStart && (lastWeek ? d.day < mondayStr : true));
+  const weekHours = weekDays.reduce((s, d) => s + d.workedHours, 0);
+  const shortDay = (d: string) =>
+    new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+  const shareText = [
+    `${employee.name} - hours for week of ${shortDay(weekStart)}`,
+    "",
+    ...[...weekDays].reverse().map((d) => {
+      const times = d.segments.map((s) => `${time(s.in)}-${s.out ? time(s.out) : "still on"}`).join(", ");
+      const lunch = d.lunchMinutes > 0 ? ` (lunch ${d.lunchMinutes}m)` : "";
+      return `${shortDay(d.day)}: ${times}${lunch} = ${hm(d.workedHours)}`;
+    }),
+    "",
+    `Total: ${hm(weekHours)} (${weekHours.toFixed(2)} hrs)`,
+    "From the RedFox crew app clock",
+  ].join("\n");
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-10 pt-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">My hours</h1>
         <p className="text-sm text-muted-foreground">
-          This week: <span className="font-semibold text-foreground tabular-nums">{hm(weekHours)}</span>
+          {lastWeek ? "Last week" : "This week"}:{" "}
+          <span className="font-semibold text-foreground tabular-nums">{hm(weekHours)}</span>
         </p>
       </div>
 
-      {days.length === 0 && (
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+        <div role="tablist" className="flex rounded-lg border border-border bg-muted p-0.5 text-sm font-medium">
+          <Link href="/field/hours" role="tab" aria-selected={!lastWeek}
+            className={`flex-1 rounded-md py-2 text-center ${!lastWeek ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+            This week
+          </Link>
+          <Link href="/field/hours?week=last" role="tab" aria-selected={lastWeek}
+            className={`flex-1 rounded-md py-2 text-center ${lastWeek ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+            Last week
+          </Link>
+        </div>
+        <ShareHours text={shareText} title={`${employee.name} hours`} />
+        <p className="text-xs text-muted-foreground">Sends your clock-in and clock-out times by text or email, straight from the app clock.</p>
+      </div>
+
+      {weekDays.length === 0 && (
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
           No time yet. Tap Start day on My jobs when you get to the shop.
         </div>
       )}
 
       <ul className="flex flex-col gap-3">
-        {days.map((d) => (
+        {weekDays.map((d) => (
           <li key={d.day} className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-baseline justify-between gap-3">
               <p className="font-semibold text-foreground">{dayLabel(d.day)}</p>
