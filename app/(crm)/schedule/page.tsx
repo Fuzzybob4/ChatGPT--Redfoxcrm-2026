@@ -39,6 +39,38 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     : { data: [] as any[] };
   const byId = new Map<string, any>((customers ?? []).map((c: any) => [c.id, c]));
 
+  // At-a-glance line for each stop: new or past customer, and what they're getting
+  // (first line of this season's invoice items).
+  const pastIds = new Set<string>();
+  const serviceOf = new Map<string, string>();
+  for (let i = 0; i < customerIds.length; i += 200) {
+    const ids = customerIds.slice(i, i + 200);
+    const [{ data: before }, { data: items }] = await Promise.all([
+      db.from("invoices").select("customer_id").eq("org_id", org.orgId).in("customer_id", ids).lt("created_at", settings.seasonStart).gt("amount_paid", 0),
+      db
+        .from("invoices")
+        .select("customer_id, created_at, invoice_line_items(description, line_total, sort_order)")
+        .eq("org_id", org.orgId)
+        .in("customer_id", ids)
+        .neq("status", "cancelled")
+        .or(`created_at.gte.${settings.seasonStart},season_year.eq.${settings.seasonYear}`)
+        .order("created_at", { ascending: true }),
+    ]);
+    for (const b of before ?? []) pastIds.add(b.customer_id);
+    for (const inv of (items ?? []) as any[]) {
+      const lines = ((inv.invoice_line_items ?? []) as any[])
+        .filter((l) => Number(l.line_total) > 0)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((l) => String(l.description ?? "").split("\n")[0].trim())
+        .filter((d) => d && !/^(square (invoice|card|cash|payment)|deposit|discount|vendor setup)/i.test(d));
+      if (!lines.length) continue;
+      const prev = serviceOf.get(inv.customer_id);
+      const merged = [...new Set([...(prev ? prev.split(" + ") : []), ...lines])];
+      serviceOf.set(inv.customer_id, merged.slice(0, 3).join(" + "));
+    }
+  }
+  const GENERIC_TITLE = /^(holiday lighting installation|holiday lighting removal|install|installation)$/i;
+
   // Jobs that still only carry a typed crew name get matched to the crew.
   const crewByName = new Map(settings.crews.map((c) => [c.name.toLowerCase(), c.id]));
   const boardJobs: BoardJob[] = (jobs ?? []).map((j: any) => {
@@ -56,6 +88,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       points: jobPoints(j.job_size, settings.sizePoints),
       status: String(j.status ?? "scheduled").toLowerCase(),
       jobType: String(j.job_type ?? "install").toLowerCase(),
+      customerType: j.customer_id ? (pastIds.has(j.customer_id) ? "past" : "new") : undefined,
+      service:
+        (j.customer_id ? serviceOf.get(j.customer_id) ?? null : null) ??
+        (j.title && !GENERIC_TITLE.test(String(j.title).trim()) ? String(j.title).trim() : null),
     };
   });
 

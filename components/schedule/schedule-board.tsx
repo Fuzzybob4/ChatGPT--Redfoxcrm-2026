@@ -44,6 +44,9 @@ export interface BoardJob {
   size: JobSize;
   /** Load points for this job, using the business's job-size weights. */
   points?: number;
+  customerType?: "new" | "past";
+  /** What they're getting, e.g. "Front roof line". */
+  service?: string | null;
   status: string;
   jobType: string;
 }
@@ -56,6 +59,24 @@ const fmtTime = (t?: string | null) => {
   const [h, m] = t.split(":").map(Number);
   return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "AM" : "PM"}`;
 };
+function ServiceLine({ job, compact = false }: { job: BoardJob; compact?: boolean }) {
+  if (!job.customerType && !job.service) return null;
+  return (
+    <span className={`flex min-w-0 items-center gap-1 ${compact ? "text-[10px]" : "text-xs"}`}>
+      {job.customerType && (
+        <span
+          className={`shrink-0 rounded px-1 font-medium ${
+            job.customerType === "new" ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+          }`}
+        >
+          {job.customerType === "new" ? "New" : "Past"}
+        </span>
+      )}
+      {job.service && <span className="truncate text-foreground/80">{job.service}</span>}
+    </span>
+  );
+}
+
 const byTime = (a: BoardJob, b: BoardJob) => (a.startTime ?? "99").localeCompare(b.startTime ?? "99");
 const fmtPts = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ""));
 const selectCls = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
@@ -460,6 +481,7 @@ function MobileDayView({
                     <span className="w-14 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">{fmtTime(j.startTime) || "—"}</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{j.customerName}</span>
+                      <ServiceLine job={j} />
                       <span className="block truncate text-xs text-muted-foreground">
                         {j.jobType.includes("remov") ? "Removal · " : ""}
                         {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
@@ -523,6 +545,7 @@ function Row({
                   {j.startTime ? <span className="font-normal text-muted-foreground">{fmtTime(j.startTime)} · </span> : null}
                   {j.customerName}
                 </span>
+                <ServiceLine job={j} compact />
                 <span className="block truncate text-muted-foreground">
                   {j.jobType.includes("remov") ? "Removal · " : ""}
                   {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
