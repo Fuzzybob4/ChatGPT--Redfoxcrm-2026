@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { stripe } from '@/lib/stripe';
 import { getCurrentOrg } from '@/lib/org';
 
@@ -167,7 +168,8 @@ export async function startStripeConnect(
         metadata: { redfox_org_id: orgId },
       });
       accountId = account.id;
-      await supabase
+      // Payment-account columns are server-only; the caller was checked above.
+      await createAdminClient()
         .from('organizations')
         .update({ stripe_account_id: accountId, payment_provider: 'stripe' })
         .eq('id', orgId);

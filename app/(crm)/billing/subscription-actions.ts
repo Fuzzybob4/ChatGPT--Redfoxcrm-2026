@@ -87,8 +87,8 @@ export async function startSubscription(
 
     await reconcileSubscriptionToDb(subscription, org.orgId, user.id, planId, interval);
 
-    // Mirror high-level status onto the org row for quick reads.
-    await supabase
+    // Mirror high-level status onto the org row for quick reads (server-only columns).
+    await createAdminClient()
       .from('organizations')
       .update({
         subscription_status: subscription.status === 'trialing' ? 'trialing' : 'active',
@@ -139,7 +139,7 @@ export async function cancelSubscription(): Promise<{ ok: true } | { ok: false; 
     const updated = await stripe.subscriptions.update(sub.stripe_subscription_id, {
       cancel_at_period_end: true,
     });
-    await supabase
+    await createAdminClient()
       .from('subscriptions')
       .update({ cancel_at: periodEndIso(updated), updated_at: new Date().toISOString() })
       .eq('stripe_subscription_id', sub.stripe_subscription_id);

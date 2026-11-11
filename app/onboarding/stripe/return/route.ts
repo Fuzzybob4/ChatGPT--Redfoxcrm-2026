@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentOrg } from '@/lib/org';
 import { stripe } from '@/lib/stripe';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const orgId = searchParams.get('org');
 
-  if (orgId) {
-    const supabase = await createClient();
-    const { data: org } = await supabase
+  // Only a member of this business may refresh its Stripe status.
+  const current = await getCurrentOrg();
+  if (orgId && current?.orgId === orgId) {
+    const db = createAdminClient();
+    const { data: org } = await db
       .from('organizations')
       .select('stripe_account_id')
       .eq('id', orgId)
@@ -17,7 +20,7 @@ export async function GET(request: Request) {
     if (org?.stripe_account_id) {
       try {
         const account = await stripe.accounts.retrieve(org.stripe_account_id);
-        await supabase
+        await db
           .from('organizations')
           .update({
             stripe_charges_enabled: account.charges_enabled,

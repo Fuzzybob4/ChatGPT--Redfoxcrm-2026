@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
 import { stripe } from "@/lib/stripe/server";
 import { getAddon, getAddonsMonthlyCents, formatCents } from "@/lib/pricing";
@@ -98,7 +99,7 @@ export async function purchaseAddons(addonIds: string[]): Promise<PurchaseResult
 
     // Activate the add-ons.
     const newActive = Array.from(new Set([...current, ...toActivate]));
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await createAdminClient()
       .from("organizations")
       .update({ active_addons: newActive })
       .eq("id", org.orgId);
@@ -134,7 +135,7 @@ export async function removeAddon(addonId: string): Promise<PurchaseResult> {
     const current: string[] = orgRow?.active_addons ?? [];
     const newActive = current.filter((id) => id !== addonId);
 
-    const { error } = await supabase
+    const { error } = await createAdminClient()
       .from("organizations")
       .update({ active_addons: newActive })
       .eq("id", org.orgId);
