@@ -33,6 +33,7 @@ import { deriveLifecycleStatus, estimateSignal, inCurrentSeason, invoicePaymentS
 import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-control";
 import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
+import { ContractBillingCard } from "@/components/customers/contract-billing-card";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -237,6 +238,8 @@ export default function CustomerDetailPage({ params }: Props) {
             </Card>
 
             <ContactPreferencesCard customerId={customer.id} onChanged={refresh} />
+
+            <ContractBillingCard customerId={customer.id} />
 
             {/* Portal Access Card */}
             <CustomerPortalLinkCard 

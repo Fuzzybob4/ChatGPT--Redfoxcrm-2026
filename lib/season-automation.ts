@@ -118,7 +118,13 @@ export async function runRebookOffers(db: Db, orgId: string, rules: BusinessRule
       : [{ org_id: orgId, invoice_id: inv.id, description: source.title || "Holiday lighting", quantity: 1, unit_price: total, line_total: total, sort_order: 0 }];
     await db.from("invoice_line_items").insert(rows);
     try {
-      await sendInvoiceEmail(db, orgId, inv.id, "rebook_offer");
+      await sendInvoiceEmail(
+        db,
+        orgId,
+        inv.id,
+        "rebook_offer",
+        rules.contractOffer ? { contractOffer: { years: rules.contractYears, percent: rules.contractPercent } } : undefined,
+      );
       emailed++;
     } catch {
       // Logged in invoice_reminder_log; the invoice is still in the portal.

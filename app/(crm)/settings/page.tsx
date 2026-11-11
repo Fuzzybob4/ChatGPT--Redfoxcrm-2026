@@ -87,6 +87,9 @@ export default async function SettingsPage({
     removalStartDay: rules.removalStartDay,
     rebookAuto: rules.rebookAuto,
     rebookDepositPercent: rules.rebookDepositPercent,
+    contractOffer: rules.contractOffer,
+    contractYears: rules.contractYears,
+    contractPercent: rules.contractPercent,
   };
 
   return (

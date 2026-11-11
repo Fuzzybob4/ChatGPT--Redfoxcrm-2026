@@ -16,6 +16,9 @@ export type BusinessRulesInput = {
   removalStartDay: number;
   rebookAuto: boolean;
   rebookDepositPercent: number;
+  contractOffer: boolean;
+  contractYears: number;
+  contractPercent: number;
 };
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -73,6 +76,9 @@ export async function saveBusinessRules(input: BusinessRulesInput): Promise<{ ok
         removal_start_day: rDay,
         rebook_auto: Boolean(input.rebookAuto),
         rebook_deposit_percent: depositPct,
+        contract_offer: Boolean(input.contractOffer),
+        contract_years: Math.min(10, Math.max(1, Math.round(Number(input.contractYears) || 3))),
+        contract_percent: Math.min(100, Math.max(1, Number(input.contractPercent) || 10)),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "org_id" },

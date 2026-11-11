@@ -119,6 +119,28 @@ export function BusinessRulesSettings({ initial, canEdit }: { initial: BusinessR
               <span className="text-sm text-muted-foreground">%</span>
             </div>
           )}
+          {rules.rebookAuto && (
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                <span className="block font-medium">Also offer a multi-year monthly plan</span>
+                <span className="block text-xs text-muted-foreground">
+                  The rebook email gets a second link: lock in this price for several years and pay monthly, no deposit. Customers sign
+                  online and it shows under Contract billing on their page.
+                </span>
+              </span>
+              <Switch checked={rules.contractOffer} disabled={!canEdit} onCheckedChange={(v: boolean) => set("contractOffer", v)} />
+            </label>
+          )}
+          {rules.rebookAuto && rules.contractOffer && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Input type="number" min="1" max="10" className="h-9 w-16" disabled={!canEdit} value={rules.contractYears}
+                onChange={(e) => set("contractYears", Number(e.target.value))} />
+              <span className="text-muted-foreground">years, billed</span>
+              <Input type="number" min="1" max="100" step="0.5" className="h-9 w-20" disabled={!canEdit} value={rules.contractPercent}
+                onChange={(e) => set("contractPercent", Number(e.target.value))} />
+              <span className="text-muted-foreground">% a month (Jan–Oct)</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

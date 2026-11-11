@@ -40,10 +40,15 @@ export interface BusinessRules {
   removalStart: string;
   rebookAuto: boolean;
   rebookDepositPercent: number;
+  /** Offer a multi-year, pay-monthly contract alongside the rebook deposit. */
+  contractOffer: boolean;
+  contractYears: number;
+  contractPercent: number;
+  contractMonths: number[];
 }
 
 const RULE_COLUMNS =
-  "timezone, season_start_month, season_start_day, day_slots, job_size_points, crew_hide_prices, removal_start_month, removal_start_day, rebook_auto, rebook_deposit_percent";
+  "timezone, season_start_month, season_start_day, day_slots, job_size_points, crew_hide_prices, removal_start_month, removal_start_day, rebook_auto, rebook_deposit_percent, contract_offer, contract_years, contract_percent, contract_months";
 
 function rulesFromRow(s: any): BusinessRules {
   const timezone = typeof s?.timezone === "string" && s.timezone ? s.timezone : "America/Chicago";
@@ -67,6 +72,10 @@ function rulesFromRow(s: any): BusinessRules {
     removalStart,
     rebookAuto: Boolean(s?.rebook_auto),
     rebookDepositPercent: Math.min(100, Math.max(0, Number(s?.rebook_deposit_percent ?? 50))),
+    contractOffer: Boolean(s?.contract_offer),
+    contractYears: Number(s?.contract_years) || 3,
+    contractPercent: Number(s?.contract_percent) || 10,
+    contractMonths: Array.isArray(s?.contract_months) && s.contract_months.length ? (s.contract_months as number[]) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     timezone,
     seasonStartMonth,
     seasonStartDay,

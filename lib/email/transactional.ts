@@ -56,6 +56,8 @@ export function renderEmail(opts: {
   paragraphs: string[];
   details?: Array<[string, string]>;
   button?: { text: string; url: string };
+  /** A second, quieter choice under the main button. */
+  secondaryLink?: { text: string; url: string };
   footerNote?: string;
 }): string {
   const details = (opts.details ?? [])
@@ -74,6 +76,7 @@ export function renderEmail(opts: {
 ${opts.paragraphs.map((p) => `<p style="margin:0 0 12px">${esc(p)}</p>`).join("")}
 ${details ? `<table role="presentation" width="100%" style="margin:8px 0 16px;border-top:1px solid #e7e6e2;border-bottom:1px solid #e7e6e2;padding:8px 0;font-size:14px">${details}</table>` : ""}
 ${opts.button ? `<p style="margin:20px 0"><a href="${esc(opts.button.url)}" style="display:inline-block;background:#c2381e;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">${esc(opts.button.text)}</a></p>` : ""}
+${opts.secondaryLink ? `<p style="margin:-8px 0 20px"><a href="${esc(opts.secondaryLink.url)}" style="color:#c2381e;font-weight:600">${esc(opts.secondaryLink.text)}</a></p>` : ""}
 <p style="margin:16px 0 0;color:#52514e;font-size:13px">Questions? Just reply to this email${contact ? ` or reach us at ${contact}` : ""}.</p>
 </td></tr>
 ${opts.footerNote ? `<tr><td style="padding-top:20px;font-size:12px;color:#8a8984">${opts.footerNote}</td></tr>` : ""}
@@ -135,6 +138,7 @@ export async function sendInvoiceEmail(
   orgId: string,
   invoiceId: string,
   kind: Exclude<TransactionalKind, "estimate_sent">,
+  options?: { contractOffer?: { years: number; percent: number } },
 ): Promise<{ to: string }> {
   if (!isEmailConfigured()) throw new EmailNotConfiguredError();
   const { invoice, customer } = await loadInvoiceContext(db, invoiceId, orgId);
@@ -170,6 +174,7 @@ export async function sendInvoiceEmail(
   let paragraphs: string[];
   let button: { text: string; url: string } | undefined = { text: deposit > paid ? "View & pay deposit" : "View & pay invoice", url: portalUrl };
   let footerNote: string | undefined;
+  let secondaryLink: { text: string; url: string } | undefined;
 
   switch (kind) {
     case "invoice_sent":
@@ -198,6 +203,16 @@ export async function sendInvoiceEmail(
         `Want the same setup next season? We've saved your spot at this year's price. Pay the deposit to lock in your install date early.`,
       ];
       button = { text: "Rebook & pay deposit", url: portalUrl };
+      if (options?.contractOffer) {
+        const o = options.contractOffer;
+        paragraphs.push(
+          `Prefer to spread it out? Lock in this price for ${o.years} years and pay ${o.percent}% a month instead. No deposit needed.`,
+        );
+        secondaryLink = {
+          text: `See the ${o.years}-year monthly plan`,
+          url: `${appBaseUrl()}/customer-portal/${encodeURIComponent(portalToken)}/plan?invoice=${encodeURIComponent(invoiceId)}`,
+        };
+      }
       break;
     case "contract_installment":
       subject = `This month's contract payment for ${business.name}`;
@@ -218,7 +233,7 @@ export async function sendInvoiceEmail(
       break;
   }
 
-  const html = renderEmail({ business, greeting: `Hi ${firstName},`, paragraphs, details, button, footerNote });
+  const html = renderEmail({ business, greeting: `Hi ${firstName},`, paragraphs, details, button, secondaryLink, footerNote });
   try {
     const result = await sendEmail({ to, subject, html, fromName: business.name, replyTo: business.email });
     await logEmail(db, { org_id: orgId, invoice_id: invoiceId, kind, email_address: to, status: "sent", provider_id: result.data?.id ?? null });
