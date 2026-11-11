@@ -60,6 +60,7 @@ export async function startJob(jobId: string, location?: string | null): Promise
     .from("time_entries")
     .select("id, scheduled_job_id")
     .eq("employee_id", employee.id)
+    .not("scheduled_job_id", "is", null)
     .is("clock_out", null);
 
   const otherOpen = (openEntries ?? []).find((e) => e.scheduled_job_id !== jobId);
@@ -74,7 +75,12 @@ export async function startJob(jobId: string, location?: string | null): Promise
     ? await admin.from("employees").select("id").eq("org_id", org.orgId).eq("crew_id", crewId).eq("is_active", true)
     : { data: [] as { id: string }[] };
   const ids = [...new Set([employee.id, ...(crewMates ?? []).map((m: { id: string }) => m.id)])];
-  const { data: busy } = await admin.from("time_entries").select("employee_id, scheduled_job_id").in("employee_id", ids).is("clock_out", null);
+  const { data: busy } = await admin
+    .from("time_entries")
+    .select("employee_id, scheduled_job_id")
+    .in("employee_id", ids)
+    .not("scheduled_job_id", "is", null)
+    .is("clock_out", null);
   const busyIds = new Set((busy ?? []).map((b: { employee_id: string }) => b.employee_id));
   const rows = ids
     .filter((id) => !busyIds.has(id))
@@ -90,6 +96,8 @@ export async function startJob(jobId: string, location?: string | null): Promise
     const { error: entryError } = await admin.from("time_entries").insert(rows);
     if (entryError) return { error: "Could not start the timer. Please try again." };
   }
+  // Forgot to start the day? Starting a job starts it for them.
+  await startShift(admin, org.orgId, ids, location);
 
   const { error } = await admin
     .from("scheduled_jobs")
@@ -177,6 +185,71 @@ export async function completeJob(
   return { ok: true, nextJobId: await findNextJob(org.orgId, employee.id, jobId) };
 }
 
+
+/** Start the work-day clock for these employees (skips anyone already on it). */
+async function startShift(admin: any, orgId: string, employeeIds: string[], location?: string | null) {
+  if (!employeeIds.length) return 0;
+  const { data: open } = await admin
+    .from("time_entries")
+    .select("employee_id")
+    .in("employee_id", employeeIds)
+    .is("scheduled_job_id", null)
+    .is("clock_out", null);
+  const on = new Set((open ?? []).map((r: { employee_id: string }) => r.employee_id));
+  const now = new Date().toISOString();
+  const rows = employeeIds
+    .filter((id) => !on.has(id))
+    .map((id) => ({ org_id: orgId, employee_id: id, clock_in: now, break_minutes: 0, notes: "Work day", location_clock_in: location?.slice(0, 120) ?? null }));
+  if (rows.length) await admin.from("time_entries").insert(rows);
+  return rows.length;
+}
+
+/** Who a day-clock tap applies to: a crew lead clocks the whole crew; anyone else, just themselves. */
+async function dayCrew(admin: any, orgId: string, employee: { id: string; crewId: string | null }, isLead: boolean) {
+  if (!isLead || !employee.crewId) return [employee.id];
+  const { data } = await admin.from("employees").select("id").eq("org_id", orgId).eq("crew_id", employee.crewId).eq("is_active", true);
+  return [...new Set([employee.id, ...(data ?? []).map((e: { id: string }) => e.id)])];
+}
+
+/** Start the day (at the shop, storage, or wherever the crew starts). */
+export async function startDay(location?: string | null): Promise<ActionResult> {
+  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  await startShift(admin, org.orgId, ids, location);
+  revalidatePath("/field");
+  revalidatePath("/timesheets");
+  return { ok: true };
+}
+
+/** End the day (back at storage, or at the last job). Also stops any job timer still running. */
+export async function endDay(location?: string | null): Promise<ActionResult> {
+  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const { data: open } = await admin
+    .from("time_entries")
+    .select("id, employee_id, clock_in, break_minutes")
+    .in("employee_id", ids)
+    .is("clock_out", null);
+  for (const e of open ?? []) {
+    const hours = Math.max(0, (now.getTime() - new Date(e.clock_in).getTime()) / 3_600_000 - (e.break_minutes ?? 0) / 60);
+    await admin
+      .from("time_entries")
+      .update({
+        clock_out: nowIso,
+        total_hours: Math.round(hours * 100) / 100,
+        location_clock_out: location?.slice(0, 120) ?? null,
+        updated_at: nowIso,
+      })
+      .eq("id", e.id);
+  }
+  revalidatePath("/field");
+  revalidatePath("/timesheets");
+  return { ok: true };
+}
 
 /** Stop every running timer on this job (the whole crew). */
 async function clockOutJob(admin: any, jobId: string, leadId: string, location?: string | null) {

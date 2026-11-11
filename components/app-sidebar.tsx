@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Map,
   HardHat,
+  Clock,
   BarChart3,
   Receipt,
   Mail,
@@ -105,6 +106,13 @@ const navItems = [
     title: "Crew",
     href: "/crew",
     icon: HardHat,
+    children: [
+      {
+        title: "Timesheets",
+        href: "/timesheets",
+        icon: Clock,
+      },
+    ],
   },
   {
     title: "Fleet Management",

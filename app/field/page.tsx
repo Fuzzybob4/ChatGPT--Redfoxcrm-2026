@@ -1,15 +1,24 @@
-import { getAssignedJobs, getFieldContext, getOpenTimeEntry } from "@/lib/field";
+import { getAssignedJobs, getFieldContext, getOpenShift, getOpenTimeEntry } from "@/lib/field";
 import { FieldJobList } from "@/components/field/field-job-list";
 import { NoEmployeeProfile } from "@/components/field/no-employee-profile";
+import { DayClock } from "@/components/field/day-clock";
 
 export default async function FieldHomePage() {
-  const { org, employee } = await getFieldContext();
+  const { org, employee, canRunJobs } = await getFieldContext();
   if (!employee) return <NoEmployeeProfile role={org.role} />;
 
-  const [jobs, openEntry] = await Promise.all([
+  const [jobs, openEntry, shift] = await Promise.all([
     getAssignedJobs(org.orgId, employee.id),
     getOpenTimeEntry(employee.id),
+    getOpenShift(employee.id),
   ]);
 
-  return <FieldJobList jobs={jobs} openEntry={openEntry} firstName={employee.name.split(" ")[0]} />;
+  return (
+    <>
+      <div className="px-4 pt-4">
+        <DayClock since={shift?.clockIn ?? null} forCrew={canRunJobs && Boolean(employee.crewId)} />
+      </div>
+      <FieldJobList jobs={jobs} openEntry={openEntry} firstName={employee.name.split(" ")[0]} />
+    </>
+  );
 }

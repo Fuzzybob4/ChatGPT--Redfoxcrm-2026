@@ -185,11 +185,26 @@ export async function getOpenTimeEntry(employeeId: string): Promise<OpenTimeEntr
     .from("time_entries")
     .select("id, scheduled_job_id, clock_in")
     .eq("employee_id", employeeId)
+    .not("scheduled_job_id", "is", null)
     .is("clock_out", null)
     .order("clock_in", { ascending: false })
     .limit(1)
     .maybeSingle();
   return data ? { id: data.id, jobId: data.scheduled_job_id, clockIn: data.clock_in } : null;
+}
+
+/** The employee's work-day clock (time entries with no job), if it's running. */
+export async function getOpenShift(employeeId: string): Promise<{ id: string; clockIn: string } | null> {
+  const { data } = await createAdminClient()
+    .from("time_entries")
+    .select("id, clock_in")
+    .eq("employee_id", employeeId)
+    .is("scheduled_job_id", null)
+    .is("clock_out", null)
+    .order("clock_in", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? { id: data.id, clockIn: data.clock_in } : null;
 }
 
 export interface FieldMapStop {
