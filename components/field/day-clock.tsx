@@ -51,7 +51,7 @@ export function DayClock({
             <ElapsedTimer since={since} baseMs={0} className="font-mono text-xl font-bold tabular-nums text-foreground" />
           </div>
           <Button variant="outline" className="h-12" disabled={pending}
-            onClick={() => run(startLunch, forCrew ? "Clock your whole crew out for lunch? Any job timer pauses too." : "Clock out for lunch?")}>
+            onClick={() => run(startLunch, "Clock out for lunch? Your job timer pauses too.")}>
             <Utensils className="size-4" />
             Lunch
           </Button>
@@ -75,7 +75,7 @@ export function DayClock({
       ) : (
         <div className="flex items-center gap-3">
           <p className="flex-1 text-sm text-muted-foreground">
-            {forCrew ? "Start the day for your crew when you leave the shop." : "Start your day when you get to the shop."}
+            Start your day when you get to the shop or storage. Everyone clocks in for themselves.
           </p>
           <Button className="h-12" disabled={pending} onClick={() => run(startDay)}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Sun className="size-4" />}

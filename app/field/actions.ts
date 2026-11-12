@@ -68,12 +68,19 @@ export async function startJob(jobId: string, location?: string | null): Promise
 
   const now = new Date().toISOString();
 
-  // The lead starts the clock for the whole crew: themselves plus everyone on
-  // the job's crew who isn't already on the clock somewhere else.
-  // The lead starts the clock for everyone working with this crew today.
+  // Job time goes to the lead plus crew members who have started their own day
+  // (Start day). Nobody gets put on the clock just because the lead did.
   const crewId = job.crewId ?? employee.crewId;
   const crewMates = crewId ? await crewRoster(admin, org.orgId, crewId) : [];
-  const ids = [...new Set([employee.id, ...crewMates])];
+  const { data: onDay } = crewMates.length
+    ? await admin
+        .from("time_entries")
+        .select("employee_id")
+        .in("employee_id", crewMates)
+        .is("scheduled_job_id", null)
+        .is("clock_out", null)
+    : { data: [] as { employee_id: string }[] };
+  const ids = [...new Set([employee.id, ...(onDay ?? []).map((r: { employee_id: string }) => r.employee_id)])];
   const { data: busy } = await admin
     .from("time_entries")
     .select("employee_id, scheduled_job_id")
@@ -95,8 +102,8 @@ export async function startJob(jobId: string, location?: string | null): Promise
     const { error: entryError } = await admin.from("time_entries").insert(rows);
     if (entryError) return { error: "Could not start the timer. Please try again." };
   }
-  // Forgot to start the day? Starting a job starts it for them.
-  await startShift(admin, org.orgId, ids, location);
+  // Lead forgot to tap Start day? Starting a job starts it for them (only them).
+  await startShift(admin, org.orgId, [employee.id], location);
 
   const { error } = await admin
     .from("scheduled_jobs")
@@ -203,17 +210,11 @@ async function startShift(admin: any, orgId: string, employeeIds: string[], loca
   return rows.length;
 }
 
-/** Who a day-clock tap applies to: a crew lead clocks the whole crew; anyone else, just themselves. */
-async function dayCrew(admin: any, orgId: string, employee: { id: string; crewId: string | null }, isLead: boolean) {
-  if (!isLead || !employee.crewId) return [employee.id];
-  return [...new Set([employee.id, ...(await crewRoster(admin, orgId, employee.crewId))])];
-}
-
-/** Start the day (at the shop, storage, or wherever the crew starts). */
+/** Start the day (at the shop or storage). Everyone clocks in for themselves. */
 export async function startDay(location?: string | null): Promise<ActionResult> {
-  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  const { org, employee, admin } = await getFieldContext();
   if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
-  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  const ids = [employee.id];
   await startShift(admin, org.orgId, ids, location);
   revalidatePath("/field");
   revalidatePath("/timesheets");
@@ -259,9 +260,9 @@ export async function endDay(location?: string | null): Promise<ActionResult> {
  * so lunch is never counted as paid time.
  */
 export async function startLunch(location?: string | null): Promise<ActionResult> {
-  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  const { employee, admin } = await getFieldContext();
   if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
-  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  const ids = [employee.id];
   const now = new Date();
   const nowIso = now.toISOString();
   const { data: open } = await admin
