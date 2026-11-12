@@ -10,7 +10,12 @@ export interface FieldEmployee {
   canManageWorkOrders: boolean;
   /** Crew lead: runs the job (on my way, start/pause the crew's time, finish or return visit). */
   isLead: boolean;
+  /** The crew they work with today (their own, or the one they're helping). */
   crewId: string | null;
+  /** Their regular crew. */
+  homeCrewId?: string | null;
+  /** True when they picked "Working with another crew today". */
+  helpingToday?: boolean;
 }
 
 export const OFFICE_ROLES = ["owner", "admin", "manager"];
@@ -51,11 +56,13 @@ export async function getFieldContext() {
   const admin = createAdminClient();
   const { data: employee } = await admin
     .from("employees")
-    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id, crew_id")
+    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id, crew_id, helping_crew_id, helping_date")
     .eq("org_id", org.orgId)
     .eq("user_id", org.userId)
     .maybeSingle();
 
+  const today = employee?.helping_date ? await orgToday(org.orgId) : null;
+  const helpingToday = Boolean(employee?.helping_crew_id && employee.helping_date === today);
   const fieldEmployee: FieldEmployee | null = employee
     ? {
         id: employee.id,
@@ -70,7 +77,9 @@ export async function getFieldContext() {
           employee.can_access_work_orders === true ||
           /\blead\b/i.test(employee.position ?? ""),
         isLead: employee.role === "crew_lead" || /\blead\b/i.test(employee.position ?? ""),
-        crewId: (employee.crew_id as string | null) ?? null,
+        crewId: helpingToday ? (employee.helping_crew_id as string) : ((employee.crew_id as string | null) ?? null),
+        homeCrewId: (employee.crew_id as string | null) ?? null,
+        helpingToday,
       }
     : null;
 
@@ -87,11 +96,48 @@ export async function getFieldContext() {
 
 type JobRow = Record<string, any>;
 
-/** The crew this employee belongs to (jobs assigned to that crew are theirs too). */
+/** Today's date in the business's time zone. */
+async function orgToday(orgId: string): Promise<string> {
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  return (await loadBusinessRules(createAdminClient(), orgId)).today;
+}
+
+/**
+ * The crew this employee works with today: their own crew, or the crew they
+ * picked with "Working with ... today" (jobs on that crew are theirs too).
+ */
 async function crewIdOf(employeeId: string | null): Promise<string | null> {
   if (!employeeId) return null;
-  const { data } = await createAdminClient().from("employees").select("crew_id").eq("id", employeeId).maybeSingle();
-  return (data?.crew_id as string | null) ?? null;
+  const { data } = await createAdminClient()
+    .from("employees")
+    .select("org_id, crew_id, helping_crew_id, helping_date")
+    .eq("id", employeeId)
+    .maybeSingle();
+  if (!data) return null;
+  if (data.helping_crew_id && data.helping_date && data.helping_date === (await orgToday(data.org_id))) {
+    return data.helping_crew_id as string;
+  }
+  return (data.crew_id as string | null) ?? null;
+}
+
+/**
+ * Everyone working with a crew today: its own members (minus anyone helping
+ * another crew today) plus people from other crews helping it today.
+ */
+export async function crewRoster(admin: any, orgId: string, crewId: string): Promise<string[]> {
+  const today = await orgToday(orgId);
+  const { data } = await admin
+    .from("employees")
+    .select("id, crew_id, helping_crew_id, helping_date")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .or(`crew_id.eq.${crewId},helping_crew_id.eq.${crewId}`);
+  return (data ?? [])
+    .filter((e: any) => {
+      const helping = e.helping_crew_id && e.helping_date === today;
+      return helping ? e.helping_crew_id === crewId : e.crew_id === crewId;
+    })
+    .map((e: any) => e.id as string);
 }
 
 /** PostgREST filter: assigned by name, or the job is on their crew. */

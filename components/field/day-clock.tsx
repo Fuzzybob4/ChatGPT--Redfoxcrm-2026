@@ -56,7 +56,7 @@ export function DayClock({
             Lunch
           </Button>
           <Button variant="outline" className="h-12" disabled={pending}
-            onClick={() => run(endDay, forCrew ? "End the day for your whole crew?" : "End your work day?")}>
+            onClick={() => run(endDay, "End your work day? This clocks out only you.")}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Moon className="size-4" />}
             End day
           </Button>

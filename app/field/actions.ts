@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAccessibleJob, getAssignedJobs, getFieldContext, isOpenStatus } from "@/lib/field";
+import { crewRoster, getAccessibleJob, getAssignedJobs, getFieldContext, isOpenStatus } from "@/lib/field";
 import { createNotification } from "@/lib/notifications-server";
 import { RETURN_REASONS, type ReturnReason } from "@/components/field/format";
 
@@ -70,11 +70,10 @@ export async function startJob(jobId: string, location?: string | null): Promise
 
   // The lead starts the clock for the whole crew: themselves plus everyone on
   // the job's crew who isn't already on the clock somewhere else.
+  // The lead starts the clock for everyone working with this crew today.
   const crewId = job.crewId ?? employee.crewId;
-  const { data: crewMates } = crewId
-    ? await admin.from("employees").select("id").eq("org_id", org.orgId).eq("crew_id", crewId).eq("is_active", true)
-    : { data: [] as { id: string }[] };
-  const ids = [...new Set([employee.id, ...(crewMates ?? []).map((m: { id: string }) => m.id)])];
+  const crewMates = crewId ? await crewRoster(admin, org.orgId, crewId) : [];
+  const ids = [...new Set([employee.id, ...crewMates])];
   const { data: busy } = await admin
     .from("time_entries")
     .select("employee_id, scheduled_job_id")
@@ -207,8 +206,7 @@ async function startShift(admin: any, orgId: string, employeeIds: string[], loca
 /** Who a day-clock tap applies to: a crew lead clocks the whole crew; anyone else, just themselves. */
 async function dayCrew(admin: any, orgId: string, employee: { id: string; crewId: string | null }, isLead: boolean) {
   if (!isLead || !employee.crewId) return [employee.id];
-  const { data } = await admin.from("employees").select("id").eq("org_id", orgId).eq("crew_id", employee.crewId).eq("is_active", true);
-  return [...new Set([employee.id, ...(data ?? []).map((e: { id: string }) => e.id)])];
+  return [...new Set([employee.id, ...(await crewRoster(admin, orgId, employee.crewId))])];
 }
 
 /** Start the day (at the shop, storage, or wherever the crew starts). */
@@ -222,11 +220,15 @@ export async function startDay(location?: string | null): Promise<ActionResult> 
   return { ok: true };
 }
 
-/** End the day (back at storage, or at the last job). Also stops any job timer still running. */
+/**
+ * End the day (back at storage, or at the last job). Only clocks out the person
+ * who taps it, so a crew member who goes on to help another crew keeps working.
+ * Also stops any job timer they still have running.
+ */
 export async function endDay(location?: string | null): Promise<ActionResult> {
-  const { org, employee, admin, canRunJobs } = await getFieldContext();
+  const { employee, admin } = await getFieldContext();
   if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
-  const ids = await dayCrew(admin, org.orgId, employee, canRunJobs);
+  const ids = [employee.id];
   const now = new Date();
   const nowIso = now.toISOString();
   const { data: open } = await admin
@@ -383,4 +385,28 @@ export async function needsReturnVisit(
 async function findNextJob(orgId: string, employeeId: string, currentJobId: string) {
   const jobs = await getAssignedJobs(orgId, employeeId);
   return jobs.find((j) => j.id !== currentJobId && isOpenStatus(j.status))?.id ?? null;
+}
+
+/**
+ * "Working with ___ today": join another crew for the day (or go back to your
+ * own). Their jobs show up for you, and that crew's lead clocks you in with them.
+ */
+export async function setHelpingCrew(crewId: string | null): Promise<ActionResult> {
+  const { org, employee, admin } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  if (crewId) {
+    const { data: crew } = await admin.from("crews").select("id").eq("id", crewId).eq("org_id", org.orgId).maybeSingle();
+    if (!crew) return { error: "That crew wasn't found." };
+  }
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const { today } = await loadBusinessRules(admin, org.orgId);
+  const goingHome = !crewId || crewId === employee.homeCrewId;
+  await admin
+    .from("employees")
+    .update(goingHome ? { helping_crew_id: null, helping_date: null } : { helping_crew_id: crewId, helping_date: today })
+    .eq("id", employee.id)
+    .eq("org_id", org.orgId);
+  revalidatePath("/field", "layout");
+  revalidatePath("/schedule");
+  return { ok: true };
 }
