@@ -41,7 +41,7 @@ export default async function MyHoursPage({ searchParams }: { searchParams: Prom
     "",
     ...[...weekDays].reverse().map((d) => {
       const times = d.segments.map((s) => `${time(s.in)}-${s.out ? time(s.out) : "still on"}`).join(", ");
-      const lunch = d.lunchMinutes > 0 ? ` (lunch ${d.lunchMinutes}m)` : "";
+      const lunch = (d.lunchMinutes > 0 ? ` (lunch ${d.lunchMinutes}m)` : "") + (d.editNote ? " [edited by office]" : "");
       return `${shortDay(d.day)}: ${times}${lunch} = ${hm(d.workedHours)}`;
     }),
     "",
@@ -97,6 +97,11 @@ export default async function MyHoursPage({ searchParams }: { searchParams: Prom
                 </li>
               ))}
             </ul>
+            {d.editNote && (
+              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                <span className="rounded bg-emerald-100 px-1 font-semibold dark:bg-emerald-900/40">Edited by office</span> {d.editNote}
+              </p>
+            )}
             {d.lunchMinutes > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">Lunch: {d.lunchMinutes} min (not paid)</p>
             )}

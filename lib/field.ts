@@ -494,6 +494,8 @@ export interface HoursDay {
   lunchMinutes: number;
   jobHours: number;
   segments: { in: string; out: string | null }[];
+  /** Office note when the times were corrected. */
+  editNote: string | null;
 }
 
 /** One person's clock history, newest day first. */
@@ -504,7 +506,7 @@ export async function getMyHours(orgId: string, employeeId: string, days = 14): 
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const { data } = await db
     .from("time_entries")
-    .select("scheduled_job_id, clock_in, clock_out, total_hours")
+    .select("scheduled_job_id, clock_in, clock_out, total_hours, edited_at, edit_note")
     .eq("employee_id", employeeId)
     .gte("clock_in", since)
     .order("clock_in", { ascending: true });
@@ -534,6 +536,7 @@ export async function getMyHours(orgId: string, employeeId: string, days = 14): 
       lunchMinutes: Math.round(lunch),
       jobHours: r.jobs.reduce((s: number, e: any) => s + hrs(e), 0),
       segments: segs.map((e: any) => ({ in: e.clock_in, out: e.clock_out })),
+      editNote: [...r.shifts, ...r.jobs].filter((e: any) => e.edited_at).map((e: any) => e.edit_note).pop() ?? null,
     };
   });
   out.sort((a, b) => b.day.localeCompare(a.day));

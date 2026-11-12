@@ -5,11 +5,17 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadBusinessRules } from "@/lib/schedule-server";
 import { addDays } from "@/lib/schedule";
+import { EditDayTimes } from "@/components/timesheets/edit-day-times";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Timesheets - RedFox CRM" };
 
 type Entry = {
+  id: string;
+  edited_at: string | null;
+  edit_note: string | null;
+  original_clock_in: string | null;
+  original_clock_out: string | null;
   employee_id: string;
   scheduled_job_id: string | null;
   clock_in: string;
@@ -36,7 +42,7 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
   const [{ data: entries }, { data: employees }] = await Promise.all([
     db
       .from("time_entries")
-      .select("employee_id, scheduled_job_id, clock_in, clock_out, total_hours, location_clock_in, location_clock_out")
+      .select("id, employee_id, scheduled_job_id, clock_in, clock_out, total_hours, location_clock_in, location_clock_out, edited_at, edit_note, original_clock_in, original_clock_out")
       .eq("org_id", org.orgId)
       .gte("clock_in", `${addDays(since, -1)}T00:00:00Z`)
       .order("clock_in", { ascending: true })
@@ -47,6 +53,8 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
     (employees ?? []).map((e: any) => [e.id, e.full_name?.trim() || [e.first_name, e.last_name].filter(Boolean).join(" ") || e.email || "Employee"]),
   );
   const dayOf = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: tz });
+  const hhmm = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "";
   const timeOf = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }) : "—";
   const now = Date.now();
@@ -99,6 +107,8 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
             const dayHours = r.shifts.reduce((s, e) => s + hrs(e), 0);
             const jobHours = r.jobs.reduce((s, e) => s + hrs(e), 0);
             const open = r.shifts.some((e) => !e.clock_out);
+            const edits = [...r.shifts, ...r.jobs].filter((e) => e.edited_at);
+            const dayLabel = new Date(`${r.day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
             let lunchMin = 0;
             for (let i = 1; i < r.shifts.length; i++) {
               const prevOut = r.shifts[i - 1].clock_out;
@@ -117,6 +127,17 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
                       {shift ? `${timeOf(shift.clock_in)} – ${open ? "still on" : timeOf(lastShift.clock_out)}` : "No Start day (job time only)"}
                       {lunchMin > 0 ? ` · ${Math.round(lunchMin)} min lunch` : ""}
                     </p>
+                    {edits.length > 0 && (
+                      <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-400">
+                        <span className="rounded bg-emerald-100 px-1 font-semibold dark:bg-emerald-900/40">Edited</span>{" "}
+                        {edits[edits.length - 1].edit_note}
+                        {edits.some((e) => e.original_clock_in) && (
+                          <span className="text-muted-foreground">
+                            {" "}· was {edits.filter((e) => e.original_clock_in).map((e) => `${timeOf(e.original_clock_in)}–${timeOf(e.original_clock_out)}`).join(", ")}
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <p className="text-xs">
                       {startMap && <a className="text-primary underline" href={startMap} target="_blank" rel="noreferrer">Start spot</a>}
                       {startMap && endMap && " · "}
@@ -127,6 +148,15 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
                     <p className="font-semibold tabular-nums">{(r.shifts.length ? dayHours : jobHours).toFixed(2)} h</p>
                     <p className="text-xs text-muted-foreground tabular-nums">{jobHours.toFixed(2)} h on jobs</p>
                     {open && <p className="text-xs font-medium text-amber-600">Day not ended</p>}
+                    <div className="mt-1">
+                      <EditDayTimes
+                        employeeId={r.employeeId}
+                        employeeName={nameOf.get(r.employeeId) ?? "Employee"}
+                        day={r.day}
+                        dayLabel={dayLabel}
+                        segments={r.shifts.map((e) => ({ id: e.id, clockIn: hhmm(e.clock_in), clockOut: hhmm(e.clock_out) }))}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
