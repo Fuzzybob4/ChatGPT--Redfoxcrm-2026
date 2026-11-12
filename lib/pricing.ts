@@ -1,7 +1,7 @@
 // Single source of truth for all RedFox CRM subscription and add-on pricing.
 // Prices are stored in cents to avoid floating-point rounding issues.
 
-export type PlanId = "starter" | "professional" | "enterprise";
+export type PlanId = "starter" | "professional" | "business" | "enterprise";
 export type BillingInterval = "monthly" | "yearly";
 
 export interface PlanDefinition {
@@ -34,22 +34,33 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     emailsPerMonth: 4000,
     emailOverageCentsPerEmail: 1.2, // $0.012
   },
+  business: {
+    id: "business",
+    name: "Business",
+    monthlyCents: 19900,
+    description: "For established companies running several crews",
+    emailsPerMonth: 6000,
+    emailOverageCentsPerEmail: 1.0, // $0.010
+  },
+  // Enterprise is custom-quoted ("Contact us"); this price is only a default
+  // the RedFox admin can override per business.
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
     monthlyCents: 24900,
-    description: "For large organizations needing custom solutions",
+    description: "For large or multi-location companies needing a custom plan",
     emailsPerMonth: 6000,
     emailOverageCentsPerEmail: 1.0, // $0.010
   },
 };
 
-// Yearly billing gives 20% off the BASE plan only (not add-ons).
+// Paying for a full year up front gives 20% off the BASE plan only (not add-ons).
 export const YEARLY_DISCOUNT = 0.2;
 
 export const PLAN_LOCATION_LIMITS: Record<PlanId, number | null> = {
   starter: 1,
-  professional: 10,
+  professional: 1,
+  business: 1,
   enterprise: null,
 };
 
@@ -57,6 +68,7 @@ export const PLAN_LOCATION_LIMITS: Record<PlanId, number | null> = {
 export const PLAN_USER_LIMITS: Record<PlanId, number | null> = {
   starter: 3,
   professional: 6,
+  business: 12,
   enterprise: null,
 };
 

@@ -71,7 +71,7 @@ export default async function AdminCustomersPage({ searchParams }: SearchProps) 
             />
           </form>
           <div className="flex gap-2">
-            {['starter', 'professional', 'enterprise'].map((p) => (
+            {['starter', 'professional', 'business', 'enterprise'].map((p) => (
               <Link
                 key={p}
                 href={plan === p ? '/admin/customers' : `/admin/customers?plan=${p}`}

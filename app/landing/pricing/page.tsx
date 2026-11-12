@@ -12,62 +12,68 @@ const plans = [
     name: 'Starter',
     price: '$49',
     period: '/month',
-    description: 'Perfect for solo operators and small teams',
+    description: 'For owner-operators getting organized',
     features: [
-      '1 Location',
       'Up to 3 users (owner, office & crew logins)',
+      '1 location',
       'Up to 3,000 customers & properties',
-      'Basic scheduling',
-      'Estimates & invoicing',
-      'Mobile app access',
+      'Scheduling & crew app',
+      'Estimates, invoices & online pay',
       'Email support',
-      'Monthly reports',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Start 30-Day Free Trial',
     highlighted: false,
   },
   {
     name: 'Professional',
     price: '$120',
     period: '/month',
-    description: 'For growing businesses with multiple crews',
+    description: 'For a growing company with a crew or two',
     features: [
-      'Up to 5 locations',
       'Up to 6 users: admin, office staff & installers',
+      '1 location',
       'Up to 15,000 customers & properties',
-      'Advanced scheduling & routing',
-      'Estimates & invoicing',
-      'Customer portal',
-      'Mobile app access',
-      'Photo documentation',
-      'Performance analytics',
+      'Crew schedule board & auto-scheduling',
+      'Crew app with GPS time clock & timesheets',
+      'Customer portal, payment reminders & rebooking',
       'Priority email & chat support',
-      'Weekly reports',
-      'API access',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Start 30-Day Free Trial',
     highlighted: true,
   },
   {
-    name: 'Enterprise',
-    price: '$249',
+    name: 'Business',
+    price: '$199',
     period: '/month',
-    description: 'For large organizations needing custom solutions',
+    description: 'For established companies running several crews',
     features: [
-      'Unlimited locations',
-      'Unlimited users',
+      'Up to 12 users',
+      '1 location',
       'Unlimited customers & properties',
-      'White-label options',
-      'Custom integrations (QuickBooks, Stripe & more)',
-      'Dedicated account manager',
-      'Custom reporting',
-      'Advanced security features',
-      'Phone & prioritized support',
+      'Everything in Professional',
+      'Multi-year contracts & monthly billing plans',
+      'Priority phone support',
     ],
-    cta: 'Contact Sales',
+    cta: 'Start 30-Day Free Trial',
+    highlighted: false,
+  },
+  {
+    name: 'Enterprise',
+    price: 'Custom',
+    period: '',
+    description: '13+ users or multiple locations',
+    features: [
+      'Unlimited users',
+      'Multiple locations',
+      'Everything in Business',
+      'Custom setup & data import',
+      'Dedicated account manager',
+    ],
+    cta: 'Contact Us',
     highlighted: false,
   },
 ];
+
 
 const addons = [
   {
@@ -110,14 +116,14 @@ export default function PricingPage() {
             Simple, Transparent Pricing
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your business. All plans include a 30-day free trial with full access to all features.
+            Every plan starts with a 30-day free trial. Pay for a full year up front and save 20%.
           </p>
         </div>
       </section>
 
       {/* Pricing Cards */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {plans.map((plan, idx) => (
             <div
               key={idx}
@@ -140,7 +146,7 @@ export default function PricingPage() {
                 <span className="text-muted-foreground ml-2">{plan.period}</span>
               </div>
 
-              <Link href="/signup" className="w-full mb-8 block">
+              <Link href={plan.price === 'Custom' ? 'mailto:redfoxcrm1@gmail.com?subject=RedFox%20Enterprise' : '/signup'} className="w-full mb-8 block">
                 <Button
                   variant={plan.highlighted ? 'default' : 'outline'}
                   size="lg"
@@ -203,29 +209,29 @@ export default function PricingPage() {
                   <th className="text-left py-3 px-4 font-semibold text-foreground">Feature</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground">Starter</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground">Professional</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground">Business</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground">Enterprise</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['Locations', '1', '5', 'Unlimited'],
-                  ['Users (logins)', '3', '6', 'Unlimited'],
-                  ['Customers & Properties', '3,000', '15,000', 'Unlimited'],
-                  ['Estimates & Invoicing', '✓', '✓', '✓'],
-                  ['Job Scheduling', 'Basic', 'Advanced', 'Advanced'],
-                  ['Route Optimization', '—', 'Coming soon', 'Coming soon'],
-                  ['Customer Portal', '—', '✓', '✓'],
-                  ['Mobile App', '✓', '✓', '✓'],
-                  ['Analytics & Reports', 'Monthly', 'Weekly', 'Custom'],
-                  ['API Access', '—', '✓', '✓'],
-                  ['White Label', '—', '—', '✓'],
-                  ['Dedicated Support', '—', '✓', '✓'],
+                  ['Price', '$49/mo', '$120/mo', '$199/mo', 'Custom'],
+                  ['Users (logins)', '3', '6', '12', 'Unlimited'],
+                  ['Locations', '1', '1', '1', 'Multiple'],
+                  ['Customers & Properties', '3,000', '15,000', 'Unlimited', 'Unlimited'],
+                  ['Estimates, Invoicing & Online Pay', '✓', '✓', '✓', '✓'],
+                  ['Crew App & GPS Time Clock', '✓', '✓', '✓', '✓'],
+                  ['Customer Portal & Payment Reminders', '✓', '✓', '✓', '✓'],
+                  ['Automatic Rebooking', '—', '✓', '✓', '✓'],
+                  ['Multi-year Contracts', '—', '—', '✓', '✓'],
+                  ['Support', 'Email', 'Email & chat', 'Phone', 'Dedicated manager'],
                 ].map((row, ridx) => (
                   <tr key={ridx} className="border-b border-border hover:bg-background/50 transition-colors">
                     <td className="py-3 px-4 text-foreground font-medium">{row[0]}</td>
                     <td className="py-3 px-4 text-center text-muted-foreground">{row[1]}</td>
                     <td className="py-3 px-4 text-center text-muted-foreground">{row[2]}</td>
                     <td className="py-3 px-4 text-center text-muted-foreground">{row[3]}</td>
+                    <td className="py-3 px-4 text-center text-muted-foreground">{row[4]}</td>
                   </tr>
                 ))}
               </tbody>

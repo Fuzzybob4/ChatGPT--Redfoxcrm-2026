@@ -16,7 +16,7 @@ export type JobType = "install" | "removal" | "other";
 export type InvoiceStatus = "Draft" | "Sent" | "Paid" | "Overdue";
 export type CustomerStatus = "Active" | "Inactive" | "Lead";
 export type EstimateStatus = "Draft" | "Sent" | "Accepted" | "Rejected" | "Converted";
-export type PlanType = "starter" | "professional" | "enterprise";
+export type PlanType = "starter" | "professional" | "business" | "enterprise";
 
 export interface Location {
   id: string;

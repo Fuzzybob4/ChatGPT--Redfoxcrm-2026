@@ -29,7 +29,7 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-const PLANS = ['starter', 'professional', 'enterprise'];
+const PLANS = ['starter', 'professional', 'business', 'enterprise'];
 
 export default async function AdminCustomerDetailPage({ params }: Props) {
   const { id } = await params;

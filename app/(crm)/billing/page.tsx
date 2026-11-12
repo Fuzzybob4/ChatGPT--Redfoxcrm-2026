@@ -19,6 +19,7 @@ import {
   getPlan,
 } from '@/lib/pricing';
 import { getTrialState } from '@/lib/trial';
+import { changePlan } from './subscription-actions';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
@@ -29,12 +30,19 @@ const PLAN_FEATURES: Record<string, string[]> = {
     'Basic reporting',
   ],
   professional: [
-    'Up to 5 locations',
+    '1 location',
     'Up to 6 users: admin, office & crew',
     'Up to 15,000 customers',
     '4,000 marketing emails/mo',
     'Advanced reporting',
     'Priority support',
+  ],
+  business: [
+    '1 location',
+    'Up to 12 users',
+    'Unlimited customers',
+    'Multi-year contracts',
+    'Priority phone support',
   ],
   enterprise: [
     'Unlimited locations',
@@ -229,7 +237,7 @@ export default function BillingPage() {
           {/* Available Plans */}
           <div>
             <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {(Object.keys(PLANS) as (keyof typeof PLANS)[]).map((planId) => {
                 const plan = PLANS[planId];
                 const current = planId === currentPlanId;
@@ -252,13 +260,19 @@ export default function BillingPage() {
                             </p>
                           </div>
                         )}
-                        <p className="text-2xl font-bold">
-                          {formatCents(plan.monthlyCents)}
-                          <span className="text-sm font-normal text-muted-foreground">/mo</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          or {formatCents(yearlyCents)}/yr &mdash; save {Math.round(YEARLY_DISCOUNT * 100)}%
-                        </p>
+                        {plan.id === 'enterprise' && !current ? (
+                          <p className="text-2xl font-bold">Custom</p>
+                        ) : (
+                          <>
+                            <p className="text-2xl font-bold">
+                              {formatCents(plan.monthlyCents)}
+                              <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              or {formatCents(yearlyCents)}/yr paid up front &mdash; save {Math.round(YEARLY_DISCOUNT * 100)}%
+                            </p>
+                          </>
+                        )}
                       </div>
                       <ul className="space-y-2 text-sm">
                         {PLAN_FEATURES[plan.id].map((feature) => (
@@ -275,10 +289,15 @@ export default function BillingPage() {
                       </ul>
                       {current ? (
                         <p className="text-sm text-muted-foreground font-medium">Current plan</p>
+                      ) : plan.id === 'enterprise' ? (
+                        <a
+                          href="mailto:redfoxcrm1@gmail.com?subject=RedFox%20Enterprise"
+                          className="block w-full rounded-lg border border-border bg-background px-4 py-2 text-center text-sm font-medium hover:bg-accent transition-colors"
+                        >
+                          Contact us
+                        </a>
                       ) : (
-                        <button className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent transition-colors">
-                          Switch to {plan.name}
-                        </button>
+                        <SwitchPlanButton planId={plan.id} planName={plan.name} />
                       )}
                     </CardContent>
                   </Card>
@@ -413,5 +432,30 @@ function PaymentMethodSection({ org, isTrialing, daysLeft }: {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function SwitchPlanButton({ planId, planName }: { planId: string; planName: string }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  return (
+    <div className="space-y-1">
+      <button
+        disabled={busy}
+        onClick={async () => {
+          if (!confirm(`Switch to ${planName}? Your next bill is adjusted for the change.`)) return;
+          setBusy(true);
+          setMsg('');
+          const r = await changePlan(planId as 'starter' | 'professional' | 'business');
+          setBusy(false);
+          if (r.ok) window.location.reload();
+          else setMsg(r.error);
+        }}
+        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
+      >
+        {busy ? 'Switching...' : `Switch to ${planName}`}
+      </button>
+      {msg && <p className="text-xs text-destructive">{msg}</p>}
+    </div>
   );
 }

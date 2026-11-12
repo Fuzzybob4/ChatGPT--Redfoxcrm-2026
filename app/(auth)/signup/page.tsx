@@ -19,7 +19,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [locationName, setLocationName] = useState('');
-  const [plan, setPlan] = useState<'starter' | 'professional' | 'enterprise'>('starter');
+  const [plan, setPlan] = useState<'starter' | 'professional' | 'business'>('professional');
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [locationCount, setLocationCount] = useState('1');
   const [error, setError] = useState('');
@@ -217,9 +217,9 @@ export default function SignupPage() {
             <div className="space-y-1.5">
               <label htmlFor="plan" className="text-sm font-medium text-foreground">Plan</label>
               <select id="plan" value={plan} onChange={(e) => setPlan(e.target.value as typeof plan)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-base">
-                <option value="starter">Starter — 1 location</option>
-                <option value="professional">Professional — multiple locations</option>
-                <option value="enterprise">Enterprise — all locations</option>
+                <option value="starter">Starter: $49/mo, up to 3 users</option>
+                <option value="professional">Professional: $120/mo, up to 6 users</option>
+                <option value="business">Business: $199/mo, up to 12 users</option>
               </select>
             </div>
 
@@ -227,16 +227,11 @@ export default function SignupPage() {
               <label htmlFor="billing-interval" className="text-sm font-medium text-foreground">Billing interval</label>
               <select id="billing-interval" value={billingInterval} onChange={(e) => setBillingInterval(e.target.value as typeof billingInterval)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-base">
                 <option value="monthly">Monthly</option>
-                <option value="yearly">Annual</option>
+                <option value="yearly">Pay yearly (save 20%)</option>
               </select>
             </div>
 
-            {plan !== 'starter' && (
-              <div className="space-y-1.5">
-                <label htmlFor="location-count" className="text-sm font-medium text-foreground">Number of locations</label>
-                <Input id="location-count" type="number" min="1" value={locationCount} onChange={(e) => setLocationCount(e.target.value)} required />
-              </div>
-            )}
+
 
             <div className="space-y-1.5">
               <label htmlFor="location" className="text-sm font-medium text-foreground">Primary location name</label>

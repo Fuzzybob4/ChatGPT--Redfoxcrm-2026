@@ -152,3 +152,56 @@ export async function cancelSubscription(): Promise<{ ok: true } | { ok: false; 
   }
 }
 
+
+/**
+ * Owner switches plans (Starter / Professional / Business). Enterprise is set up
+ * by RedFox directly. Stripe prorates the change on the next bill.
+ */
+export async function changePlan(planId: PlanId): Promise<{ ok: true } | { ok: false; error: string }> {
+  const org = await getCurrentOrg();
+  if (!org) return { ok: false, error: 'Not authenticated' };
+  if (!['owner', 'admin'].includes(org.role)) return { ok: false, error: 'Only the business owner can change the plan.' };
+  if (!['starter', 'professional', 'business'].includes(planId)) {
+    return { ok: false, error: 'Contact us to set up Enterprise.' };
+  }
+  const admin = createAdminClient();
+  const { getPlanUserLimit } = await import('@/lib/pricing');
+  const limit = getPlanUserLimit(planId);
+  if (limit != null) {
+    const { count } = await admin.from('user_memberships').select('id', { count: 'exact', head: true }).eq('org_id', org.orgId);
+    if ((count ?? 0) > limit) {
+      return { ok: false, error: `You have ${count} users, and ${getPlan(planId).name} includes ${limit}. Remove some logins first or pick a bigger plan.` };
+    }
+  }
+
+  const { data: row } = await admin
+    .from('organizations')
+    .select('stripe_customer_id, subscription_interval')
+    .eq('id', org.orgId)
+    .single();
+  const interval: BillingInterval = row?.subscription_interval === 'yearly' ? 'yearly' : 'monthly';
+
+  try {
+    if (row?.stripe_customer_id) {
+      const subs = await stripe.subscriptions.list({ customer: row.stripe_customer_id, status: 'all', limit: 10 });
+      const live = subs.data.find((s) => ['active', 'trialing', 'past_due', 'unpaid'].includes(s.status));
+      if (live) {
+        const priceId = await ensurePlanPrice(planId, interval);
+        const item = live.items.data[0];
+        await stripe.subscriptions.update(live.id, {
+          items: [{ id: item.id, price: priceId }],
+          proration_behavior: 'create_prorations',
+          metadata: { ...live.metadata, redfox_plan: planId },
+        });
+      }
+    }
+    await admin
+      .from('organizations')
+      .update({ plan: planId, max_locations: getPlanLocationLimit(planId) })
+      .eq('id', org.orgId);
+    revalidatePath('/', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not change the plan.' };
+  }
+}

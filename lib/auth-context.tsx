@@ -8,7 +8,7 @@ export interface User {
   email: string;
   name: string;
   locationId: string;
-  plan: 'starter' | 'professional' | 'enterprise';
+  plan: 'starter' | 'professional' | 'business' | 'enterprise';
 }
 
 interface AuthContextType {

@@ -54,7 +54,7 @@ export async function createOrganization(
     const meta = (user.user_metadata ?? {}) as Record<string, string>;
     const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const plan = meta.plan === 'enterprise' || meta.plan === 'professional' ? meta.plan : 'starter';
+    const plan = meta.plan === 'business' || meta.plan === 'professional' ? meta.plan : 'starter';
     const requestedLocations = Math.min(100, Math.max(1, Number.parseInt(meta.location_count ?? '1', 10) || 1));
     const maxLocations = plan === 'starter' ? 1 : plan === 'professional' ? requestedLocations : requestedLocations;
     const subscriptionInterval = meta.billing_interval === 'yearly' ? 'yearly' : 'monthly';
