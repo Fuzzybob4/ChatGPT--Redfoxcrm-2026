@@ -15,7 +15,7 @@ const plans = [
     description: 'Perfect for solo operators and small teams',
     features: [
       '1 Location',
-      'Up to 3 team members',
+      'Up to 3 users (owner, office & crew logins)',
       'Up to 3,000 customers & properties',
       'Basic scheduling',
       'Estimates & invoicing',
@@ -28,12 +28,12 @@ const plans = [
   },
   {
     name: 'Professional',
-    price: '$149',
+    price: '$120',
     period: '/month',
     description: 'For growing businesses with multiple crews',
     features: [
       'Up to 5 locations',
-      'Up to 20 team members',
+      'Up to 6 users: admin, office staff & installers',
       'Up to 15,000 customers & properties',
       'Advanced scheduling & routing',
       'Estimates & invoicing',
@@ -50,12 +50,12 @@ const plans = [
   },
   {
     name: 'Enterprise',
-    price: '$199',
-    period: '/month starting',
+    price: '$249',
+    period: '/month',
     description: 'For large organizations needing custom solutions',
     features: [
       'Unlimited locations',
-      'Unlimited team members',
+      'Unlimited users',
       'Unlimited customers & properties',
       'White-label options',
       'Custom integrations (QuickBooks, Stripe & more)',
@@ -209,7 +209,7 @@ export default function PricingPage() {
               <tbody>
                 {[
                   ['Locations', '1', '5', 'Unlimited'],
-                  ['Team Members', '3', '20', 'Unlimited'],
+                  ['Users (logins)', '3', '6', 'Unlimited'],
                   ['Customers & Properties', '3,000', '15,000', 'Unlimited'],
                   ['Estimates & Invoicing', '✓', '✓', '✓'],
                   ['Job Scheduling', 'Basic', 'Advanced', 'Advanced'],

@@ -29,12 +29,15 @@ export async function ensurePlanPrice(
   const lookupKey = planLookupKey(planId, interval);
 
   // 1. Reuse an existing active price with this lookup key.
+  const expectedAmount = getPlanChargeCents(planId, interval);
   const existing = await stripe.prices.list({
     lookup_keys: [lookupKey],
     active: true,
     limit: 1,
   });
-  if (existing.data[0]) return existing.data[0].id;
+  // Reuse the price only if it still matches today's plan price; otherwise a new
+  // price is created below and takes over the lookup key (old subscribers keep theirs).
+  if (existing.data[0] && existing.data[0].unit_amount === expectedAmount) return existing.data[0].id;
 
   // 2. Find or create the Product for this plan.
   const plan = getPlan(planId);
@@ -57,6 +60,7 @@ export async function ensurePlanPrice(
     unit_amount: amount,
     recurring: { interval: RECURRING[interval].interval },
     lookup_key: lookupKey,
+    transfer_lookup_key: true,
     metadata: { redfox_plan: planId, redfox_interval: interval },
   });
 

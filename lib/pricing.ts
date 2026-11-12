@@ -21,7 +21,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   starter: {
     id: "starter",
     name: "Starter",
-    monthlyCents: 2900,
+    monthlyCents: 4900,
     description: "Perfect for solo operators and small teams",
     emailsPerMonth: 2000,
     emailOverageCentsPerEmail: 1.5, // $0.015
@@ -29,7 +29,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   professional: {
     id: "professional",
     name: "Professional",
-    monthlyCents: 7900,
+    monthlyCents: 12000,
     description: "For growing businesses with multiple crews",
     emailsPerMonth: 4000,
     emailOverageCentsPerEmail: 1.2, // $0.012
@@ -37,7 +37,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    monthlyCents: 14900,
+    monthlyCents: 24900,
     description: "For large organizations needing custom solutions",
     emailsPerMonth: 6000,
     emailOverageCentsPerEmail: 1.0, // $0.010
@@ -52,6 +52,17 @@ export const PLAN_LOCATION_LIMITS: Record<PlanId, number | null> = {
   professional: 10,
   enterprise: null,
 };
+
+/** Logins (owner, office staff and crew) included in each plan. Null = unlimited. */
+export const PLAN_USER_LIMITS: Record<PlanId, number | null> = {
+  starter: 3,
+  professional: 6,
+  enterprise: null,
+};
+
+export function getPlanUserLimit(planId: string | null | undefined): number | null {
+  return PLAN_USER_LIMITS[getPlan(planId).id];
+}
 
 export function getPlanLocationLimit(planId: string | null | undefined): number | null {
   return PLAN_LOCATION_LIMITS[getPlan(planId).id];

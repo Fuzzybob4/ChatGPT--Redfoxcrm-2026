@@ -104,6 +104,9 @@ export async function sendEmployeeLoginInvite(
   const admin = createAdminClient();
   const origin = await siteOrigin();
 
+  const seat = await checkSeatLimit(admin, employeeId);
+  if (seat) return { error: seat };
+
   const { error } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(`/crew-setup?employee_id=${employeeId}`)}`,
   });
@@ -149,4 +152,38 @@ export async function sendEmployeeLoginInvite(
     .eq("id", employeeId);
 
   return { success: true, existingAccount: false };
+}
+
+/**
+ * Each plan includes a set number of logins (owner, office and crew). Returns
+ * an error message when inviting one more person would go over the plan.
+ */
+async function checkSeatLimit(admin: ReturnType<typeof createAdminClient>, employeeId: string): Promise<string | null> {
+  const { getPlanUserLimit, getPlan } = await import("@/lib/pricing");
+  const { data: emp } = await admin.from("employees").select("org_id, user_id").eq("id", employeeId).maybeSingle();
+  if (!emp?.org_id || emp.user_id) return null; // already has a login: re-sending is fine
+  const { data: org } = await admin
+    .from("organizations")
+    .select("plan, lifetime_access, admin_plan_override")
+    .eq("id", emp.org_id)
+    .maybeSingle();
+  if (!org || org.lifetime_access) return null;
+  const limit = getPlanUserLimit(org.admin_plan_override ?? org.plan);
+  if (limit == null) return null;
+  const [{ count: members }, { count: pending }] = await Promise.all([
+    admin.from("user_memberships").select("id", { count: "exact", head: true }).eq("org_id", emp.org_id),
+    admin
+      .from("employees")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", emp.org_id)
+      .is("user_id", null)
+      .not("invited_at", "is", null)
+      .is("invite_accepted_at", null)
+      .neq("id", employeeId),
+  ]);
+  const used = (members ?? 0) + (pending ?? 0);
+  if (used >= limit) {
+    return `Your ${getPlan(org.admin_plan_override ?? org.plan).name} plan includes ${limit} users and they're all in use. Upgrade your plan in Billing, or remove someone's login first.`;
+  }
+  return null;
 }

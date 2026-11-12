@@ -23,19 +23,22 @@ import { getTrialState } from '@/lib/trial';
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: [
     '1 location',
-    'Up to 100 customers',
+    'Up to 3 users',
+    'Up to 3,000 customers',
     '2,000 marketing emails/mo',
     'Basic reporting',
   ],
   professional: [
-    'Multiple locations',
-    'Up to 1,000 customers',
+    'Up to 5 locations',
+    'Up to 6 users: admin, office & crew',
+    'Up to 15,000 customers',
     '4,000 marketing emails/mo',
     'Advanced reporting',
     'Priority support',
   ],
   enterprise: [
     'Unlimited locations',
+    'Unlimited users',
     'Unlimited customers',
     '6,000 marketing emails/mo',
     'Custom reporting',
