@@ -418,3 +418,26 @@ export async function quickAddCrew(
   revalidatePath("/crew");
   return { ok: true, crew: { id: data.id, name: data.name, color: data.color, active: Boolean(data.active) } };
 }
+
+/**
+ * Take a job off the schedule (owner, admin or manager). The record is kept
+ * (archived) so time entries and photos still point at it; the customer goes
+ * back to "Needs scheduling" if they have no other job.
+ */
+export async function deleteScheduledJob(jobId: string): Promise<{ ok: true } | Fail> {
+  const org = await requireOrg(true);
+  if (!org) return { ok: false, error: "Only owners, admins and managers can delete jobs." };
+  const db = createAdminClient();
+  const { data: job } = await db.from("scheduled_jobs").select("id, status").eq("id", jobId).eq("org_id", org.orgId).maybeSingle();
+  if (!job) return { ok: false, error: "Job not found." };
+  if (job.status === "in_progress") return { ok: false, error: "The crew is working this job right now. Finish or pause it first." };
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("scheduled_jobs")
+    .update({ archived_at: now, status: "cancelled", status_key: "cancelled", updated_at: now })
+    .eq("id", jobId)
+    .eq("org_id", org.orgId);
+  if (error) return { ok: false, error: "Couldn't delete the job." };
+  refresh();
+  return { ok: true };
+}

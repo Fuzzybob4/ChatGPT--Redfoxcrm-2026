@@ -28,7 +28,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .eq("org_id", org.orgId)
       .gte("scheduled_date", start)
       .lte("scheduled_date", end)
-      .neq("status", "cancelled")
+      // Finished and cancelled jobs come off the board.
+      .not("status", "in", "(cancelled,completed)")
       .is("archived_at", null)
       .order("scheduled_date"),
   ]);

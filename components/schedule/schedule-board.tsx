@@ -20,6 +20,7 @@ import {
   saveScheduleSettings,
   undoScheduleBatch,
   updateScheduledJob,
+  deleteScheduledJob,
   type MovedJob,
 } from "@/app/(crm)/schedule/actions";
 
@@ -266,7 +267,14 @@ export function ScheduleBoard({
       </p>
 
       {/* Edit job */}
-      <EditJobDialog job={editing} crews={crews} onClose={() => setEditing(null)} onSave={(patch) => editing && act(() => updateScheduledJob(editing.id, patch), () => setEditing(null))} pending={pending} />
+      <EditJobDialog
+        job={editing}
+        crews={crews}
+        onClose={() => setEditing(null)}
+        onSave={(patch) => editing && act(() => updateScheduledJob(editing.id, patch), () => setEditing(null))}
+        onDelete={() => editing && act(() => deleteScheduledJob(editing.id), () => setEditing(null))}
+        pending={pending}
+      />
 
       {/* Rain confirm */}
       <Dialog open={Boolean(rainConfirm)} onOpenChange={(o) => !o && setRainConfirm(null)}>
@@ -567,20 +575,24 @@ function EditJobDialog({
   crews,
   onClose,
   onSave,
+  onDelete,
   pending,
 }: {
   job: BoardJob | null;
   crews: BoardCrew[];
   onClose: () => void;
   onSave: (patch: { date?: string; crewId?: string | null; size?: JobSize }) => void;
+  onDelete: () => void;
   pending: boolean;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState("");
   const [crewId, setCrewId] = useState("");
   const [size, setSize] = useState<JobSize>("standard");
   const [lastId, setLastId] = useState<string | null>(null);
   if (job && job.id !== lastId) {
     setLastId(job.id);
+    setConfirmDelete(false);
     setDate(job.date);
     setCrewId(job.crewId ?? "");
     setSize(job.size);
@@ -635,6 +647,27 @@ function EditJobDialog({
             >
               {pending ? "Saving…" : "Save"}
             </Button>
+          </div>
+          <div className="border-t pt-3">
+            {confirmDelete ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Take this job off the schedule? The customer goes back to &ldquo;Needs scheduling&rdquo; if they have no other job.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="destructive" disabled={pending} onClick={onDelete}>
+                    Yes, delete job
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                    Keep it
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="text-xs font-medium text-destructive hover:underline" onClick={() => setConfirmDelete(true)}>
+                Delete job
+              </button>
+            )}
           </div>
         </div>
       </DialogContent>
