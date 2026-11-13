@@ -174,6 +174,10 @@ async function handleRefund(refund: Stripe.Refund): Promise<string | null> {
  * Returns an error string if the operation failed, null on success.
  */
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<string | null> {
+  // Card-saving sessions (signup, Add card) and subscription checkouts aren't
+  // customer invoice payments; nothing to record here, and not an error.
+  if (session.mode !== "payment" || !session.metadata?.invoice_id) return null;
+
   // Strict validation of required metadata
   const invoiceId = session.metadata?.invoice_id;
   const orgId = session.metadata?.org_id;
@@ -282,7 +286,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
  */
 async function handleInvoicePaid(stripeInvoice: Stripe.Invoice): Promise<string | null> {
   const inv = stripeInvoice as unknown as Record<string, unknown>;
-  const sub = inv.subscription;
+  // Newer Stripe API versions put the subscription under parent.subscription_details.
+  const parentSub = (inv.parent as { subscription_details?: { subscription?: unknown } } | null)?.subscription_details?.subscription;
+  const sub = inv.subscription ?? parentSub;
   const subscriptionId = typeof sub === "string" ? sub : (sub as { id?: string } | null)?.id;
 
   if (!subscriptionId) {
@@ -353,7 +359,9 @@ async function handleInvoicePaid(stripeInvoice: Stripe.Invoice): Promise<string 
  */
 async function handleInvoicePaymentFailed(stripeInvoice: Stripe.Invoice): Promise<string | null> {
   const inv = stripeInvoice as unknown as Record<string, unknown>;
-  const sub = inv.subscription;
+  // Newer Stripe API versions put the subscription under parent.subscription_details.
+  const parentSub = (inv.parent as { subscription_details?: { subscription?: unknown } } | null)?.subscription_details?.subscription;
+  const sub = inv.subscription ?? parentSub;
   const subscriptionId = typeof sub === "string" ? sub : (sub as { id?: string } | null)?.id;
   if (!subscriptionId) return null; // Not a subscription invoice — ignore.
 
