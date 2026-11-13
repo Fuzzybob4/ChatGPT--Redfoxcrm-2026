@@ -16,6 +16,8 @@ export interface FieldEmployee {
   homeCrewId?: string | null;
   /** True when they picked "Working with another crew today". */
   helpingToday?: boolean;
+  /** False for owners / salaried people: no day clock or hours. */
+  trackTime?: boolean;
 }
 
 export const OFFICE_ROLES = ["owner", "admin", "manager"];
@@ -56,7 +58,7 @@ export async function getFieldContext() {
   const admin = createAdminClient();
   const { data: employee } = await admin
     .from("employees")
-    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id, crew_id, helping_crew_id, helping_date")
+    .select("id, full_name, first_name, last_name, email, role, position, can_access_work_orders, location_id, crew_id, helping_crew_id, helping_date, track_time")
     .eq("org_id", org.orgId)
     .eq("user_id", org.userId)
     .maybeSingle();
@@ -79,6 +81,7 @@ export async function getFieldContext() {
         isLead: employee.role === "crew_lead" || /\blead\b/i.test(employee.position ?? ""),
         crewId: helpingToday ? (employee.helping_crew_id as string) : ((employee.crew_id as string | null) ?? null),
         homeCrewId: (employee.crew_id as string | null) ?? null,
+        trackTime: employee.track_time !== false,
         helpingToday,
       }
     : null;

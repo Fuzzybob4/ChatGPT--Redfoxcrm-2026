@@ -18,7 +18,9 @@ export default async function FieldHomePage() {
   return (
     <>
       <div className="flex flex-col gap-2 px-4 pt-4">
-        <DayClock since={shift.since} lunchSince={shift.lunchSince} forCrew={canRunJobs && Boolean(employee.crewId)} />
+        {employee.trackTime !== false && (
+          <DayClock since={shift.since} lunchSince={shift.lunchSince} forCrew={canRunJobs && Boolean(employee.crewId)} />
+        )}
         {(crews ?? []).length > 1 && (
           <CrewSwitcher crews={crews ?? []} currentCrewId={employee.crewId} homeCrewId={employee.homeCrewId ?? null} />
         )}
