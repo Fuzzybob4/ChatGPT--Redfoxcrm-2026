@@ -55,6 +55,14 @@ export async function startJob(jobId: string, location?: string | null): Promise
   const { admin, org, employee, job } = ctx;
 
   if (job.status === "completed") return { error: "This job is already completed." };
+  {
+    const { loadBusinessRules } = await import("@/lib/schedule-server");
+    const { today } = await loadBusinessRules(admin, org.orgId);
+    if (job.scheduledDate && job.scheduledDate > today) {
+      const day = new Date(`${job.scheduledDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+      return { error: `This job is scheduled for ${day}. You can start it that day.` };
+    }
+  }
 
   const { data: openEntries } = await admin
     .from("time_entries")
