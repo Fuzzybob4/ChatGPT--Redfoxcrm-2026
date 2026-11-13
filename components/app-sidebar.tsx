@@ -349,7 +349,14 @@ export async function AppSidebar() {
             <DropdownMenuItem render={<Link href="/billing" />}>
               Billing
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" render={<Link href="/auth/signout" />}>
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => {
+                // Not a <Link>: Next.js would prefetch it and sign the user out
+                // just from opening this menu.
+                window.location.href = "/auth/signout";
+              }}
+            >
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
