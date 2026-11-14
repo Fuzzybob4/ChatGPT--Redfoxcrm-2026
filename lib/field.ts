@@ -401,6 +401,38 @@ export async function getInstallItems(orgId: string, customerId: string): Promis
   const rules = await loadBusinessRules(admin, orgId);
   const crewSafeText = await crewTextFilter(orgId, rules.crewHidePrices);
   const season = rules.seasonStart;
+  const custom = await getCustomInstallItems(orgId, customerId, season);
+  if (custom) {
+    return custom
+      .map((i) => ({ description: crewSafeText(i.description), quantity: i.quantity }))
+      .filter((i) => i.description);
+  }
+  return getInvoiceInstallItems(orgId, customerId, season, crewSafeText);
+}
+
+/** The office's hand-edited list for this season, or null when there isn't one. */
+export async function getCustomInstallItems(orgId: string, customerId: string, season: string): Promise<InstallItem[] | null> {
+  const { data } = await createAdminClient()
+    .from("customers")
+    .select("install_items, install_items_season")
+    .eq("id", customerId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!data || !Array.isArray(data.install_items)) return null;
+  if (!data.install_items_season || String(data.install_items_season).slice(0, 10) < season.slice(0, 10)) return null;
+  return (data.install_items as any[])
+    .map((i) => ({ description: String(i?.description ?? "").trim(), quantity: Number(i?.quantity) > 0 ? Number(i.quantity) : 1 }))
+    .filter((i) => i.description);
+}
+
+/** The list as it comes from this season's accepted estimate or newest invoice. */
+export async function getInvoiceInstallItems(
+  orgId: string,
+  customerId: string,
+  season: string,
+  crewSafeText: (t: string | null | undefined) => string = (t) => String(t ?? "").trim(),
+): Promise<InstallItem[]> {
+  const admin = createAdminClient();
   const [{ data: estimates }, { data: invoices }] = await Promise.all([
     admin
       .from("estimates")
