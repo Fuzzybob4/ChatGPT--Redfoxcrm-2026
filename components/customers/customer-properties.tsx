@@ -147,7 +147,26 @@ export function CustomerProperties({ customerId, properties }: Props) {
   }
 
   return (
-    <Card>
+    <Card className={properties.length === 0 ? "py-0" : undefined}>
+      {properties.length === 0 ? (
+        // One compact row until it's needed: most customers have one address.
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Building2 className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">More properties</p>
+              <p className="text-xs text-muted-foreground">
+                Second home, or an HOA / property manager with several sites
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={openAdd}>
+            <Plus className="size-3.5" data-icon="inline-start" />
+            Add
+          </Button>
+        </div>
+      ) : (
+      <>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <div>
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -160,7 +179,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
             )}
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
-            Manage all service &amp; billing addresses for this customer
+            Each home or site this customer has us light
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={openAdd}>
@@ -169,7 +188,6 @@ export function CustomerProperties({ customerId, properties }: Props) {
         </Button>
       </CardHeader>
       <CardContent className="pt-0">
-        {properties.length > 0 ? (
           <div className="flex flex-col divide-y divide-border">
             {properties.map((p) => (
               <div key={p.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
@@ -245,19 +263,9 @@ export function CustomerProperties({ customerId, properties }: Props) {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-            <span className="flex size-10 items-center justify-center rounded-full bg-muted">
-              <Building2 className="size-5 text-muted-foreground" />
-            </span>
-            <p className="text-sm text-muted-foreground">No additional properties yet</p>
-            <p className="text-xs text-muted-foreground max-w-xs">
-              Add each building or address this customer manages. Great for property
-              managers with multiple locations.
-            </p>
-          </div>
-        )}
       </CardContent>
+      </>
+      )}
 
       {/* Add / Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
