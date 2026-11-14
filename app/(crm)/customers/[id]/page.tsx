@@ -34,6 +34,7 @@ import { LifecycleStageControl } from "@/components/customers/lifecycle-stage-co
 import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 import { ContractBillingCard } from "@/components/customers/contract-billing-card";
+import { InstallListCard } from "@/components/customers/install-list-card";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -348,6 +349,9 @@ export default function CustomerDetailPage({ params }: Props) {
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* What's being installed this season (same list the crew sees) */}
+            <InstallListCard customerId={customer.id} />
 
             {/* Properties (multi-address) */}
             <CustomerProperties customerId={customer.id} properties={properties} />
