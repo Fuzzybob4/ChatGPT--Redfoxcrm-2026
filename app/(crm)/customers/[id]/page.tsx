@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   MapPin, Phone, Mail, CalendarDays, FileText,
-  ArrowLeft, Plus, Pencil, Tag, StickyNote, MessageSquare,
+  ArrowLeft, Plus, Pencil, Tag, StickyNote, MessageSquare, ChevronRight,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -35,6 +35,24 @@ import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 import { ContractBillingCard } from "@/components/customers/contract-billing-card";
 import { InstallListCard } from "@/components/customers/install-list-card";
+
+const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+/** "2026-11-14" is a calendar day, not midnight UTC — read it as local noon so it never slips a day. */
+function showDate(value: string | null | undefined, opts: Intl.DateTimeFormatOptions): string {
+  if (!value) return "";
+  const s = String(value);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00`) : new Date(s);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", opts);
+}
+
+/** "08:00" / "14:30:00" → "8:00 AM" / "2:30 PM". */
+function showTime(value: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(value);
+  if (!m) return value;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -376,28 +394,27 @@ export default function CustomerDetailPage({ params }: Props) {
                 {jobs.length > 0 ? (
                   <div className="flex flex-col divide-y divide-border">
                     {jobs.map((job) => (
-                      <div
+                      <Link
                         key={job.id}
-                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                        href={`/schedule?week=${String(job.scheduledDate).slice(0, 10)}`}
+                        className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/60"
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{job.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(job.scheduledDate).toLocaleDateString("en-US", {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            })}{" "}
-                            at {job.scheduledTime} &middot; {job.technicianName}
+                            {showDate(job.scheduledDate, { weekday: "short", month: "short", day: "numeric" })}
+                            {job.scheduledTime ? ` at ${showTime(job.scheduledTime)}` : ""}
+                            {job.technicianName ? ` · ${job.technicianName}` : ""}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-sm font-semibold text-foreground">
-                            ${job.amount}
-                          </span>
+                          {Number(job.amount) > 0 && (
+                            <span className="text-sm font-semibold text-foreground">{usd(Number(job.amount))}</span>
+                          )}
                           <StatusBadge status={job.status} />
+                          <ChevronRight className="size-4 text-muted-foreground" />
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 ) : (
@@ -428,28 +445,25 @@ export default function CustomerDetailPage({ params }: Props) {
                 {invs.length > 0 ? (
                   <div className="flex flex-col divide-y divide-border">
                     {invs.map((inv) => (
-                      <div
+                      <Link
                         key={inv.id}
-                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                        href={`/invoices/${inv.id}`}
+                        className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/60"
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-medium">{inv.invoiceNumber}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Due{" "}
-                            {new Date(inv.dueDate).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </p>
+                          {inv.dueDate && (
+                            <p className="text-xs text-muted-foreground">
+                              Due {showDate(inv.dueDate, { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-sm font-semibold">
-                            ${getInvoiceTotal(inv).toLocaleString()}
-                          </span>
+                          <span className="text-sm font-semibold">{usd(getInvoiceTotal(inv))}</span>
                           <StatusBadge status={inv.status} />
+                          <ChevronRight className="size-4 text-muted-foreground" />
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 ) : (
