@@ -332,11 +332,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const locJobs = getLocationJobs(locationId);
     const locCustomers = getLocationCustomers(locationId);
 
-    // Money is counted for THIS season only (not all-time), and by what was
-    // actually collected — deposits included — rather than invoice totals.
+    // Money is counted from a start date (the dashboard passes Jan 1 = year to date),
+    // by what was actually collected (deposits included), not invoice totals.
     const season = (seasonStart ?? '').slice(0, 10);
     const seasonInvoices = locInvoices.filter(
-      (i) => i.status !== 'Cancelled' && (!season || (i.issuedDate ?? '') >= season),
+      (i) => String(i.status) !== 'Cancelled' && (!season || (i.issuedDate ?? '') >= season),
     );
     const round = (n: number) => Math.round(n * 100) / 100;
     const totalRevenue = round(
@@ -344,7 +344,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
     const outstandingRevenue = round(
       seasonInvoices
-        .filter((i) => i.status !== 'Draft')
+        .filter((i) => String(i.status) !== 'Draft')
         .reduce((sum, i) => sum + Math.max(0, Number((i as any).total ?? 0) - Number((i as any).amountPaid ?? 0)), 0),
     );
     const scheduledJobs = locJobs.filter((j) => j.status === 'Scheduled').length;
