@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const { selectedLocationId } = useLocation();
   const { loading, getDashboardStats, getCustomerById, getLocationJobs, invoices, locations } = useData();
   const org = useOrgContext();
-  const stats = getDashboardStats(selectedLocationId);
+  const stats = getDashboardStats(selectedLocationId, org.seasonStart);
 
   // Fleet metrics — only loaded when fleet_management add-on is active
   const hasFleet = org.addonIds?.includes('fleet_management');
@@ -106,18 +106,18 @@ export default function DashboardPage() {
         {/* KPI row */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
-            title="Revenue (Paid)"
-            value={`$${stats.totalRevenue.toLocaleString()}`}
+            title="Collected this season"
+            value={stats.totalRevenue.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
             icon={DollarSign}
             accent
-            trendLabel="This period"
+            trendLabel={org.seasonStart ? `Since ${new Date(org.seasonStart.slice(0, 10) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "This season"}
           />
           <StatCard
             title="Outstanding"
-            value={`$${stats.outstandingRevenue.toLocaleString()}`}
+            value={stats.outstandingRevenue.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
             icon={AlertCircle}
             trend="down"
-            trendLabel="Awaiting payment"
+            trendLabel="Still owed this season"
           />
           <StatCard
             title="Active Customers"

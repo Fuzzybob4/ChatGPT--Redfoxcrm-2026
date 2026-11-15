@@ -74,7 +74,7 @@ interface DataContextType {
   getLocationCustomers: (locationId: string) => LiveCustomer[];
   getLocationJobs: (locationId: string) => Job[];
   getLocationEstimates: (locationId: string) => LiveEstimate[];
-  getDashboardStats: (locationId: string) => {
+  getDashboardStats: (locationId: string, seasonStart?: string) => {
     totalRevenue: number;
     outstandingRevenue: number;
     activeCustomers: number;
@@ -325,19 +325,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const getLocationEstimates = (locationId: string) =>
     locationId ? estimates.filter((e) => e.locationId === locationId) : estimates;
 
-  const getDashboardStats = (locationId: string) => {
+  const getDashboardStats = (locationId: string, seasonStart?: string) => {
     const locInvoices = locationId
       ? invoices.filter((i) => i.locationId === locationId)
       : invoices;
     const locJobs = getLocationJobs(locationId);
     const locCustomers = getLocationCustomers(locationId);
 
-    const totalRevenue = locInvoices
-      .filter((i) => i.status === 'Paid')
-      .reduce((sum, i) => sum + i.total, 0);
-    const outstandingRevenue = locInvoices
-      .filter((i) => i.status === 'Sent' || i.status === 'Overdue')
-      .reduce((sum, i) => sum + i.total, 0);
+    // Money is counted for THIS season only (not all-time), and by what was
+    // actually collected — deposits included — rather than invoice totals.
+    const season = (seasonStart ?? '').slice(0, 10);
+    const seasonInvoices = locInvoices.filter(
+      (i) => i.status !== 'Cancelled' && (!season || (i.issuedDate ?? '') >= season),
+    );
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const totalRevenue = round(
+      seasonInvoices.reduce((sum, i) => sum + Math.max(0, Number((i as any).amountPaid ?? 0)), 0),
+    );
+    const outstandingRevenue = round(
+      seasonInvoices
+        .filter((i) => i.status !== 'Draft')
+        .reduce((sum, i) => sum + Math.max(0, Number((i as any).total ?? 0) - Number((i as any).amountPaid ?? 0)), 0),
+    );
     const scheduledJobs = locJobs.filter((j) => j.status === 'Scheduled').length;
     const completedJobs = locJobs.filter((j) => j.status === 'Completed').length;
     const activeCustomers = locCustomers.filter((c) => c.status === 'Active').length;

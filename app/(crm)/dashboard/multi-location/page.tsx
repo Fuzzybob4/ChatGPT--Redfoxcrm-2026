@@ -70,7 +70,7 @@ export default function MultiLocationDashboard() {
 
   // Calculate stats for all locations
   const locationStats: LocationStats[] = locations.map((loc) => {
-    const stats = getDashboardStats(loc.id);
+    const stats = getDashboardStats(loc.id, org.seasonStart);
     return {
       id: loc.id,
       name: loc.name,
@@ -82,7 +82,7 @@ export default function MultiLocationDashboard() {
   // (getDashboardStats('')), not a sum of each known location's stats.
   // Summing per-location stats silently drops any customer/invoice/estimate/
   // job that hasn't been assigned a location_id, understating org totals.
-  const orgTotals = getDashboardStats('');
+  const orgTotals = getDashboardStats('', org.seasonStart);
 
   // Surface records that exist but aren't tied to any location, so data
   // never silently disappears from this view the way it did before.
