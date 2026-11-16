@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useData } from '@/lib/data-context';
 import { getEditableEstimate, updateEstimate, type EditableEstimate } from '@/app/(crm)/estimates/edit-actions';
+import { getEstimateApprovalInfo, removeEstimateImage } from '@/app/(crm)/estimates/approval-actions';
 
 interface Row {
   key: string;
@@ -41,6 +42,38 @@ export default function EditEstimatePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [mainImages, setMainImages] = useState<{ name: string }[]>([]);
+  const [mainVersion, setMainVersion] = useState(0);
+
+  useEffect(() => {
+    getEstimateApprovalInfo(id).then((i) => setMainImages(i.images)).catch(() => undefined);
+  }, [id]);
+
+  async function addMainImages(files: FileList | null) {
+    if (!files?.length) return;
+    setError(null);
+    setUploadingKey('main');
+    try {
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.append('file', file);
+        const res = await fetch(`/api/estimates/${id}/images`, { method: 'POST', body });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || 'Upload failed');
+        setMainImages(json.images ?? []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingKey(null);
+      setMainVersion((v) => v + 1);
+    }
+  }
+
+  async function removeMainImage(n: number) {
+    setMainImages(await removeEstimateImage(id, n));
+    setMainVersion((v) => v + 1);
+  }
 
   async function uploadItemImage(key: string, file: File | undefined) {
     if (!file) return;
@@ -178,6 +211,54 @@ export default function EditEstimatePage() {
               <div className="space-y-1.5">
                 <label htmlFor="est-title" className="text-sm font-medium">Title</label>
                 <Input id="est-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={est.locked} />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Main picture</p>
+                <p className="text-xs text-muted-foreground">Shown first on the estimate; the first one also goes in the email. Up to 6.</p>
+                {mainImages.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {mainImages.map((img, n) => (
+                      <div key={`${img.name}-${n}-${mainVersion}`} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/estimates/${id}/images?i=${n}&v=${mainVersion}`}
+                          alt={img.name}
+                          className="aspect-square w-full rounded-md border object-cover"
+                        />
+                        {n === 0 && (
+                          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">Main</span>
+                        )}
+                        {!est.locked && (
+                          <button
+                            type="button"
+                            onClick={() => void removeMainImage(n)}
+                            aria-label={`Remove ${img.name}`}
+                            className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!est.locked && mainImages.length < 6 && (
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50">
+                    {uploadingKey === 'main' ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+                    {uploadingKey === 'main' ? 'Uploading…' : mainImages.length ? 'Add another picture' : 'Add main picture'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      disabled={uploadingKey !== null}
+                      onChange={(e) => {
+                        void addMainImages(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="est-desc" className="text-sm font-medium">Description</label>

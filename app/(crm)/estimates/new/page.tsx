@@ -38,6 +38,7 @@ export default function NewEstimatePage() {
   const [discount, setDiscount] = useState('0');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [mainImages, setMainImages] = useState<{ file: File; preview: string }[]>([]);
   const [taxRate, setTaxRate] = useState('0');
   const [depositPercent, setDepositPercent] = useState('50');
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +107,16 @@ export default function NewEstimatePage() {
       setIsSaving(false);
       return;
     }
-    // Upload item photos now that the estimate exists.
+    // Upload the main pictures, then the item photos, now that the estimate exists.
+    for (const img of mainImages) {
+      try {
+        const body = new FormData();
+        body.append('file', img.file);
+        await fetch(`/api/estimates/${res.id}/images`, { method: 'POST', body });
+      } catch {
+        // Can be added again from the estimate page.
+      }
+    }
     for (const [idx, item] of kept.entries()) {
       if (!item.file) continue;
       try {
@@ -157,6 +167,55 @@ export default function NewEstimatePage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Estimate title</label>
                 <Input placeholder="Holiday lighting 2026" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-foreground">Main picture (the customer sees this first)</p>
+                <p className="text-xs text-muted-foreground">A mockup of the lit-up home or building. The first one also goes in the email. Up to 6.</p>
+                {mainImages.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {mainImages.map((img, n) => (
+                      <div key={img.preview} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.preview} alt={`Main picture ${n + 1}`} className="aspect-square w-full rounded-md border object-cover" />
+                        {n === 0 && (
+                          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">Main</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMainImages((list) => {
+                              URL.revokeObjectURL(list[n].preview);
+                              return list.filter((_, i) => i !== n);
+                            })
+                          }
+                          aria-label={`Remove main picture ${n + 1}`}
+                          className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {mainImages.length < 6 && (
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50">
+                    <ImagePlus className="size-4" />
+                    {mainImages.length ? 'Add another picture' : 'Add main picture'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        setMainImages((list) =>
+                          [...list, ...files.map((file) => ({ file, preview: URL.createObjectURL(file) }))].slice(0, 6),
+                        );
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="est-desc" className="text-sm font-medium text-foreground">Description (the customer sees this)</label>
