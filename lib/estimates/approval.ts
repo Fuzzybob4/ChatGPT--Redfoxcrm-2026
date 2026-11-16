@@ -142,7 +142,8 @@ export async function approveEstimateAndCreateInvoice(
       invoice_number: invoiceNumber,
       title,
       description: estimate.description,
-      notes: estimate.notes,
+      // Estimate notes are internal; invoice notes are shown to the customer, so don't carry them over.
+      notes: null,
       subtotal,
       tax_rate: Number(estimate.tax_rate ?? 0),
       tax_amount: taxAmount,

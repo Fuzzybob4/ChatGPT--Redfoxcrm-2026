@@ -226,9 +226,9 @@ export default function NewEstimatePage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Notes (optional)</label>
+                <label className="text-sm font-medium text-foreground">Internal notes (optional, customer never sees these)</label>
                 <Textarea
-                  placeholder="Add any notes for the customer..."
+                  placeholder="e.g. Gate code, who to call, options discussed…"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}

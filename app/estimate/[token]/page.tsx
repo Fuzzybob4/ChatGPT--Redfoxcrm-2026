@@ -23,7 +23,7 @@ export default async function PublicEstimatePage({ params }: Props) {
   const { data: estimate } = await db
     .from("estimates")
     .select(
-      "id, org_id, customer_id, estimate_number, title, description, notes, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images",
+      "id, org_id, customer_id, estimate_number, title, description, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images",
     )
     .eq("approval_token", token)
     .maybeSingle();
@@ -79,7 +79,8 @@ export default async function PublicEstimatePage({ params }: Props) {
         number: estimate.estimate_number ?? "",
         title: estimate.title || "Estimate",
         description: estimate.description,
-        notes: estimate.notes,
+        // Notes are the business's own (internal); the customer sees the description.
+        notes: null,
         subtotal: Number(estimate.subtotal ?? 0) || total,
         taxAmount: Number(estimate.tax_amount ?? 0),
         total,

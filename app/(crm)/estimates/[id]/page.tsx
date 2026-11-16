@@ -194,8 +194,8 @@ export default function EstimateDetailPage() {
           {estimate.notes && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Notes</CardTitle>
-                <CardDescription>The customer sees these notes on their estimate.</CardDescription>
+                <CardTitle className="text-base">Internal notes</CardTitle>
+                <CardDescription>Only your team sees these. The customer never does.</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="whitespace-pre-line text-muted-foreground">{estimate.notes}</p>
