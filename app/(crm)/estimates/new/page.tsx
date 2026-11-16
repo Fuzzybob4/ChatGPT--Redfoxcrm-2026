@@ -7,7 +7,7 @@ import { useLocation } from '@/lib/location-context';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
+import { CustomerPicker } from '@/components/customers/customer-picker';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useEffect, useState } from 'react';
@@ -42,7 +42,8 @@ export default function NewEstimatePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   // Filter customers by location
-  const locationCustomers = getLocationCustomers(selectedLocationId);
+  // Customers without a location belong everywhere (otherwise they could never be picked).
+  const locationCustomers = getLocationCustomers('').filter((c) => !selectedLocationId || !c.locationId || c.locationId === selectedLocationId);
 
   const addLineItem = () => {
     setLineItems([
@@ -114,19 +115,11 @@ export default function NewEstimatePage() {
               <CardDescription>Select which customer this estimate is for</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Customer</label>
-                <Select value={customerId} onValueChange={(v) => setCustomerId(v || '')}>
-                  <SelectGroup>
-                    <SelectItem value="">Select a customer...</SelectItem>
-                    {locationCustomers.map((cust) => (
-                      <SelectItem key={cust.id} value={cust.id}>
-                        {cust.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </Select>
-              </div>
+              <CustomerPicker
+                customers={locationCustomers.map((c) => ({ id: c.id, name: c.name, address: c.address, phone: c.phone, email: c.email }))}
+                value={customerId}
+                onChange={setCustomerId}
+              />
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Estimate title</label>
                 <Input placeholder="Holiday lighting 2026" value={title} onChange={(e) => setTitle(e.target.value)} />

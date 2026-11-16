@@ -7,6 +7,7 @@ import { useData } from '@/lib/data-context';
 import { useLocation } from '@/lib/location-context';
 import { createInvoice } from '../actions';
 import { CrewSelect } from '@/components/crews/crew-select';
+import { CustomerPicker } from '@/components/customers/customer-picker';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -91,7 +92,7 @@ export default function NewInvoicePage() {
   const [allowAddons, setAllowAddons] = useState(false);
   const [addonItems, setAddonItems] = useState<AddonItem[]>([]);
 
-  const locationCustomers = getLocationCustomers(selectedLocationId);
+  const locationCustomers = getLocationCustomers('').filter((c) => !selectedLocationId || !c.locationId || c.locationId === selectedLocationId);
 
   useEffect(() => {
     const customerParam = searchParams.get('customer');
@@ -260,20 +261,12 @@ export default function NewInvoicePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="customer">Customer</Label>
-                    <Select value={customerId} onValueChange={(value) => setCustomerId(value ?? '')}>
-                      <SelectTrigger id="customer" className="w-full">
-                        <SelectValue placeholder="Select a customer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {locationCustomers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="sm:col-span-2">
+                    <CustomerPicker
+                      customers={locationCustomers.map((c) => ({ id: c.id, name: c.name, address: c.address, phone: c.phone, email: c.email }))}
+                      value={customerId}
+                      onChange={setCustomerId}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="due-date">Due Date</Label>
