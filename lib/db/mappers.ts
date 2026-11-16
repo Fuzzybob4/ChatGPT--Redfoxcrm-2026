@@ -102,6 +102,8 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   customerId: string;
   paymentState: string | null;
   stripePaymentLink: string | null;
+  viewCount: number;
+  lastViewedAt: string | null;
 } {
   const total = money(row.total_amount, row.total_cents);
   const status = (titleCase(row.status) as InvoiceStatus) || 'Draft';
@@ -143,6 +145,8 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
     amountPaid: money(row.amount_paid, row.amount_paid_cents),
     paymentState: row.payment_state ?? row.status ?? null,
     stripePaymentLink: row.stripe_payment_link ?? null,
+    viewCount: Number(row.view_count ?? 0),
+    lastViewedAt: row.last_viewed_at ?? null,
   };
 }
 

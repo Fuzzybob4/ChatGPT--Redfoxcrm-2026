@@ -59,6 +59,8 @@ export function renderEmail(opts: {
   /** A second, quieter choice under the main button. */
   secondaryLink?: { text: string; url: string };
   footerNote?: string;
+  /** A picture shown above the details (e.g. a mockup of the lit-up home), linking to the button URL. */
+  image?: { url: string; alt: string };
 }): string {
   const details = (opts.details ?? [])
     .map(
@@ -74,6 +76,7 @@ export function renderEmail(opts: {
 <tr><td style="font-size:15px;line-height:1.55;color:#0b0b0b">
 <p style="margin:0 0 12px">${esc(opts.greeting)}</p>
 ${opts.paragraphs.map((p) => `<p style="margin:0 0 12px">${esc(p)}</p>`).join("")}
+${opts.image ? `<p style="margin:4px 0 16px"><a href="${esc(opts.button?.url ?? opts.image.url)}"><img src="${esc(opts.image.url)}" alt="${esc(opts.image.alt)}" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:10px;border:1px solid #e7e6e2"></a></p>` : ""}
 ${details ? `<table role="presentation" width="100%" style="margin:8px 0 16px;border-top:1px solid #e7e6e2;border-bottom:1px solid #e7e6e2;padding:8px 0;font-size:14px">${details}</table>` : ""}
 ${opts.button ? `<p style="margin:20px 0"><a href="${esc(opts.button.url)}" style="display:inline-block;background:#c2381e;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px">${esc(opts.button.text)}</a></p>` : ""}
 ${opts.secondaryLink ? `<p style="margin:-8px 0 20px"><a href="${esc(opts.secondaryLink.url)}" style="color:#c2381e;font-weight:600">${esc(opts.secondaryLink.text)}</a></p>` : ""}
@@ -249,7 +252,7 @@ export async function sendInvoiceEmail(
 export async function sendEstimateEmail(
   db: Db,
   orgId: string,
-  estimate: { id: string; customer_id: string; estimate_number: string | null; title: string | null; total_amount: number | string | null; deposit_percent: number | string | null; valid_until?: string | null },
+  estimate: { id: string; customer_id: string; estimate_number: string | null; title: string | null; total_amount: number | string | null; deposit_percent: number | string | null; valid_until?: string | null; images?: unknown },
   approvalUrl: string,
 ): Promise<{ to: string }> {
   if (!isEmailConfigured()) throw new EmailNotConfiguredError();
@@ -283,6 +286,9 @@ export async function sendEstimateEmail(
     ],
     details,
     button: { text: "Review & approve estimate", url: approvalUrl },
+    image: Array.isArray(estimate.images) && estimate.images.length > 0
+      ? { url: `${approvalUrl}/image/0`, alt: "Preview of your lighting design" }
+      : undefined,
   });
   try {
     const result = await sendEmail({ to, subject: `Your estimate from ${business.name}`, html, fromName: business.name, replyTo: business.email });

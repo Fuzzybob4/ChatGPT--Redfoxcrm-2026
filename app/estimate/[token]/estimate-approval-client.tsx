@@ -12,6 +12,8 @@ import { approveEstimate, declineEstimate } from "./actions";
 
 interface Props {
   token: string;
+  /** How many pictures (mockups) are attached; served from /estimate/<token>/image/<n>. */
+  imageCount?: number;
   business: { name: string; phone: string | null; email: string | null };
   customer: { name: string; address: string };
   estimate: {
@@ -38,7 +40,7 @@ const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", curren
 const day = (d: string | null) =>
   d ? new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "";
 
-export function EstimateApprovalClient({ token, business, customer, estimate: base, items }: Props) {
+export function EstimateApprovalClient({ token, imageCount = 0, business, customer, estimate: base, items }: Props) {
   const locked = Boolean(base.approvedAt) || Boolean(base.declinedAt);
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(items.filter((i) => (locked ? i.selected !== false : true)).map((i) => i.id)),
@@ -116,6 +118,22 @@ export function EstimateApprovalClient({ token, business, customer, estimate: ba
           </CardHeader>
           <CardContent className="space-y-4">
             {estimate.description && <p className="whitespace-pre-line text-sm">{estimate.description}</p>}
+
+            {imageCount > 0 && (
+              <div className={`grid gap-2 ${imageCount > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {Array.from({ length: imageCount }).map((_, n) => (
+                  <a key={n} href={`/estimate/${token}/image/${n}`} target="_blank" rel="noreferrer" className={imageCount > 1 && n === 0 ? "col-span-2" : ""}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/estimate/${token}/image/${n}`}
+                      alt={n === 0 ? "Preview of your lighting design" : `Lighting design picture ${n + 1}`}
+                      className="w-full rounded-lg border object-cover"
+                      loading={n === 0 ? "eager" : "lazy"}
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
 
             {items.length > 0 && (
               <div className="space-y-2">

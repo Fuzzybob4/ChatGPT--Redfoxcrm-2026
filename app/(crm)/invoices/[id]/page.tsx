@@ -136,7 +136,16 @@ export default function InvoiceDetailPage({ params }: Props) {
                     {invoice.invoiceNumber}
                   </CardTitle>
                 </div>
-                <StatusBadge status={invoice.status} />
+                <div className="flex flex-col items-end gap-1.5">
+                  <StatusBadge status={invoice.status} />
+                  {invoice.status !== "Draft" && (Number((invoice as any).viewCount ?? 0) > 0 || !invoice.invoiceNumber.startsWith("SQ-")) && (
+                    <span className="text-right text-xs text-muted-foreground">
+                      {Number((invoice as any).viewCount ?? 0) > 0
+                        ? `Opened ${(invoice as any).viewCount === 1 ? "once" : `${(invoice as any).viewCount}×`} · last ${new Date((invoice as any).lastViewedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                        : "Not opened yet"}
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
 

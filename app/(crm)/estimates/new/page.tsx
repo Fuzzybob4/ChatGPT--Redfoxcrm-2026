@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectItem, SelectGroup } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { createEstimate } from '@/app/(crm)/estimates/actions';
 
@@ -26,6 +26,11 @@ export default function NewEstimatePage() {
   const { selectedLocationId } = useLocation();
   const { getLocationCustomers, refresh } = useData();
   const [customerId, setCustomerId] = useState('');
+  // Opened from a customer's page (/estimates/new?customer=<id>): pre-pick them.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('customer');
+    if (fromUrl) setCustomerId(fromUrl);
+  }, []);
   const [discount, setDiscount] = useState('0');
   const [title, setTitle] = useState('');
   const [depositPercent, setDepositPercent] = useState('50');

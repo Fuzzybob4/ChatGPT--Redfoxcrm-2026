@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadEstimateItems } from "@/lib/estimates/approval";
+import { isStaffOf, readImages } from "@/lib/estimates/images";
 import { EstimateApprovalClient } from "./estimate-approval-client";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function PublicEstimatePage({ params }: Props) {
   const { data: estimate } = await db
     .from("estimates")
     .select(
-      "id, org_id, customer_id, estimate_number, title, description, notes, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, invoice_id",
+      "id, org_id, customer_id, estimate_number, title, description, notes, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images",
     )
     .eq("approval_token", token)
     .maybeSingle();
@@ -39,10 +40,20 @@ export default async function PublicEstimatePage({ params }: Props) {
       .maybeSingle(),
   ]);
 
-  // Let the business see that the customer opened it.
-  if (!estimate.viewed_at) {
-    await db.from("estimates").update({ viewed_at: new Date().toISOString() }).eq("id", estimate.id);
+  // Let the business see that the customer opened it. The owner previewing
+  // their own link (signed in to the business) doesn't count as a view.
+  if (!(await isStaffOf(estimate.org_id))) {
+    const now = new Date().toISOString();
+    await db
+      .from("estimates")
+      .update({
+        viewed_at: estimate.viewed_at ?? now,
+        last_viewed_at: now,
+        view_count: Number((estimate as any).view_count ?? 0) + 1,
+      })
+      .eq("id", estimate.id);
   }
+  const imageCount = readImages((estimate as any).images).length;
 
   const items = await loadEstimateItems(db, estimate.id, estimate.org_id);
   const total = Number(estimate.total_amount ?? 0) || Number(estimate.subtotal ?? 0);
@@ -51,6 +62,7 @@ export default async function PublicEstimatePage({ params }: Props) {
   return (
     <EstimateApprovalClient
       token={token}
+      imageCount={imageCount}
       business={{
         name: profile?.business_name || org?.name || "Your contractor",
         phone: profile?.phone ?? null,

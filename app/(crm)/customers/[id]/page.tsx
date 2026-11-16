@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
-  MapPin, Phone, Mail, CalendarDays, FileText,
+  MapPin, Phone, Mail, CalendarDays, FileText, ClipboardCheck,
   ArrowLeft, Plus, Pencil, Tag, StickyNote, MessageSquare, ChevronRight,
 } from "lucide-react";
 
@@ -91,6 +91,9 @@ export default function CustomerDetailPage({ params }: Props) {
       amountPaid: (i as { amountPaid?: number | null }).amountPaid,
     }),
   );
+  const customerEstimates = estimates
+    .filter((e) => e.customerId === customer.id)
+    .sort((a, b) => String(b.createdDate ?? '').localeCompare(String(a.createdDate ?? '')));
   const estimateSignals = estimates
     .filter((e) => e.customerId === customer.id)
     .map((e) => estimateSignal({ status: e.status, sentAt: e.sentAt, invoiceId: e.invoiceId }));
@@ -421,6 +424,48 @@ export default function CustomerDetailPage({ params }: Props) {
                   <p className="text-sm text-muted-foreground text-center py-6">
                     No jobs yet
                   </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Estimates */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <ClipboardCheck className="size-4 text-primary" />
+                  Estimates
+                </CardTitle>
+                <Button variant="outline" size="sm" render={<Link href={`/estimates/new?customer=${customer.id}`} />}>
+                  <Plus className="size-3.5" data-icon="inline-start" />
+                  New Estimate
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {customerEstimates.length > 0 ? (
+                  <div className="flex flex-col divide-y divide-border">
+                    {customerEstimates.map((est) => (
+                      <Link
+                        key={est.id}
+                        href={`/estimates/${est.id}`}
+                        className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{(est as { title?: string }).title || est.estimateNumber}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {est.estimateNumber}
+                            {est.createdDate ? ` · ${showDate(est.createdDate, { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-sm font-semibold">{usd(Number((est as { total?: number }).total ?? 0))}</span>
+                          <StatusBadge status={est.status} />
+                          <ChevronRight className="size-4 text-muted-foreground" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-2 text-sm text-muted-foreground">No estimates yet.</p>
                 )}
               </CardContent>
             </Card>

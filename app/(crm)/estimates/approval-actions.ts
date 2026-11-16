@@ -23,6 +23,13 @@ export interface EstimateApprovalInfo {
   invoiceId: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
+  /** Last time it was actually emailed through RedFox, and to whom. */
+  emailedAt: string | null;
+  emailedTo: string | null;
+  /** Customer opens (owner previews are not counted). */
+  viewCount: number;
+  lastViewedAt: string | null;
+  images: { name: string }[];
 }
 
 async function origin() {
@@ -40,7 +47,7 @@ async function loadOwned(estimateId: string) {
     .from("estimates")
     .select(
       ESTIMATE_COLUMNS +
-        ", approval_token, sent_at, viewed_at, approved_at, approved_by_name, declined_at, decline_reason",
+        ", approval_token, sent_at, viewed_at, approved_at, approved_by_name, declined_at, decline_reason, images, view_count, last_viewed_at",
     )
     .eq("id", estimateId)
     .eq("org_id", org.orgId)
@@ -51,12 +58,19 @@ async function loadOwned(estimateId: string) {
 
 export async function getEstimateApprovalInfo(estimateId: string): Promise<EstimateApprovalInfo> {
   const { db, estimate } = await loadOwned(estimateId);
-  const { data: customer } = await db
-    .from("customers")
-    .select("phone, email")
-    .eq("id", estimate.customer_id)
-    .eq("org_id", estimate.org_id)
-    .maybeSingle();
+  const [{ data: customer }, { data: lastEmail }] = await Promise.all([
+    db.from("customers").select("phone, email").eq("id", estimate.customer_id).eq("org_id", estimate.org_id).maybeSingle(),
+    db
+      .from("invoice_reminder_log")
+      .select("email_address, created_at")
+      .eq("estimate_id", estimate.id)
+      .eq("org_id", estimate.org_id)
+      .eq("kind", "estimate_sent")
+      .eq("status", "sent")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   return {
     link: estimate.approval_token ? `${await origin()}/estimate/${estimate.approval_token}` : null,
     depositPercent: Number(estimate.deposit_percent ?? 0),
@@ -69,6 +83,11 @@ export async function getEstimateApprovalInfo(estimateId: string): Promise<Estim
     invoiceId: estimate.invoice_id ?? null,
     customerPhone: customer?.phone ?? null,
     customerEmail: customer?.email ?? null,
+    emailedAt: (lastEmail as any)?.created_at ?? null,
+    emailedTo: (lastEmail as any)?.email_address ?? null,
+    viewCount: Number(estimate.view_count ?? 0),
+    lastViewedAt: estimate.last_viewed_at ?? estimate.viewed_at ?? null,
+    images: (Array.isArray(estimate.images) ? estimate.images : []).map((i: any) => ({ name: String(i?.name ?? "Image") })),
   };
 }
 
@@ -87,8 +106,6 @@ export async function shareEstimate(
     .update({
       approval_token: token,
       deposit_percent: pct,
-      sent_at: estimate.sent_at ?? new Date().toISOString(),
-      status: estimate.status && estimate.status.toLowerCase() !== "draft" ? estimate.status : "sent",
       updated_at: new Date().toISOString(),
     })
     .eq("id", estimate.id)
@@ -120,5 +137,40 @@ export async function emailEstimateToCustomer(
   const { db, estimate } = await loadOwned(estimateId);
   const { sendEstimateEmail } = await import("@/lib/email/transactional");
   const { to } = await sendEstimateEmail(db, estimate.org_id, estimate as any, link);
+  await markSent(db, estimate);
   return { to, link };
+}
+
+async function markSent(db: ReturnType<typeof createAdminClient>, estimate: Record<string, any>) {
+  const status = String(estimate.status ?? "draft").toLowerCase();
+  await db
+    .from("estimates")
+    .update({
+      sent_at: estimate.sent_at ?? new Date().toISOString(),
+      ...(status === "draft" ? { status: "sent" } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", estimate.id)
+    .eq("org_id", estimate.org_id);
+  revalidatePath("/estimates");
+}
+
+/** The owner texted the link from their own phone: count it as sent. */
+export async function markEstimateSent(estimateId: string): Promise<void> {
+  const { db, estimate } = await loadOwned(estimateId);
+  await markSent(db, estimate);
+}
+
+/** Remove one attached picture (by its position). */
+export async function removeEstimateImage(estimateId: string, index: number): Promise<{ name: string }[]> {
+  const { db, estimate } = await loadOwned(estimateId);
+  const images: any[] = Array.isArray(estimate.images) ? [...estimate.images] : [];
+  const [removed] = images.splice(index, 1);
+  if (!removed) return images.map((i) => ({ name: String(i?.name ?? "Image") }));
+  await db.from("estimates").update({ images, updated_at: new Date().toISOString() }).eq("id", estimate.id).eq("org_id", estimate.org_id);
+  if (removed.path) {
+    const { deletePhoto } = await import("@/lib/photo-storage");
+    await deletePhoto(String(removed.path)).catch(() => undefined);
+  }
+  return images.map((i) => ({ name: String(i?.name ?? "Image") }));
 }

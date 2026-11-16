@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { CheckCircle2, Copy, Eye, Link2, Mail, MessageSquare, Send, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Eye, ImagePlus, Link2, Loader2, Mail, MessageSquare, Send, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import {
   emailEstimateToCustomer,
   getEstimateApprovalInfo,
   markEstimateAccepted,
+  markEstimateSent,
+  removeEstimateImage,
   shareEstimate,
   type EstimateApprovalInfo,
 } from "@/app/(crm)/estimates/approval-actions";
@@ -24,6 +26,7 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     getEstimateApprovalInfo(estimateId)
@@ -63,6 +66,33 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
       setInfo(await getEstimateApprovalInfo(estimateId));
       setNotice(`Emailed to ${to}.`);
       onChanged?.();
+    });
+  }
+
+  async function addImages(files: FileList | null) {
+    if (!files?.length) return;
+    setError(null);
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.append("file", file);
+        const res = await fetch(`/api/estimates/${estimateId}/images`, { method: "POST", body });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || "Upload failed");
+      }
+      setInfo(await getEstimateApprovalInfo(estimateId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeImage(index: number) {
+    run(async () => {
+      await removeEstimateImage(estimateId, index);
+      setInfo(await getEstimateApprovalInfo(estimateId));
     });
   }
 
@@ -126,6 +156,70 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
           </div>
         )}
 
+        {/* Pictures the customer sees on the estimate (and the first one in the email) */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm">Pictures for the customer</Label>
+            <span className="text-xs text-muted-foreground">{info.images.length}/6</span>
+          </div>
+          {info.images.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {info.images.map((img, n) => (
+                <div key={`${img.name}-${n}`} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/estimates/${estimateId}/images?i=${n}`}
+                    alt={img.name}
+                    className="aspect-square w-full rounded-md border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(n)}
+                    disabled={pending}
+                    aria-label={`Remove ${img.name}`}
+                    className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {info.images.length < 6 && (
+            <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/50">
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+              {uploading ? "Uploading…" : "Add a mockup or photo"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={uploading}
+                onChange={(e) => {
+                  void addImages(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+
+        {/* Delivery & opens, in plain words */}
+        <div className="space-y-1 rounded-md bg-muted/50 p-3 text-sm">
+          <p>
+            {info.emailedAt
+              ? <>Emailed to <strong>{info.emailedTo}</strong> · {when(info.emailedAt)}</>
+              : info.sentAt
+                ? <>Link shared with the customer · not emailed through RedFox</>
+                : <>Not sent yet</>}
+          </p>
+          <p className="text-muted-foreground">
+            {info.viewCount > 0
+              ? <>Customer opened it {info.viewCount === 1 ? "once" : `${info.viewCount} times`} · last {when(info.lastViewedAt)}</>
+              : "Customer hasn't opened it yet. Your own previews don't count."}
+          </p>
+        </div>
+
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label htmlFor="deposit" className="text-xs">Deposit at approval</Label>
@@ -168,7 +262,13 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
             </div>
             <div className="flex flex-wrap gap-2">
               {info.customerPhone && (
-                <Button size="sm" variant="outline" className="gap-2" render={<a href={`sms:${info.customerPhone}?&body=${smsBody}`} />}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => void markEstimateSent(estimateId).then(async () => setInfo(await getEstimateApprovalInfo(estimateId)))}
+                  render={<a href={`sms:${info.customerPhone}?&body=${smsBody}`} />}
+                >
                   <MessageSquare className="size-4" /> Text to customer
                 </Button>
               )}
@@ -176,9 +276,6 @@ export function EstimateApprovalPanel({ estimateId, onChanged }: { estimateId: s
                 <Eye className="size-4" /> Preview
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {info.viewedAt ? `Customer opened it ${when(info.viewedAt)}.` : "Not opened by the customer yet."}
-            </p>
           </div>
         )}
 

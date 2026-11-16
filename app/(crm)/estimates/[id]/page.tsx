@@ -86,7 +86,7 @@ export default function EstimateDetailPage() {
       />
 
       {/* Content */}
-      <div className="flex-1 p-6 overflow-auto max-w-4xl">
+      <div className="flex-1 p-4 sm:p-6 overflow-auto max-w-4xl">
         <div className="space-y-6">
           {/* Header Card */}
           <Card>
@@ -121,13 +121,32 @@ export default function EstimateDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Send, pictures and opens: right under the header so it's easy to find */}
+          <div id="estimate-approval" className="print:hidden">
+            <EstimateApprovalPanel estimateId={estimate.id} onChanged={() => void refresh()} />
+          </div>
+
           {/* Line Items */}
           <Card>
             <CardHeader>
               <CardTitle>Estimate Items</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="border border-border rounded-lg overflow-hidden">
+              <ul className="divide-y divide-border rounded-lg border border-border md:hidden">
+                {estimate.lineItems.map((item) => (
+                  <li key={item.id} className={`flex flex-col gap-1 p-3 ${item.selected === false ? 'opacity-50' : ''}`}>
+                    <p className="whitespace-pre-line text-sm text-foreground">{item.description}</p>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {item.quantity} × ${item.unitPrice.toFixed(2)}
+                        {item.selected === false && ' · customer skipped'}
+                      </span>
+                      <span className="font-semibold text-foreground">${(item.quantity * item.unitPrice).toFixed(2)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden border border-border rounded-lg overflow-hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -140,7 +159,7 @@ export default function EstimateDetailPage() {
                   <TableBody>
                     {estimate.lineItems.map((item) => (
                       <TableRow key={item.id} className={item.selected === false ? 'opacity-50 line-through' : ''}>
-                        <TableCell className="text-foreground">
+                        <TableCell className="whitespace-pre-line text-foreground">
                           {item.description}
                           {item.selected === false && <span className="ml-2 text-xs no-underline">(customer skipped)</span>}
                         </TableCell>
@@ -163,7 +182,7 @@ export default function EstimateDetailPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-3 max-w-xs ml-auto">
-                <div className="border-t border-border pt-3 flex justify-between">
+                <div className="flex justify-between">
                   <span className="font-semibold text-foreground">{estimate.status === 'Accepted' ? 'Approved total' : 'Total'}</span>
                   <span className="font-bold text-lg text-primary">${total.toFixed(2)}</span>
                 </div>
@@ -176,17 +195,14 @@ export default function EstimateDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Notes</CardTitle>
+                <CardDescription>The customer sees these notes on their estimate.</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{estimate.notes}</p>
+                <p className="whitespace-pre-line text-muted-foreground">{estimate.notes}</p>
               </CardContent>
             </Card>
           )}
 
-          {/* Online approval */}
-          <div id="estimate-approval" className="print:hidden">
-            <EstimateApprovalPanel estimateId={estimate.id} onChanged={() => void refresh()} />
-          </div>
         </div>
       </div>
     </div>
