@@ -57,7 +57,43 @@ export function AdminSidebar({ role, name, email }: Props) {
   };
 
   return (
-    <aside className="w-60 shrink-0 flex flex-col bg-[#0d0d0d] border-r border-white/[0.06] min-h-screen">
+    <>
+    {/* Phone / tablet: compact top bar + swipeable tabs (the sidebar would eat half the screen) */}
+    <div className="lg:hidden sticky top-0 z-30 bg-[#0d0d0d]/95 backdrop-blur border-b border-white/[0.06]">
+      <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+        <div className="w-8 h-8 rounded-lg bg-[#C8392B] flex items-center justify-center shrink-0">
+          <Image src="/logo.png" alt="RedFox" width={18} height={18} className="w-[18px] h-[18px]" />
+        </div>
+        <div className="flex flex-col leading-none">
+          <span className="font-extrabold text-sm text-white tracking-tight">REDFOX</span>
+          <span className="text-[8px] font-bold text-[#C8392B] tracking-[0.2em] uppercase">Admin Portal</span>
+        </div>
+        <form action={adminLogoutAction} className="ml-auto">
+          <button type="submit" aria-label="Sign out" className="flex items-center justify-center size-11 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]">
+            <LogOut className="size-4" />
+          </button>
+        </form>
+      </div>
+      <nav className="flex gap-1.5 overflow-x-auto px-3 pb-3 [scrollbar-width:none]">
+        {visibleItems.map((item) => {
+          const isActive = pathname === item.href || (item.href !== '/admin/dashboard' && pathname.startsWith(item.href));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
+                isActive ? 'bg-[#C8392B] text-white' : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.08]'
+              )}
+            >
+              <item.icon className="size-4 shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+    <aside className="hidden lg:flex w-60 shrink-0 flex-col bg-[#0d0d0d] border-r border-white/[0.06] min-h-screen sticky top-0 h-screen">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.06]">
         <div className="w-8 h-8 rounded-lg bg-[#C8392B] flex items-center justify-center shrink-0">
@@ -114,5 +150,6 @@ export function AdminSidebar({ role, name, email }: Props) {
         </form>
       </div>
     </aside>
+    </>
   );
 }
