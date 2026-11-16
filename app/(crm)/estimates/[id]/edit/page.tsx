@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ImagePlus, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,7 @@ interface Row {
   quantity: string;
   unitPrice: string;
   optional: boolean;
+  imagePath: string | null;
 }
 
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -39,6 +40,25 @@ export default function EditEstimatePage() {
   const [validUntil, setValidUntil] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+
+  async function uploadItemImage(key: string, file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setUploadingKey(key);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await fetch(`/api/estimates/${id}/item-image`, { method: 'POST', body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.path) throw new Error(json.error || 'Upload failed');
+      setRows((r) => r.map((x) => (x.key === key ? { ...x, imagePath: json.path } : x)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingKey(null);
+    }
+  }
 
   useEffect(() => {
     getEditableEstimate(id)
@@ -53,12 +73,13 @@ export default function EditEstimatePage() {
         setDeposit(String(e.depositPercent));
         setValidUntil(e.validUntil);
         setRows(
-          (e.items.length ? e.items : [{ description: '', quantity: 1, unitPrice: 0, optional: true }]).map((i) => ({
+          (e.items.length ? e.items : [{ description: '', quantity: 1, unitPrice: 0, optional: true, imagePath: null }]).map((i) => ({
             key: newKey(),
             description: i.description,
             quantity: String(i.quantity),
             unitPrice: String(i.unitPrice),
             optional: i.optional,
+            imagePath: i.imagePath ?? null,
           })),
         );
       })
@@ -96,6 +117,7 @@ export default function EditEstimatePage() {
         quantity: Number(r.quantity) || 0,
         unitPrice: Number(r.unitPrice) || 0,
         optional: r.optional,
+        imagePath: r.imagePath,
       })),
     });
     if (!res.ok) {
@@ -184,7 +206,7 @@ export default function EditEstimatePage() {
                   variant="outline"
                   size="sm"
                   disabled={est.locked}
-                  onClick={() => setRows((r) => [...r, { key: newKey(), description: '', quantity: '1', unitPrice: '0', optional: true }])}
+                  onClick={() => setRows((r) => [...r, { key: newKey(), description: '', quantity: '1', unitPrice: '0', optional: true, imagePath: null }])}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add item
@@ -194,14 +216,53 @@ export default function EditEstimatePage() {
             <CardContent className="space-y-3">
               {rows.map((r, idx) => (
                 <div key={r.key} className="space-y-2 rounded-lg border p-3">
-                  <Textarea
-                    rows={2}
-                    value={r.description}
-                    onChange={(e) => update(r.key, { description: e.target.value })}
-                    placeholder="Description"
-                    aria-label={`Item ${idx + 1} description`}
-                    disabled={est.locked}
-                  />
+                  <div className="flex gap-3">
+                    {r.imagePath ? (
+                      <div className="relative shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/estimates/${id}/item-image?path=${encodeURIComponent(r.imagePath)}`}
+                          alt={`Picture for item ${idx + 1}`}
+                          className="size-20 rounded-md border object-cover"
+                        />
+                        {!est.locked && (
+                          <button
+                            type="button"
+                            onClick={() => update(r.key, { imagePath: null })}
+                            aria-label="Remove picture"
+                            className="absolute -right-2 -top-2 flex size-7 items-center justify-center rounded-full bg-black/70 text-white"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <label
+                        className={`flex size-20 shrink-0 flex-col items-center justify-center gap-1 rounded-md border border-dashed text-center text-[11px] text-muted-foreground ${est.locked ? 'opacity-50' : 'cursor-pointer hover:bg-muted/50'}`}
+                      >
+                        {uploadingKey === r.key ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+                        {uploadingKey === r.key ? 'Uploading' : 'Add photo'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          disabled={est.locked || uploadingKey !== null}
+                          onChange={(e) => {
+                            void uploadItemImage(r.key, e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    )}
+                    <Textarea
+                      rows={3}
+                      value={r.description}
+                      onChange={(e) => update(r.key, { description: e.target.value })}
+                      placeholder={'First line: item name (e.g. 48" wreath)\nNext lines: details (colors, bulbs, where it goes)'}
+                      aria-label={`Item ${idx + 1} description`}
+                      disabled={est.locked}
+                    />
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1.5">
                       <label htmlFor={`q-${r.key}`} className="text-xs text-muted-foreground">Qty</label>

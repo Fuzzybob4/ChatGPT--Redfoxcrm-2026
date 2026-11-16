@@ -62,12 +62,13 @@ export interface EstimateItemRow {
   optional: boolean;
   selected: boolean | null;
   sort_order: number;
+  image_path?: string | null;
 }
 
 export async function loadEstimateItems(db: Db, estimateId: string, orgId: string): Promise<EstimateItemRow[]> {
   const { data } = await db
     .from("estimate_line_items")
-    .select("id, description, quantity, unit_price, line_total, optional, selected, sort_order")
+    .select("id, description, quantity, unit_price, line_total, optional, selected, sort_order, image_path")
     .eq("estimate_id", estimateId)
     .eq("org_id", orgId)
     .order("sort_order");

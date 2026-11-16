@@ -15,7 +15,7 @@ export interface EditableEstimate {
   depositPercent: number;
   validUntil: string;
   discount: number;
-  items: { description: string; quantity: number; unitPrice: number; optional: boolean }[];
+  items: { description: string; quantity: number; unitPrice: number; optional: boolean; imagePath: string | null }[];
   /** Approved estimates already have an invoice and can't be changed. */
   locked: boolean;
   customerHasSeenIt: boolean;
@@ -42,7 +42,7 @@ export async function getEditableEstimate(id: string): Promise<EditableEstimate 
   const [{ data: items }, { data: customer }] = await Promise.all([
     db
       .from("estimate_line_items")
-      .select("description, quantity, unit_price, optional, sort_order")
+      .select("description, quantity, unit_price, optional, sort_order, image_path")
       .eq("estimate_id", id)
       .eq("org_id", org.orgId)
       .order("sort_order", { ascending: true }),
@@ -72,6 +72,7 @@ export async function getEditableEstimate(id: string): Promise<EditableEstimate 
         quantity: Number(r.quantity ?? 1),
         unitPrice: Number(r.unit_price ?? 0),
         optional: r.optional !== false,
+        imagePath: r.image_path ?? null,
       })),
     locked: Boolean(e.invoice_id || e.approved_at),
     customerHasSeenIt: Number(e.view_count ?? 0) > 0,
@@ -86,7 +87,7 @@ export interface UpdateEstimateInput {
   depositPercent: number;
   validUntil: string;
   discount: number;
-  items: { description: string; quantity: number; unitPrice: number; optional: boolean }[];
+  items: { description: string; quantity: number; unitPrice: number; optional: boolean; imagePath?: string | null }[];
 }
 
 /** Save changes. The customer's link stays the same and shows the new version. */
@@ -112,6 +113,11 @@ export async function updateEstimate(
       quantity: clamp(Number(i.quantity), 0, 100000),
       unitPrice: clamp(Number(i.unitPrice), 0, 1000000),
       optional: i.optional !== false,
+      // Only pictures uploaded for this estimate can be attached to its items.
+      imagePath:
+        typeof i.imagePath === "string" && i.imagePath.startsWith(`storage/estimates/${org.orgId}/${id}/items/`)
+          ? i.imagePath
+          : null,
     }))
     .filter((i) => i.description && i.quantity > 0);
   if (!items.length) return { ok: false, error: "Add at least one item with a description." };
@@ -133,6 +139,7 @@ export async function updateEstimate(
     line_total: money(i.quantity * i.unitPrice),
     optional: i.optional,
     sort_order: idx,
+    image_path: i.imagePath as string | null,
   }));
   if (discount > 0) {
     rows.push({
@@ -144,6 +151,7 @@ export async function updateEstimate(
       line_total: -discount,
       optional: false,
       sort_order: rows.length,
+      image_path: null,
     });
   }
 

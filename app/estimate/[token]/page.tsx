@@ -95,6 +95,7 @@ export default async function PublicEstimatePage({ params }: Props) {
       }}
       items={items.map((i) => ({
         id: i.id,
+        hasImage: Boolean(i.image_path),
         description: i.description,
         quantity: Number(i.quantity ?? 1),
         lineTotal: Number(i.line_total ?? 0),

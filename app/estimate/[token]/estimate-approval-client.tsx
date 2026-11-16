@@ -33,7 +33,7 @@ interface Props {
     declinedAt: string | null;
     taxRate: number;
   };
-  items: { id: string; description: string; quantity: number; lineTotal: number; optional: boolean; selected: boolean | null }[];
+  items: { id: string; hasImage?: boolean; description: string; quantity: number; lineTotal: number; optional: boolean; selected: boolean | null }[];
 }
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -149,18 +149,42 @@ export function EstimateApprovalClient({ token, imageCount = 0, business, custom
                     return (
                       <label
                         key={i.id}
-                        className={`flex items-start gap-3 p-3 text-sm ${canToggle ? "cursor-pointer" : ""} ${on ? "" : "text-muted-foreground"}`}
+                        className={`flex items-start gap-3 p-3 text-sm transition-colors ${canToggle ? "cursor-pointer" : ""} ${on ? (i.optional ? "bg-primary/5" : "") : "text-muted-foreground"}`}
                       >
                         {i.optional ? (
                           <Checkbox checked={on} disabled={!canToggle} onChange={() => canToggle && toggle(i.id)} className="mt-0.5" />
                         ) : (
                           <span className="w-4" />
                         )}
-                        <span className={`flex-1 ${on ? "" : "line-through"}`}>
-                          {i.description}
-                          {i.quantity !== 1 ? ` × ${i.quantity}` : ""}
+                        {i.hasImage && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/estimate/${token}/item/${i.id}`}
+                            alt=""
+                            aria-hidden="true"
+                            loading="lazy"
+                            className={`size-16 shrink-0 rounded-md border object-cover transition duration-200 sm:size-20 ${
+                              on ? "ring-2 ring-primary/60" : "opacity-50 grayscale"
+                            }`}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          {(() => {
+                            const [name, ...rest] = i.description.split(/\r?\n/).filter((l) => l.trim());
+                            return (
+                              <>
+                                <span className={`block font-medium ${on ? "" : "line-through"}`}>
+                                  {name}
+                                  {i.quantity !== 1 ? ` × ${i.quantity}` : ""}
+                                </span>
+                                {rest.length > 0 && (
+                                  <span className="mt-0.5 block whitespace-pre-line text-xs text-muted-foreground">{rest.join("\n")}</span>
+                                )}
+                              </>
+                            );
+                          })()}
                         </span>
-                        <span className={`tabular-nums ${on ? "font-medium" : "line-through"}`}>{usd(i.lineTotal)}</span>
+                        <span className={`shrink-0 tabular-nums ${on ? "font-medium" : "line-through"}`}>{usd(i.lineTotal)}</span>
                       </label>
                     );
                   })}
