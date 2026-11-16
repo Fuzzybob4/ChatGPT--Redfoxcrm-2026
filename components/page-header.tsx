@@ -12,11 +12,13 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
+    // Phones: title on its own row, page buttons on a second row that scrolls
+    // sideways if needed, so neither gets squeezed. Wider screens: one row.
+    <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border bg-background px-4 py-2.5 sm:h-14 sm:flex-nowrap sm:py-0">
       <SidebarTrigger className="-ml-1 size-8" />
       <Separator orientation="vertical" className="mr-2 h-4" />
-      <div className="flex flex-1 items-center justify-between gap-4 min-w-0">
-        <div className="min-w-0 flex items-center gap-4">
+      <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-4 sm:flex-none">
           <div className="min-w-0">
             <h1 className="font-semibold text-foreground text-base leading-none truncate">
               {title}
@@ -31,7 +33,11 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
             <LocationSelector />
           </div>
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && (
+          <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:w-auto sm:shrink-0 sm:overflow-visible sm:px-0 sm:pb-0">
+            {actions}
+          </div>
+        )}
       </div>
     </header>
   );
