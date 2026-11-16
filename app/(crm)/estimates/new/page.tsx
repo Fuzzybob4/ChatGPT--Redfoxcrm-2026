@@ -220,7 +220,8 @@ export default function NewEstimatePage() {
                       )}
                       <Textarea
                         rows={3}
-                        placeholder={'First line: item name (e.g. 48" wreath)\nNext lines: details (colors, bulbs, where it goes)'}
+                        placeholder={'Item name (e.g. 48" wreath)\nDetails on the next lines'}
+                      className="min-h-24 flex-1"
                         value={item.description}
                         onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                         aria-label={`Item ${idx + 1} description`}
@@ -234,7 +235,7 @@ export default function NewEstimatePage() {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="h-9 w-20"
+                          className="h-9 w-16"
                         />
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -244,7 +245,7 @@ export default function NewEstimatePage() {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="h-9 w-28"
+                          className="h-9 w-24"
                         />
                       </div>
                       <span className="ml-auto text-sm font-semibold">${(item.quantity * item.unitPrice).toFixed(2)}</span>

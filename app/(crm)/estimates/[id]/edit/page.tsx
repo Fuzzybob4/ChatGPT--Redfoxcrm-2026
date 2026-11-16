@@ -258,7 +258,8 @@ export default function EditEstimatePage() {
                       rows={3}
                       value={r.description}
                       onChange={(e) => update(r.key, { description: e.target.value })}
-                      placeholder={'First line: item name (e.g. 48" wreath)\nNext lines: details (colors, bulbs, where it goes)'}
+                      placeholder={'Item name (e.g. 48" wreath)\nDetails on the next lines'}
+                      className="min-h-24 flex-1"
                       aria-label={`Item ${idx + 1} description`}
                       disabled={est.locked}
                     />
@@ -271,7 +272,7 @@ export default function EditEstimatePage() {
                         inputMode="decimal"
                         value={r.quantity}
                         onChange={(e) => update(r.key, { quantity: e.target.value })}
-                        className="h-9 w-20"
+                        className="h-9 w-16"
                         disabled={est.locked}
                       />
                     </div>
@@ -282,7 +283,7 @@ export default function EditEstimatePage() {
                         inputMode="decimal"
                         value={r.unitPrice}
                         onChange={(e) => update(r.key, { unitPrice: e.target.value })}
-                        className="h-9 w-28"
+                        className="h-9 w-24"
                         disabled={est.locked}
                       />
                     </div>
