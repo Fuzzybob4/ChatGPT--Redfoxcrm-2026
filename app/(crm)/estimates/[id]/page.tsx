@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { ArrowLeft, Download, Mail } from 'lucide-react';
+import { ArrowLeft, Download, Mail, Pencil } from 'lucide-react';
 import { EstimateApprovalPanel } from '@/components/estimates/estimate-approval-panel';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -63,12 +63,18 @@ export default function EstimateDetailPage() {
         title={estimate.estimateNumber}
         description={`${customer?.name || 'Unknown'} • ${customer?.address || 'No address'}`}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button render={<Link href="/estimates" />} variant="outline" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
 
+            {!(estimate as { invoiceId?: string | null }).invoiceId && estimate.status !== 'Accepted' && estimate.status !== 'Converted' && (
+              <Button render={<Link href={`/estimates/${estimate.id}/edit`} />} variant="outline" size="sm">
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
