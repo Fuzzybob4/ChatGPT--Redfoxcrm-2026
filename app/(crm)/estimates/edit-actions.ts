@@ -189,3 +189,15 @@ export async function updateEstimate(
   revalidatePath(`/estimates/${id}`);
   return { ok: true };
 }
+
+/** Attach an uploaded picture to the item at a given position (used right after creating an estimate). */
+export async function setEstimateItemImage(estimateId: string, sortOrder: number, path: string): Promise<void> {
+  const { org, db } = await ctx();
+  if (!path.startsWith(`storage/estimates/${org.orgId}/${estimateId}/items/`)) return;
+  await db
+    .from("estimate_line_items")
+    .update({ image_path: path })
+    .eq("estimate_id", estimateId)
+    .eq("org_id", org.orgId)
+    .eq("sort_order", sortOrder);
+}

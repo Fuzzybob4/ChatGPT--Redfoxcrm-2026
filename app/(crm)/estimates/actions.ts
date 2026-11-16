@@ -8,6 +8,8 @@ import { newApprovalToken } from "@/lib/estimates/approval";
 export interface CreateEstimateInput {
   customerId: string;
   title: string;
+  /** What's included, shown to the customer. */
+  description?: string;
   locationId?: string | null;
   lineItems: { description: string; quantity: number; unitPrice: number }[];
   discount?: number;
@@ -28,7 +30,7 @@ export async function createEstimate(
 
   const items = (input.lineItems ?? [])
     .map((i) => ({
-      description: String(i.description ?? "").trim().slice(0, 300),
+      description: String(i.description ?? "").trim().slice(0, 1000),
       quantity: clamp(Number(i.quantity), 0, 100000),
       unitPrice: clamp(Number(i.unitPrice), 0, 1000000),
     }))
@@ -64,6 +66,7 @@ export async function createEstimate(
       location_id: input.locationId || customer.location_id || null,
       estimate_number: `EST-${stamp}-${Math.floor(1000 + Math.random() * 9000)}`,
       title: (input.title ?? "").trim().slice(0, 200) || "Holiday lighting estimate",
+      description: (input.description ?? "").trim().slice(0, 4000) || null,
       status: "draft",
       subtotal,
       tax_rate: taxRate,
