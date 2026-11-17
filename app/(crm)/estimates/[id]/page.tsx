@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { ArrowLeft, Download, Mail, Pencil } from 'lucide-react';
 import { EstimateApprovalPanel } from '@/components/estimates/estimate-approval-panel';
+import { EstimateManageButtons } from '@/components/estimates/estimate-manage-buttons';
+import { estimateStage } from '@/lib/estimate-stage';
 import { formatPropertyAddress } from '@/components/customers/property-picker';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -26,7 +28,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export default function EstimateDetailPage() {
   const { id } = useParams() as { id: string };
-  const { loading, getEstimateById, getCustomerById, refresh, properties } = useData();
+  const { loading, getEstimateById, getCustomerById, refresh, properties, invoices } = useData();
   const estimate = getEstimateById(id);
 
   if (loading) {
@@ -58,7 +60,8 @@ export default function EstimateDetailPage() {
   const placeAddress = property ? formatPropertyAddress(property) : customer?.address || 'No address';
   // Saved total reflects what the customer approved (tax included).
   const total = (estimate as { total?: number }).total ?? 0;
-  const config = statusConfig[estimate.status] ?? { label: estimate.status, color: 'bg-gray-100 text-gray-800' };
+  const linkedInvoice = invoices.find((i) => i.id === (estimate as { invoiceId?: string | null }).invoiceId);
+  const stage = estimateStage(estimate as never, linkedInvoice ? { amountPaid: Number((linkedInvoice as { amountPaid?: number }).amountPaid ?? 0), status: linkedInvoice.status } : null);
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -78,6 +81,12 @@ export default function EstimateDetailPage() {
                 Edit
               </Button>
             )}
+            <EstimateManageButtons
+              estimateId={estimate.id}
+              archived={Boolean((estimate as { archivedAt?: string | null }).archivedAt)}
+              hasInvoice={Boolean((estimate as { invoiceId?: string | null }).invoiceId)}
+              onChanged={refresh}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -108,7 +117,7 @@ export default function EstimateDetailPage() {
                     {placeAddress}
                   </CardDescription>
                 </div>
-                <Badge className={`${config.color}`}>{config.label}</Badge>
+                <Badge className={stage.chip}>{stage.label}</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -132,6 +141,30 @@ export default function EstimateDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {(stage.key === 'approved' || stage.key === 'paid') && linkedInvoice && (
+            <div
+              className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 text-sm print:hidden ${
+                stage.key === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'
+              }`}
+            >
+              <p>
+                {stage.key === 'paid'
+                  ? "Paid. It's now on the invoice and on the schedule's Needs scheduling list for install."
+                  : 'Approved. Waiting on the deposit. Once it’s paid, this moves to the invoice and onto the schedule for install.'}
+              </p>
+              <div className="flex gap-2">
+                <Button render={<Link href={`/invoices/${linkedInvoice.id}`} />} size="sm" variant="outline">
+                  View invoice
+                </Button>
+                {stage.key === 'paid' && (
+                  <Button render={<Link href="/schedule" />} size="sm">
+                    Schedule install
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Send, pictures and opens: right under the header so it's easy to find */}
           <div id="estimate-approval" className="print:hidden">

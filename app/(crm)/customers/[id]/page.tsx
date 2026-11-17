@@ -35,6 +35,7 @@ import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 import { ContractBillingCard } from "@/components/customers/contract-billing-card";
 import { InstallListCard } from "@/components/customers/install-list-card";
+import { estimateStage } from "@/lib/estimate-stage";
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -60,7 +61,7 @@ interface Props {
 
 export default function CustomerDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, refresh, estimates, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
+  const { loading, refresh, estimates, invoices, getCustomerById, getCustomerJobs, getCustomerInvoices, getCustomerPhotos, getCustomerProperties } = useData();
   const customer = getCustomerById(id);
   const photos = getCustomerPhotos(id);
   const properties = getCustomerProperties(id);
@@ -92,7 +93,7 @@ export default function CustomerDetailPage({ params }: Props) {
     }),
   );
   const customerEstimates = estimates
-    .filter((e) => e.customerId === customer.id)
+    .filter((e) => e.customerId === customer.id && !(e as { archivedAt?: string | null }).archivedAt)
     .sort((a, b) => String(b.createdDate ?? '').localeCompare(String(a.createdDate ?? '')));
   const estimateSignals = estimates
     .filter((e) => e.customerId === customer.id)
@@ -458,12 +459,11 @@ export default function CustomerDetailPage({ params }: Props) {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           <span className="text-sm font-semibold">{usd(Number((est as { total?: number }).total ?? 0))}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            est.status === 'Accepted' || est.status === 'Converted' ? 'bg-emerald-100 text-emerald-800'
-                              : est.status === 'Sent' ? 'bg-blue-100 text-blue-800'
-                              : est.status === 'Rejected' ? 'bg-red-100 text-red-800'
-                              : 'bg-muted text-muted-foreground'
-                          }`}>{est.status === 'Accepted' ? 'Approved' : est.status}</span>
+                          {(() => {
+                            const inv = invoices.find((i) => i.id === (est as { invoiceId?: string | null }).invoiceId);
+                            const st = estimateStage(est as never, inv ? { amountPaid: Number((inv as { amountPaid?: number }).amountPaid ?? 0), status: inv.status } : null);
+                            return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.chip}`}>{st.label}</span>;
+                          })()}
                           <ChevronRight className="size-4 text-muted-foreground" />
                         </div>
                       </Link>

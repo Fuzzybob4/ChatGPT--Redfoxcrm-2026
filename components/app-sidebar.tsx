@@ -160,7 +160,8 @@ export async function AppSidebar() {
       .eq("org_id", org.orgId)
       .is("approved_at", null)
       .is("declined_at", null)
-      .is("invoice_id", null),
+      .is("invoice_id", null)
+      .is("archived_at", null),
     // Invoices with money still owed.
     supabase
       .from("invoices")

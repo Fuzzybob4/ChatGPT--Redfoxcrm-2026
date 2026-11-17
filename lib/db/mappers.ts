@@ -152,7 +152,7 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   };
 }
 
-export function mapEstimate(row: Record<string, any>): Estimate & { total: number; sentAt: string | null; invoiceId: string | null } {
+export function mapEstimate(row: Record<string, any>): Estimate & { total: number; sentAt: string | null; invoiceId: string | null; archivedAt: string | null; title: string } {
   const total = toNum(row.total_amount) || toNum(row.subtotal);
   const status = (titleCase(row.status) as EstimateStatus) || 'Draft';
 
@@ -188,6 +188,8 @@ export function mapEstimate(row: Record<string, any>): Estimate & { total: numbe
     total,
     sentAt: row.sent_at ?? null,
     invoiceId: row.invoice_id ?? null,
+    archivedAt: row.archived_at ?? null,
+    title: row.title ?? '',
   };
 }
 

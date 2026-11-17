@@ -23,11 +23,11 @@ export default async function PublicEstimatePage({ params }: Props) {
   const { data: estimate } = await db
     .from("estimates")
     .select(
-      "id, org_id, customer_id, estimate_number, title, description, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images, property_id",
+      "id, org_id, customer_id, estimate_number, title, description, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images, property_id, archived_at",
     )
     .eq("approval_token", token)
     .maybeSingle();
-  if (!estimate) notFound();
+  if (!estimate || (estimate as { archived_at?: string | null }).archived_at) notFound();
 
   const [{ data: profile }, { data: org }, { data: customer }] = await Promise.all([
     db.from("business_profiles").select("business_name, phone, email, website").eq("org_id", estimate.org_id).maybeSingle(),
