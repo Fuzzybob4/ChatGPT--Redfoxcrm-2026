@@ -23,6 +23,7 @@ import { getInvoiceTotal } from "@/lib/data";
 import { useData } from "@/lib/data-context";
 import { useOrgContext } from "@/lib/org-context";
 import { sendInvoiceToCustomer } from "../actions";
+import { InvoiceSharePanel } from "@/components/invoices/invoice-share-panel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -119,6 +120,11 @@ export default function InvoiceDetailPage({ params }: Props) {
             >
               {sendNote.text}
             </p>
+          )}
+          {!["Paid", "Cancelled"].includes(String(invoice.status)) && (
+            <div className="mb-4">
+              <InvoiceSharePanel invoiceId={invoice.id} onShared={() => startTransition(async () => { await refresh(); })} />
+            </div>
           )}
           <Card>
             <CardHeader className="pb-4">

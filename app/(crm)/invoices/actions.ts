@@ -441,3 +441,73 @@ export async function sendInvoiceToCustomer(
   revalidatePath(`/invoices/${invoiceId}`);
   return { marked: true, emailedTo, emailError };
 }
+
+export interface InvoiceShareInfo {
+  link: string;
+  customerPhone: string | null;
+  customerFirstName: string;
+  businessName: string;
+  invoiceNumber: string;
+  amountDue: number;
+  depositDue: number;
+}
+
+/**
+ * The customer's pay link (their RedFox portal), for texting or copying when
+ * email isn't reliable. Same link the invoice email uses.
+ */
+export async function getInvoiceShareInfo(invoiceId: string): Promise<InvoiceShareInfo> {
+  const parsed = uuidSchema.safeParse(invoiceId);
+  if (!parsed.success) throw new Error("Invalid invoice");
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { ensurePortalToken } = await import("@/lib/estimates/approval");
+  const { appBaseUrl } = await import("@/lib/email/transactional");
+  const db = createAdminClient();
+  const { data: inv } = await db
+    .from("invoices")
+    .select("id, customer_id, invoice_number, total_amount, amount_paid, deposit_amount")
+    .eq("id", invoiceId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!inv) throw new Error("Invoice not found");
+  const [token, { data: customer }, { data: profile }, { data: orgRow }] = await Promise.all([
+    ensurePortalToken(db, inv.customer_id, org.orgId),
+    db.from("customers").select("first_name, full_name, phone").eq("id", inv.customer_id).eq("org_id", org.orgId).maybeSingle(),
+    db.from("business_profiles").select("business_name").eq("org_id", org.orgId).maybeSingle(),
+    db.from("organizations").select("name").eq("id", org.orgId).maybeSingle(),
+  ]);
+  const total = Number(inv.total_amount ?? 0);
+  const paid = Number(inv.amount_paid ?? 0);
+  const deposit = Number(inv.deposit_amount ?? 0);
+  return {
+    link: `${appBaseUrl()}/customer-portal/${encodeURIComponent(token)}`,
+    customerPhone: customer?.phone ?? null,
+    customerFirstName: (customer?.first_name || customer?.full_name || "").trim().split(/\s+/)[0] || "there",
+    businessName: profile?.business_name || orgRow?.name || "us",
+    invoiceNumber: inv.invoice_number ?? "",
+    amountDue: Math.max(0, Math.round((total - paid) * 100) / 100),
+    depositDue: Math.max(0, Math.round((deposit - paid) * 100) / 100),
+  };
+}
+
+/** Texting or copying the link counts as sending (a draft becomes "sent"). */
+export async function markInvoiceShared(invoiceId: string): Promise<void> {
+  const parsed = uuidSchema.safeParse(invoiceId);
+  if (!parsed.success) return;
+  const org = await getCurrentOrg();
+  if (!org) return;
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const db = createAdminClient();
+  const { data: cur } = await db.from("invoices").select("status, sent_at").eq("id", invoiceId).eq("org_id", org.orgId).maybeSingle();
+  if (!cur) return;
+  if (cur.status === "draft" || !cur.sent_at) {
+    await db
+      .from("invoices")
+      .update({ status: cur.status === "draft" ? "sent" : cur.status, sent_at: cur.sent_at ?? new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", invoiceId)
+      .eq("org_id", org.orgId);
+  }
+  revalidatePath(`/invoices/${invoiceId}`);
+}

@@ -253,7 +253,7 @@ export default function NewInvoicePage() {
         }
       />
 
-      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Left column: main invoice builder */}
           <div className="space-y-6 lg:col-span-2">
@@ -334,37 +334,54 @@ export default function NewInvoicePage() {
                   <span />
                 </div>
                 <div className="space-y-2">
-                  {lineItems.map((item) => (
+                  {lineItems.map((item, idx) => (
                     <div
                       key={item.id}
-                      className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_80px_120px_120px_36px] sm:border-0 sm:p-0"
+                      className="grid grid-cols-[1fr_1fr] items-end gap-x-3 gap-y-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_80px_120px_120px_36px] sm:items-center sm:border-0 sm:p-0"
                     >
-                      <Input
-                        placeholder="Service or product description"
-                        value={item.description}
-                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        step="1"
-                        className="text-right"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)
-                        }
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="text-right"
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)
-                        }
-                      />
-                      <div className="text-right text-sm font-medium text-foreground">
+                      <div className="col-span-2 space-y-1 sm:col-span-1">
+                        <Label htmlFor={`desc-${item.id}`} className="text-xs text-muted-foreground sm:sr-only">
+                          Description
+                        </Label>
+                        <Input
+                          id={`desc-${item.id}`}
+                          placeholder="Service or product description"
+                          value={item.description}
+                          onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`qty-${item.id}`} className="text-xs text-muted-foreground sm:sr-only">
+                          Qty
+                        </Label>
+                        <Input
+                          id={`qty-${item.id}`}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="1"
+                          className="text-right"
+                          value={item.quantity}
+                          onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`price-${item.id}`} className="text-xs text-muted-foreground sm:sr-only">
+                          Unit price ($)
+                        </Label>
+                        <Input
+                          id={`price-${item.id}`}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          className="text-right"
+                          value={item.unitPrice}
+                          onChange={(e) => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground sm:block sm:text-right">
+                        <span className="text-xs font-normal text-muted-foreground sm:hidden">Line total</span>
                         {formatCurrency(item.quantity * item.unitPrice)}
                       </div>
                       <Button
@@ -372,8 +389,8 @@ export default function NewInvoicePage() {
                         size="icon"
                         variant="ghost"
                         disabled={lineItems.length === 1}
-                        className="text-muted-foreground hover:text-destructive"
-                        aria-label="Remove line item"
+                        className="justify-self-end text-muted-foreground hover:text-destructive"
+                        aria-label={`Remove item ${idx + 1}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
