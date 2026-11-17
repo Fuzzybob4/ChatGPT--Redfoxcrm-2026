@@ -455,6 +455,10 @@ export default function CustomerDetailPage({ params }: Props) {
                           <p className="text-xs text-muted-foreground">
                             {est.estimateNumber}
                             {est.createdDate ? ` · ${showDate(est.createdDate, { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                            {(() => {
+                              const prop = properties.find((p) => p.id === (est as { propertyId?: string }).propertyId);
+                              return prop ? ` · ${prop.propertyName || prop.address}` : "";
+                            })()}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">

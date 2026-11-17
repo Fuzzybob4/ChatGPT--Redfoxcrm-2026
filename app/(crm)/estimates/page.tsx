@@ -30,7 +30,7 @@ const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', curren
 
 export default function EstimatesPage() {
   const { selectedLocationId } = useLocation();
-  const { loading, estimates, invoices, getCustomerById } = useData();
+  const { loading, estimates, invoices, properties, getCustomerById } = useData();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('open');
 
@@ -38,14 +38,18 @@ export default function EstimatesPage() {
     const invById = new Map(invoices.map((i) => [i.id, i]));
     return (selectedLocationId ? estimates.filter((e) => !e.locationId || e.locationId === selectedLocationId) : estimates).map((est) => {
       const inv = invById.get((est as { invoiceId?: string | null }).invoiceId ?? '');
+      const prop = properties.find((p) => p.id === (est as { propertyId?: string }).propertyId);
+      const customer = getCustomerById(est.customerId);
       return {
         est,
-        customer: getCustomerById(est.customerId),
+        customer,
+        // The estimate's property address when set, else the customer's address.
+        place: prop ? `${prop.propertyName ? `${prop.propertyName} · ` : ''}${prop.address}` : customer?.address ?? '',
         stage: estimateStage(est as never, inv ? { amountPaid: Number((inv as { amountPaid?: number }).amountPaid ?? 0), status: inv.status } : null),
         total: (est as { total?: number }).total ?? getEstimateTotal(est),
       };
     });
-  }, [estimates, invoices, selectedLocationId, getCustomerById]);
+  }, [estimates, invoices, properties, selectedLocationId, getCustomerById]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: rows.filter((r) => r.stage.key !== 'archived').length };
@@ -55,7 +59,7 @@ export default function EstimatesPage() {
   }, [rows]);
 
   const q = search.trim().toLowerCase();
-  const filtered = rows.filter(({ est, customer, stage }) => {
+  const filtered = rows.filter(({ est, customer, stage, place }) => {
     const inFilter =
       filter === 'all'
         ? stage.key !== 'archived'
@@ -67,7 +71,7 @@ export default function EstimatesPage() {
     return (
       est.estimateNumber.toLowerCase().includes(q) ||
       (customer?.name ?? '').toLowerCase().includes(q) ||
-      (customer?.address ?? '').toLowerCase().includes(q) ||
+      place.toLowerCase().includes(q) ||
       ((est as { title?: string }).title ?? '').toLowerCase().includes(q)
     );
   });
@@ -137,7 +141,7 @@ export default function EstimatesPage() {
             <>
               {/* Phone: cards */}
               <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card md:hidden">
-                {filtered.map(({ est, customer, stage, total }) => (
+                {filtered.map(({ est, customer, stage, total, place }) => (
                   <li key={est.id}>
                     <Link href={`/estimates/${est.id}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
                       <div className="min-w-0 flex-1 space-y-1">
@@ -148,7 +152,7 @@ export default function EstimatesPage() {
                         <p className="truncate text-xs text-muted-foreground">
                           {est.estimateNumber}
                           {est.createdDate ? ` · ${format(new Date(`${est.createdDate}T12:00:00`), 'MMM d')}` : ''}
-                          {customer?.address ? ` · ${customer.address}` : ''}
+                          {place ? ` · ${place}` : ''}
                         </p>
                         <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${stage.chip}`}>{stage.label}</span>
                       </div>
@@ -173,11 +177,11 @@ export default function EstimatesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map(({ est, customer, stage, total }) => (
+                    {filtered.map(({ est, customer, stage, total, place }) => (
                       <TableRow key={est.id}>
                         <TableCell className="font-mono text-sm font-semibold">{est.estimateNumber}</TableCell>
                         <TableCell>{customer?.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{customer?.address || '—'}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{place || '—'}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {est.createdDate ? format(new Date(`${est.createdDate}T12:00:00`), 'MMM d, yyyy') : '—'}
                         </TableCell>
