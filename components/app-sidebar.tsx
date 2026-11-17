@@ -148,20 +148,34 @@ export async function AppSidebar() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch live counts from Supabase
-  const [customersRes, estimatesRes, jobsRes, troubleRes, ticketRes, alertRes] = await Promise.all([
-    supabase
-      .from("customers")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", org.orgId),
+  // Sidebar numbers follow one rule: they count things that need attention,
+  // and they're hidden at zero. (A total like "2,662 customers" isn't shown.)
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+  const [estimatesRes, invoicesRes, jobsRes, troubleRes, ticketRes, alertRes] = await Promise.all([
+    // Estimates waiting on a decision (draft or sent, not approved/declined).
     supabase
       .from("estimates")
       .select("id", { count: "exact", head: true })
-      .eq("org_id", org.orgId),
+      .eq("org_id", org.orgId)
+      .is("approved_at", null)
+      .is("declined_at", null)
+      .is("invoice_id", null),
+    // Invoices with money still owed.
     supabase
-      .from("work_orders")
+      .from("invoices")
       .select("id", { count: "exact", head: true })
-      .eq("org_id", org.orgId),
+      .eq("org_id", org.orgId)
+      .gt("balance_due", 0)
+      .not("status", "in", "(draft,cancelled,void)")
+      .or("archived.is.null,archived.eq.false"),
+    // Jobs on today's schedule that aren't finished.
+    supabase
+      .from("scheduled_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId)
+      .eq("scheduled_date", today)
+      .is("archived_at", null)
+      .not("status", "in", "(cancelled,completed)"),
     supabase
       .from("work_order_requests")
       .select("id", { count: "exact", head: true })
@@ -180,14 +194,21 @@ export async function AppSidebar() {
   ]);
 
   const openRequests = (troubleRes.count ?? 0) + (ticketRes.count ?? 0);
+  const asBadge = (n: number | null | undefined) => (n && n > 0 ? (n > 99 ? "99+" : String(n)) : "");
+  const badgeHint: Record<string, string> = {
+    "/estimates": "waiting on the customer",
+    "/invoices": "unpaid",
+    "/jobs": "today",
+    "/tickets": "open",
+    "/inventory": "low-stock alerts",
+  };
 
-  // Build badges map with live counts
   const badgeCounts: Record<string, string> = {
-    "/customers": (customersRes.count ?? 0).toString(),
-    "/estimates": (estimatesRes.count ?? 0).toString(),
-    "/jobs": (jobsRes.count ?? 0).toString(),
-    "/tickets": openRequests.toString(),
-    "/inventory": (alertRes.count ?? 0).toString(),
+    "/estimates": asBadge(estimatesRes.count),
+    "/invoices": asBadge(invoicesRes.count),
+    "/jobs": asBadge(jobsRes.count),
+    "/tickets": asBadge(openRequests),
+    "/inventory": asBadge(alertRes.count),
   };
 
   const userEmail = user?.email ?? "";
@@ -265,10 +286,11 @@ export async function AppSidebar() {
                           Add-on
                         </Badge>
                       )}
-                      {item.badge && badgeCounts[item.href] && (
+                      {badgeCounts[item.href] && (
                         <Badge
                           variant="secondary"
-                          className="ml-auto text-[10px] h-5 px-1.5 bg-sidebar-accent text-sidebar-accent-foreground"
+                          className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] tabular-nums bg-sidebar-accent text-sidebar-accent-foreground"
+                          aria-label={`${badgeCounts[item.href]} ${badgeHint[item.href] ?? ""}`}
                         >
                           {badgeCounts[item.href]}
                         </Badge>
@@ -285,6 +307,15 @@ export async function AppSidebar() {
                               >
                                 <child.icon className="size-3.5 shrink-0" />
                                 <span>{child.title}</span>
+                                {badgeCounts[child.href] && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] tabular-nums bg-sidebar-accent text-sidebar-accent-foreground"
+                                    aria-label={`${badgeCounts[child.href]} ${badgeHint[child.href] ?? ""}`}
+                                  >
+                                    {badgeCounts[child.href]}
+                                  </Badge>
+                                )}
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                           );
