@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useData } from '@/lib/data-context';
 import { getEditableEstimate, updateEstimate, type EditableEstimate } from '@/app/(crm)/estimates/edit-actions';
+import { PropertyPicker } from '@/components/customers/property-picker';
 import { getEstimateApprovalInfo, removeEstimateImage } from '@/app/(crm)/estimates/approval-actions';
 
 interface Row {
@@ -32,6 +33,7 @@ export default function EditEstimatePage() {
   const { refresh } = useData();
   const [est, setEst] = useState<EditableEstimate | null | undefined>(undefined);
   const [title, setTitle] = useState('');
+  const [propertyId, setPropertyId] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
@@ -99,6 +101,7 @@ export default function EditEstimatePage() {
         setEst(e);
         if (!e) return;
         setTitle(e.title);
+        setPropertyId(e.propertyId);
         setDescription(e.description);
         setNotes(e.notes);
         setDiscount(String(e.discount || 0));
@@ -138,6 +141,7 @@ export default function EditEstimatePage() {
     setSaving(true);
     setError(null);
     const res = await updateEstimate(id, {
+      propertyId: propertyId || null,
       title,
       description,
       notes,
@@ -208,6 +212,7 @@ export default function EditEstimatePage() {
               <CardTitle>What the customer sees</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <PropertyPicker customerId={est.customerId} value={propertyId} onChange={setPropertyId} disabled={est.locked} />
               <div className="space-y-1.5">
                 <label htmlFor="est-title" className="text-sm font-medium">Title</label>
                 <Input id="est-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={est.locked} />

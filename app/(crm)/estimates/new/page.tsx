@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CustomerPicker } from '@/components/customers/customer-picker';
+import { PropertyPicker, defaultPropertyId } from '@/components/customers/property-picker';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useEffect, useState } from 'react';
@@ -28,8 +29,13 @@ interface LineItem {
 export default function NewEstimatePage() {
   const router = useRouter();
   const { selectedLocationId } = useLocation();
-  const { getLocationCustomers, refresh } = useData();
+  const { getLocationCustomers, refresh, properties } = useData();
   const [customerId, setCustomerId] = useState('');
+  const [propertyId, setPropertyId] = useState('');
+  // When the customer changes, pre-pick their primary property.
+  useEffect(() => {
+    setPropertyId(customerId ? defaultPropertyId(properties, customerId) : '');
+  }, [customerId, properties]);
   // Opened from a customer's page (/estimates/new?customer=<id>): pre-pick them.
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('customer');
@@ -95,6 +101,7 @@ export default function NewEstimatePage() {
       customerId,
       title,
       description,
+      propertyId: propertyId || null,
       locationId: selectedLocationId || null,
       lineItems: kept.map((i) => ({ description: i.description, quantity: i.quantity, unitPrice: i.unitPrice })),
       discount: parseFloat(discount || '0') || 0,
@@ -164,6 +171,7 @@ export default function NewEstimatePage() {
                 value={customerId}
                 onChange={setCustomerId}
               />
+              <PropertyPicker customerId={customerId} value={propertyId} onChange={setPropertyId} />
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Estimate title</label>
                 <Input placeholder="Holiday lighting 2026" value={title} onChange={(e) => setTitle(e.target.value)} />

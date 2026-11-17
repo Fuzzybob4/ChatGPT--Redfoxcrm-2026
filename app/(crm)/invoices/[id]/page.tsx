@@ -30,7 +30,7 @@ interface Props {
 
 export default function InvoiceDetailPage({ params }: Props) {
   const { id } = use(params);
-  const { loading, invoices, jobs, getCustomerById, refresh } = useData();
+  const { loading, invoices, jobs, getCustomerById, refresh, properties } = useData();
   const { businessName } = useOrgContext();
   const invoice = invoices.find((i) => i.id === id);
   const [pending, startTransition] = useTransition();
@@ -135,6 +135,15 @@ export default function InvoiceDetailPage({ params }: Props) {
                   <CardTitle className="text-xl font-bold">
                     {invoice.invoiceNumber}
                   </CardTitle>
+                  {(() => {
+                    const prop = properties.find((p) => p.id === (invoice as { propertyId?: string | null }).propertyId);
+                    return prop ? (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">{prop.propertyName || "Property"}</span> ·{" "}
+                        {[prop.address, prop.city, [prop.state, prop.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <StatusBadge status={invoice.status} />

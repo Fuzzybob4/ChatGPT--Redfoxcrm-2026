@@ -104,6 +104,7 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
   stripePaymentLink: string | null;
   viewCount: number;
   lastViewedAt: string | null;
+  propertyId: string | null;
 } {
   const total = money(row.total_amount, row.total_cents);
   const status = (titleCase(row.status) as InvoiceStatus) || 'Draft';
@@ -147,10 +148,11 @@ export function mapInvoice(row: Record<string, any>, lineItemRows: Record<string
     stripePaymentLink: row.stripe_payment_link ?? null,
     viewCount: Number(row.view_count ?? 0),
     lastViewedAt: row.last_viewed_at ?? null,
+    propertyId: row.property_id ?? null,
   };
 }
 
-export function mapEstimate(row: Record<string, any>): Estimate & { total: number; sentAt: string | null; invoiceId: string | null } {
+export function mapEstimate(row: Record<string, any>): Estimate & { total: number; sentAt: string | null; invoiceId: string | null; propertyId: string | null } {
   const total = toNum(row.total_amount) || toNum(row.subtotal);
   const status = (titleCase(row.status) as EstimateStatus) || 'Draft';
 
@@ -186,6 +188,7 @@ export function mapEstimate(row: Record<string, any>): Estimate & { total: numbe
     total,
     sentAt: row.sent_at ?? null,
     invoiceId: row.invoice_id ?? null,
+    propertyId: row.property_id ?? null,
   };
 }
 

@@ -23,7 +23,7 @@ export default async function PublicEstimatePage({ params }: Props) {
   const { data: estimate } = await db
     .from("estimates")
     .select(
-      "id, org_id, customer_id, estimate_number, title, description, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images",
+      "id, org_id, customer_id, estimate_number, title, description, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, valid_until, created_at, status, approved_at, approved_by_name, declined_at, viewed_at, view_count, invoice_id, images, property_id",
     )
     .eq("approval_token", token)
     .maybeSingle();
@@ -54,6 +54,8 @@ export default async function PublicEstimatePage({ params }: Props) {
       .eq("id", estimate.id);
   }
   const imageCount = readImages((estimate as any).images).length;
+  const { propertyAddress } = await import("@/lib/properties");
+  const place = await propertyAddress(db, estimate.org_id, (estimate as any).property_id);
 
   const items = await loadEstimateItems(db, estimate.id, estimate.org_id);
   const total = Number(estimate.total_amount ?? 0) || Number(estimate.subtotal ?? 0);
@@ -73,7 +75,7 @@ export default async function PublicEstimatePage({ params }: Props) {
           customer?.full_name?.trim() ||
           `${customer?.first_name ?? ""} ${customer?.last_name ?? ""}`.trim() ||
           "Customer",
-        address: [customer?.address, customer?.city, customer?.state, customer?.zip_code].filter(Boolean).join(", "),
+        address: place?.address || [customer?.address, customer?.city, customer?.state, customer?.zip_code].filter(Boolean).join(", "),
       }}
       estimate={{
         number: estimate.estimate_number ?? "",

@@ -10,6 +10,8 @@ export interface CreateEstimateInput {
   title: string;
   /** What's included, shown to the customer. */
   description?: string;
+  /** Which of the customer's properties this is for ('' / omitted = their main address). */
+  propertyId?: string | null;
   locationId?: string | null;
   lineItems: { description: string; quantity: number; unitPrice: number }[];
   discount?: number;
@@ -57,6 +59,8 @@ export async function createEstimate(
 
   const today = new Date();
   const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+  const { validPropertyId } = await import("@/lib/properties");
+  const propertyId = await validPropertyId(db, org.orgId, input.customerId, input.propertyId);
   const { data: est, error } = await db
     .from("estimates")
     .insert({
@@ -64,6 +68,7 @@ export async function createEstimate(
       customer_id: customer.id,
       created_by: org.userId,
       location_id: input.locationId || customer.location_id || null,
+      property_id: propertyId,
       estimate_number: `EST-${stamp}-${Math.floor(1000 + Math.random() * 9000)}`,
       title: (input.title ?? "").trim().slice(0, 200) || "Holiday lighting estimate",
       description: (input.description ?? "").trim().slice(0, 4000) || null,

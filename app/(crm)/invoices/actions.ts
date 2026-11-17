@@ -44,6 +44,7 @@ const createInvoiceSchema = z.object({
   customerId: uuidSchema,
   locationId: uuidSchema.optional(),
   estimateId: uuidSchema.optional(),
+  propertyId: uuidSchema.optional(),
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().max(2000).optional(),
   totalAmount: z.number().positive("Total amount must be greater than zero").max(1_000_000),
@@ -126,6 +127,23 @@ export async function createInvoice(input: CreateInvoiceInput) {
     if (!loc) throw new Error("Location not found or does not belong to your organisation");
   }
 
+  // Which property (validated to be this customer's); the install job goes there too.
+  let place: { address: string | null; city: string | null; state: string | null; zip_code: string | null } | null = null;
+  let propertyId: string | null = null;
+  if (data.propertyId) {
+    const { data: prop } = await supabase
+      .from("customer_properties")
+      .select("id, address, city, state, zip_code")
+      .eq("id", data.propertyId)
+      .eq("org_id", org.orgId)
+      .eq("customer_id", data.customerId)
+      .maybeSingle();
+    if (prop) {
+      propertyId = prop.id;
+      place = prop;
+    }
+  }
+
   // Generate invoice number (INV-YYYYMMDD-XXXX)
   const today = new Date();
   const datePart = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
@@ -140,6 +158,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       customer_id: data.customerId,
       location_id: data.locationId ?? null,
       estimate_id: data.estimateId ?? null,
+      property_id: propertyId,
       invoice_number: invoiceNumber,
       title: data.title,
       description: data.description ?? null,
@@ -201,10 +220,10 @@ export async function createInvoice(input: CreateInvoiceInput) {
   // Auto-create install work order if scheduling details provided
   if (data.workOrder) {
     const wo = data.workOrder;
-    const address = wo.address ?? customer.address ?? null;
-    const city = wo.city ?? customer.city ?? null;
-    const state = wo.state ?? customer.state ?? null;
-    const zipCode = wo.zipCode ?? customer.zip_code ?? null;
+    const address = wo.address ?? place?.address ?? customer.address ?? null;
+    const city = wo.city ?? place?.city ?? customer.city ?? null;
+    const state = wo.state ?? place?.state ?? customer.state ?? null;
+    const zipCode = wo.zipCode ?? place?.zip_code ?? customer.zip_code ?? null;
 
     await supabase.from("scheduled_jobs").insert({
       org_id: org.orgId,
@@ -212,6 +231,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       invoice_id: invoice.id,
       estimate_id: data.estimateId ?? null,
       location_id: data.locationId ?? null,
+      property_id: propertyId,
       title: `Install – ${data.title}`,
       job_type: "install",
       scheduled_date: wo.scheduledDate,

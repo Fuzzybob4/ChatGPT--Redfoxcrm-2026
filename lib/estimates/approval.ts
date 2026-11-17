@@ -46,10 +46,11 @@ export interface EstimateRow {
   deposit_percent: number | string | null;
   status: string | null;
   invoice_id: string | null;
+  property_id?: string | null;
 }
 
 export const ESTIMATE_COLUMNS =
-  "id, org_id, customer_id, location_id, estimate_number, title, description, notes, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, status, invoice_id";
+  "id, org_id, customer_id, location_id, estimate_number, title, description, notes, subtotal, tax_rate, tax_amount, total_amount, deposit_percent, status, invoice_id, property_id";
 
 const money = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
 
@@ -143,6 +144,7 @@ export async function approveEstimateAndCreateInvoice(
       invoice_number: invoiceNumber,
       title,
       description: estimate.description,
+      property_id: estimate.property_id ?? null,
       // Estimate notes are internal; invoice notes are shown to the customer, so don't carry them over.
       notes: null,
       subtotal,

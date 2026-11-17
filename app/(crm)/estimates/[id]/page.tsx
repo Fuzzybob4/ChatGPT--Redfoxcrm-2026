@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { ArrowLeft, Download, Mail, Pencil } from 'lucide-react';
 import { EstimateApprovalPanel } from '@/components/estimates/estimate-approval-panel';
+import { formatPropertyAddress } from '@/components/customers/property-picker';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   Draft: { label: 'Draft', color: 'bg-gray-100 text-gray-800' },
@@ -25,7 +26,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export default function EstimateDetailPage() {
   const { id } = useParams() as { id: string };
-  const { loading, getEstimateById, getCustomerById, refresh } = useData();
+  const { loading, getEstimateById, getCustomerById, refresh, properties } = useData();
   const estimate = getEstimateById(id);
 
   if (loading) {
@@ -53,6 +54,8 @@ export default function EstimateDetailPage() {
   }
 
   const customer = getCustomerById(estimate.customerId);
+  const property = properties.find((p) => p.id === (estimate as { propertyId?: string | null }).propertyId);
+  const placeAddress = property ? formatPropertyAddress(property) : customer?.address || 'No address';
   // Saved total reflects what the customer approved (tax included).
   const total = (estimate as { total?: number }).total ?? 0;
   const config = statusConfig[estimate.status] ?? { label: estimate.status, color: 'bg-gray-100 text-gray-800' };
@@ -61,7 +64,7 @@ export default function EstimateDetailPage() {
     <div className="flex flex-col min-h-screen bg-background">
       <PageHeader
         title={estimate.estimateNumber}
-        description={`${customer?.name || 'Unknown'} • ${customer?.address || 'No address'}`}
+        description={`${customer?.name || 'Unknown'} • ${placeAddress}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button render={<Link href="/estimates" />} variant="outline" size="sm">
@@ -100,7 +103,10 @@ export default function EstimateDetailPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <CardTitle>{customer?.name}</CardTitle>
-                  <CardDescription>{customer?.address || 'No address'}</CardDescription>
+                  <CardDescription>
+                    {property ? <><span className="font-medium text-foreground">{property.propertyName || 'Property'}</span> · </> : null}
+                    {placeAddress}
+                  </CardDescription>
                 </div>
                 <Badge className={`${config.color}`}>{config.label}</Badge>
               </div>

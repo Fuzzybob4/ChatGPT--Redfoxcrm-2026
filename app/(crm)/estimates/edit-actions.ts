@@ -8,6 +8,8 @@ export interface EditableEstimate {
   id: string;
   estimateNumber: string;
   customerName: string;
+  customerId: string;
+  propertyId: string;
   title: string;
   description: string;
   notes: string;
@@ -34,7 +36,7 @@ export async function getEditableEstimate(id: string): Promise<EditableEstimate 
   const { org, db } = await ctx();
   const { data: e } = await db
     .from("estimates")
-    .select("id, customer_id, estimate_number, title, description, notes, tax_rate, deposit_percent, valid_until, invoice_id, approved_at, view_count, viewed_at")
+    .select("id, customer_id, property_id, estimate_number, title, description, notes, tax_rate, deposit_percent, valid_until, invoice_id, approved_at, view_count, viewed_at")
     .eq("id", id)
     .eq("org_id", org.orgId)
     .maybeSingle();
@@ -58,6 +60,8 @@ export async function getEditableEstimate(id: string): Promise<EditableEstimate 
     estimateNumber: e.estimate_number ?? "",
     customerName:
       customer?.full_name?.trim() || `${customer?.first_name ?? ""} ${customer?.last_name ?? ""}`.trim() || "Customer",
+    customerId: e.customer_id,
+    propertyId: e.property_id ?? "",
     title: e.title ?? "",
     description: e.description ?? "",
     notes: e.notes ?? "",
@@ -80,6 +84,7 @@ export async function getEditableEstimate(id: string): Promise<EditableEstimate 
 }
 
 export interface UpdateEstimateInput {
+  propertyId?: string | null;
   title: string;
   description: string;
   notes: string;
@@ -98,7 +103,7 @@ export async function updateEstimate(
   const { org, db } = await ctx();
   const { data: e } = await db
     .from("estimates")
-    .select("id, invoice_id, approved_at, declined_at")
+    .select("id, customer_id, invoice_id, approved_at, declined_at")
     .eq("id", id)
     .eq("org_id", org.orgId)
     .maybeSingle();
@@ -165,9 +170,12 @@ export async function updateEstimate(
     return { ok: false, error: "Couldn't save the items. Please try again." };
   }
 
+  const { validPropertyId } = await import("@/lib/properties");
+  const propertyId = await validPropertyId(db, org.orgId, e.customer_id, input.propertyId);
   const { error } = await db
     .from("estimates")
     .update({
+      property_id: propertyId,
       title: (input.title ?? "").trim().slice(0, 200) || "Holiday lighting estimate",
       description: (input.description ?? "").trim().slice(0, 4000) || null,
       notes: (input.notes ?? "").trim().slice(0, 4000) || null,

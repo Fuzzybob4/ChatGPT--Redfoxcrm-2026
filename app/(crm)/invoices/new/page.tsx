@@ -8,6 +8,7 @@ import { useLocation } from '@/lib/location-context';
 import { createInvoice } from '../actions';
 import { CrewSelect } from '@/components/crews/crew-select';
 import { CustomerPicker } from '@/components/customers/customer-picker';
+import { PropertyPicker, defaultPropertyId } from '@/components/customers/property-picker';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,9 +65,13 @@ export default function NewInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedLocationId } = useLocation();
-  const { getLocationCustomers } = useData();
+  const { getLocationCustomers, properties } = useData();
 
   const [customerId, setCustomerId] = useState('');
+  const [propertyId, setPropertyId] = useState('');
+  useEffect(() => {
+    setPropertyId(customerId ? defaultPropertyId(properties, customerId) : '');
+  }, [customerId, properties]);
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -192,6 +197,7 @@ export default function NewInvoicePage() {
     try {
       const invoiceId = await createInvoice({
         customerId,
+        propertyId: propertyId || undefined,
         locationId: selectedLocationId || undefined,
         title: title.trim(),
         notes: notes.trim() || undefined,
@@ -267,6 +273,9 @@ export default function NewInvoicePage() {
                       value={customerId}
                       onChange={setCustomerId}
                     />
+                    <div className="mt-3">
+                      <PropertyPicker customerId={customerId} value={propertyId} onChange={setPropertyId} />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="due-date">Due Date</Label>
