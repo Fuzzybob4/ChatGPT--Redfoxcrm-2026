@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { SignOutMenuItem } from "@/components/sign-out-menu-item";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -380,16 +381,7 @@ export async function AppSidebar() {
             <DropdownMenuItem render={<Link href="/billing" />}>
               Billing
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => {
-                // Not a <Link>: Next.js would prefetch it and sign the user out
-                // just from opening this menu.
-                window.location.href = "/auth/signout";
-              }}
-            >
-              Sign out
-            </DropdownMenuItem>
+            <SignOutMenuItem />
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>

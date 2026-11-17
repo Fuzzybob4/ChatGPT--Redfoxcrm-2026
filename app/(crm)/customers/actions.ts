@@ -167,6 +167,16 @@ export interface PropertyInput {
   notes: string;
 }
 
+// The database accepts only these types; the form shows them capitalized.
+const DB_PROPERTY_TYPES = ["residential", "commercial", "hoa", "apartment", "condo", "other"];
+function toDbPropertyType(label: string | null | undefined): string | null {
+  const v = String(label ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (DB_PROPERTY_TYPES.includes(v)) return v;
+  if (v === "multi-family" || v === "multifamily" || v === "apartment complex") return "apartment";
+  return "other";
+}
+
 export async function saveProperty(
   customerId: string,
   propertyId: string | null,
@@ -182,7 +192,7 @@ export async function saveProperty(
     city: input.city || null,
     state: input.state || null,
     zip_code: input.zip || null,
-    property_type: input.propertyType || null,
+    property_type: toDbPropertyType(input.propertyType),
     is_primary: input.isPrimary,
     is_billing_address: input.isBillingAddress,
     is_service_address: input.isServiceAddress,

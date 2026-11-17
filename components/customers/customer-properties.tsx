@@ -30,7 +30,10 @@ interface Props {
   properties: CustomerProperty[];
 }
 
-const PROPERTY_TYPES = ["Residential", "Commercial", "HOA", "Multi-Family", "Municipal", "Other"];
+const PROPERTY_TYPES = ["Residential", "Commercial", "HOA", "Apartment", "Condo", "Other"];
+/** Stored lowercase ("hoa"); shown as the label ("HOA"). */
+const typeLabel = (v: string | null | undefined) =>
+  PROPERTY_TYPES.find((t) => t.toLowerCase() === String(v ?? "").toLowerCase()) ?? (v ? "Other" : "");
 
 const emptyForm: PropertyInput = {
   propertyName: "",
@@ -70,7 +73,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
       city: p.city,
       state: p.state,
       zip: p.zip,
-      propertyType: p.propertyType || "Residential",
+      propertyType: typeLabel(p.propertyType) || "Residential",
       isPrimary: p.isPrimary,
       isBillingAddress: p.isBillingAddress,
       isServiceAddress: p.isServiceAddress,
@@ -205,7 +208,7 @@ export function CustomerProperties({ customerId, properties }: Props) {
                       </p>
                       {p.propertyType && (
                         <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
-                          {p.propertyType}
+                          {typeLabel(p.propertyType)}
                         </Badge>
                       )}
                     </div>
