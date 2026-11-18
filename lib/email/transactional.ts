@@ -300,3 +300,64 @@ export async function sendEstimateEmail(
     throw err;
   }
 }
+
+/**
+ * Tell the business owner a customer just paid (deposit or full). Sent to the
+ * business email on file, else the account owner's login email. Best effort.
+ */
+export async function notifyBusinessOfPayment(
+  db: Db,
+  orgId: string,
+  invoiceId: string,
+  amountPaid: number,
+  isFullyPaid: boolean,
+): Promise<void> {
+  const business = await getBusinessSender(db, orgId);
+  let to = business.email;
+  if (!to) {
+    const { data: owner } = await db
+      .from("user_memberships")
+      .select("user_id")
+      .eq("org_id", orgId)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle();
+    if (owner?.user_id) {
+      const { data } = await (db as any).auth.admin.getUserById(owner.user_id);
+      to = data?.user?.email ?? null;
+    }
+  }
+  if (!to) return;
+
+  const { data: inv } = await db
+    .from("invoices")
+    .select("invoice_number, title, total_amount, amount_paid, customer_id")
+    .eq("id", invoiceId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!inv) return;
+  const { data: customer } = await db
+    .from("customers")
+    .select("full_name, first_name")
+    .eq("id", inv.customer_id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const who = customer?.full_name?.trim() || (customer?.first_name ?? "").trim() || "A customer";
+  const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const remaining = Math.max(0, Number(inv.total_amount ?? 0) - Number(inv.amount_paid ?? 0));
+  await sendEmail({
+    to,
+    fromName: "RedFox CRM",
+    subject: `💰 ${who} paid ${usd(amountPaid)}${inv.invoice_number ? ` · ${inv.invoice_number}` : ""}`,
+    html: renderEmail({
+      business: { name: "RedFox CRM", email: null, phone: null },
+      greeting: isFullyPaid ? "Invoice paid in full 🎉" : "Payment received",
+      paragraphs: [
+        `${who} just paid ${usd(amountPaid)} online${inv.title ? ` for "${inv.title}"` : ""}.`,
+        isFullyPaid ? "The invoice is now paid in full." : `Still owed on this invoice: ${usd(remaining)}.`,
+        "If this job still needs an install date, it's on the schedule's Needs scheduling list.",
+      ],
+      button: { text: "Open the invoice", url: `${appBaseUrl()}/invoices/${invoiceId}` },
+    }),
+  });
+}

@@ -277,6 +277,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   } catch (receiptErr) {
     console.error(`[stripe-webhook] Receipt email failed for invoice ${invoiceId}:`, receiptErr);
   }
+
+  // Best effort: tell the business owner they just got paid.
+  try {
+    const { isEmailConfigured } = await import("@/lib/email/resend");
+    if (isEmailConfigured()) {
+      const { notifyBusinessOfPayment } = await import("@/lib/email/transactional");
+      await notifyBusinessOfPayment(supabase, orgId, invoiceId, amountPaidCents / 100, isFullyPaid);
+    }
+  } catch (notifyErr) {
+    console.error(`[stripe-webhook] Owner payment email failed for invoice ${invoiceId}:`, notifyErr);
+  }
   return null;
 }
 
