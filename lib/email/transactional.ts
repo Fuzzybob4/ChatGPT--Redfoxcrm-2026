@@ -346,20 +346,73 @@ export async function notifyBusinessOfPayment(
 
   const { data: inv } = await db
     .from("invoices")
-    .select("invoice_number, title, total_amount, amount_paid, customer_id")
+    .select("invoice_number, title, total_amount, amount_paid, deposit_amount, customer_id, property_id, invoice_line_items(description, quantity, sort_order)")
     .eq("id", invoiceId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (!inv) return;
   const { data: customer } = await db
     .from("customers")
-    .select("full_name, first_name")
+    .select("full_name, first_name, phone, address, address1, city, state")
     .eq("id", inv.customer_id)
     .eq("org_id", orgId)
     .maybeSingle();
   const who = customer?.full_name?.trim() || (customer?.first_name ?? "").trim() || "A customer";
   const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const remaining = Math.max(0, Number(inv.total_amount ?? 0) - Number(inv.amount_paid ?? 0));
+  const total = Number(inv.total_amount ?? 0);
+  const paidSoFar = Number(inv.amount_paid ?? 0);
+  const remaining = Math.max(0, total - paidSoFar);
+
+  // Where the job is: the invoice's property, else the customer's address.
+  const { propertyAddress } = await import("@/lib/properties");
+  const prop = await propertyAddress(db, orgId, inv.property_id).catch(() => null);
+  const custAddr = [customer?.address1 || customer?.address, customer?.city, customer?.state].filter(Boolean).join(", ");
+  const address = prop?.address || custAddr;
+
+  // When it's scheduled.
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: job } = await db
+    .from("scheduled_jobs")
+    .select("scheduled_date, start_time")
+    .eq("org_id", orgId)
+    .eq("invoice_id", invoiceId)
+    .gte("scheduled_date", today)
+    .not("status", "in", "(cancelled,canceled,completed)")
+    .order("scheduled_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  // What to pull: the office's install list for the season if set, else this invoice's items.
+  let materials: Array<{ description: string; quantity: number }> = [];
+  try {
+    const { getCustomInstallItems } = await import("@/lib/field");
+    const { loadBusinessRules } = await import("@/lib/schedule-server");
+    const rules = await loadBusinessRules(db, orgId);
+    materials = (await getCustomInstallItems(orgId, inv.customer_id, rules.seasonStart)) ?? [];
+  } catch {
+    materials = [];
+  }
+  if (!materials.length) {
+    materials = ((inv as any).invoice_line_items ?? [])
+      .slice()
+      .sort((a: any, b: any) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+      .map((li: any) => ({ description: String(li.description ?? "").trim(), quantity: Number(li.quantity) > 0 ? Number(li.quantity) : 1 }))
+      .filter((m: { description: string }) => m.description);
+  }
+
+  const details: Array<[string, string]> = [
+    ["Paid now", usd(amountPaid)],
+    ["Paid so far", `${usd(paidSoFar)} of ${usd(total)}`],
+    ["Still owed", usd(remaining)],
+    ["Install", job?.scheduled_date ? `${day(job.scheduled_date)}${job.start_time ? ` · ${String(job.start_time).slice(0, 5)}` : ""}` : "Not scheduled yet"],
+  ];
+  if (address) details.push(["Address", address]);
+  if (customer?.phone) details.push(["Phone", String(customer.phone)]);
+  if (materials.length) {
+    details.push(["— Materials to pull —", ""]);
+    for (const m of materials.slice(0, 40)) details.push([m.description, `× ${m.quantity}`]);
+  }
+
   await sendEmail({
     to,
     fromName: "RedFox CRM",
@@ -369,9 +422,11 @@ export async function notifyBusinessOfPayment(
       greeting: isFullyPaid ? "Invoice paid in full 🎉" : "Payment received",
       paragraphs: [
         `${who} just paid ${usd(amountPaid)} online${inv.title ? ` for "${inv.title}"` : ""}.`,
-        isFullyPaid ? "The invoice is now paid in full." : `Still owed on this invoice: ${usd(remaining)}.`,
-        "If this job still needs an install date, it's on the schedule's Needs scheduling list.",
+        job?.scheduled_date
+          ? "Here's the job breakdown so the crew can pull materials."
+          : "This job isn't on the schedule yet. It's waiting on the schedule's Needs scheduling list.",
       ],
+      details,
       button: { text: "Open the invoice", url: `${appBaseUrl()}/invoices/${invoiceId}` },
     }),
   });
