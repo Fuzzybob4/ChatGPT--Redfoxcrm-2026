@@ -111,7 +111,7 @@ export async function startJob(jobId: string, location?: string | null): Promise
     if (entryError) return { error: "Could not start the timer. Please try again." };
   }
   // Lead forgot to tap Start day? Starting a job starts it for them (only them).
-  await startShift(admin, org.orgId, [employee.id], location);
+  await startShift(admin, org.orgId, [employee.id], location).catch((e) => console.error("[field] auto clock-in failed", employee.id, e));
 
   const { error } = await admin
     .from("scheduled_jobs")
@@ -214,7 +214,10 @@ async function startShift(admin: any, orgId: string, employeeIds: string[], loca
   const rows = employeeIds
     .filter((id) => !on.has(id))
     .map((id) => ({ org_id: orgId, employee_id: id, clock_in: now, break_minutes: 0, notes: "Work day", location_clock_in: location?.slice(0, 120) ?? null }));
-  if (rows.length) await admin.from("time_entries").insert(rows);
+  if (rows.length) {
+    const { error } = await admin.from("time_entries").insert(rows);
+    if (error) throw new Error(`Could not clock in: ${error.message}`);
+  }
   return rows.length;
 }
 
@@ -223,7 +226,12 @@ export async function startDay(location?: string | null): Promise<ActionResult> 
   const { org, employee, admin } = await getFieldContext();
   if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
   const ids = [employee.id];
-  await startShift(admin, org.orgId, ids, location);
+  try {
+    await startShift(admin, org.orgId, ids, location);
+  } catch (e) {
+    console.error("[field] startDay failed", employee.id, e);
+    return { error: "Couldn't clock you in. Please try again." };
+  }
   revalidatePath("/field");
   revalidatePath("/timesheets");
   return { ok: true };

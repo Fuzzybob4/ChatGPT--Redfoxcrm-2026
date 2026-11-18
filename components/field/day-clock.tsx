@@ -10,9 +10,11 @@ import { ElapsedTimer } from "./elapsed-timer";
 function currentLocation(): Promise<string | null> {
   if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
   return new Promise((resolve) => {
+    // Never let a stuck location prompt block clocking in.
+    const giveUp = setTimeout(() => resolve(null), 6000);
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve(`${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`),
-      () => resolve(null),
+      (pos) => { clearTimeout(giveUp); resolve(`${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`); },
+      () => { clearTimeout(giveUp); resolve(null); },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
     );
   });
@@ -36,9 +38,13 @@ export function DayClock({
     if (confirmText && !window.confirm(confirmText)) return;
     setError(null);
     start(async () => {
-      const r = await fn(await currentLocation());
-      if ("error" in r) return setError(r.error);
-      router.refresh();
+      try {
+        const r = await fn(await currentLocation());
+        if ("error" in r) return setError(r.error);
+        router.refresh();
+      } catch {
+        setError("That didn't go through. Check your signal and tap again. If it keeps failing, log out and back in.");
+      }
     });
   };
 
