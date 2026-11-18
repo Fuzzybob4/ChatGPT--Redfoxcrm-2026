@@ -225,15 +225,30 @@ export async function sendInvoiceEmail(
       ];
       button = { text: "View & pay", url: portalUrl };
       break;
-    case "payment_receipt":
-      subject = `Payment received — thank you!`;
+    case "payment_receipt": {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: nextJob } = await db
+        .from("scheduled_jobs")
+        .select("scheduled_date, status")
+        .eq("org_id", orgId)
+        .eq("invoice_id", invoiceId)
+        .gte("scheduled_date", today)
+        .not("status", "in", "(cancelled,canceled,completed)")
+        .order("scheduled_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      subject = `Payment received for invoice${number} — thank you!`;
       paragraphs = [
-        `We received your payment. Thank you for choosing ${business.name}!`,
+        `We received your payment on invoice${number}. Thank you for choosing ${business.name}!`,
         balance > 0 ? `Remaining balance: ${usd(balance)}.` : `Your invoice is paid in full.`,
+        nextJob?.scheduled_date
+          ? `You're on our schedule for ${day(nextJob.scheduled_date)}. We'll reach out before we arrive.`
+          : `Next step: we'll reach out shortly to get you on the install schedule.`,
       ];
       details.splice(2, 1, ["Paid so far", usd(paid)]);
       button = { text: "View receipt", url: portalUrl };
       break;
+    }
   }
 
   const html = renderEmail({ business, greeting: `Hi ${firstName},`, paragraphs, details, button, secondaryLink, footerNote });
