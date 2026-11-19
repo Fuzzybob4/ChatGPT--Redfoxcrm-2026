@@ -496,28 +496,37 @@ export interface DayStatus {
   since: string | null;
   /** On lunch since (clock stopped for lunch, day not ended). */
   lunchSince: string | null;
+  /** Time already worked today in earlier segments (before lunch), in ms. */
+  workedBeforeMs: number;
 }
 
 /** Where the person is in their work day: on the clock, at lunch, or neither. */
 export async function getDayStatus(orgId: string, employeeId: string): Promise<DayStatus> {
-  const open = await getOpenShift(employeeId);
-  if (open) return { since: open.clockIn, lunchSince: null };
   const { loadBusinessRules } = await import("@/lib/schedule-server");
   const { timezone } = await loadBusinessRules(createAdminClient(), orgId);
-  const { data } = await createAdminClient()
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: timezone });
+  const today = day(new Date().toISOString());
+
+  // Earlier pieces of today's work day (e.g. the morning, before lunch).
+  const { data: recent } = await createAdminClient()
     .from("time_entries")
-    .select("clock_out, notes")
+    .select("clock_in, clock_out, notes, break_minutes")
     .eq("employee_id", employeeId)
     .is("scheduled_job_id", null)
-    .not("clock_out", "is", null)
-    .order("clock_out", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const day = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: timezone });
-  if (data?.notes === "Lunch" && data.clock_out && day(data.clock_out) === day(new Date().toISOString())) {
-    return { since: null, lunchSince: data.clock_out };
-  }
-  return { since: null, lunchSince: null };
+    .gte("clock_in", new Date(Date.now() - 36 * 3_600_000).toISOString())
+    .order("clock_in", { ascending: true });
+  const closedToday = (recent ?? []).filter((r: any) => r.clock_out && day(r.clock_in) === today);
+  const workedBeforeMs = closedToday.reduce(
+    (sum: number, r: any) =>
+      sum + Math.max(0, new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime() - Number(r.break_minutes ?? 0) * 60_000),
+    0,
+  );
+
+  const open = await getOpenShift(employeeId);
+  if (open) return { since: open.clockIn, lunchSince: null, workedBeforeMs };
+  const last = closedToday[closedToday.length - 1] as any;
+  if (last?.notes === "Lunch") return { since: null, lunchSince: last.clock_out, workedBeforeMs };
+  return { since: null, lunchSince: null, workedBeforeMs };
 }
 
 export interface HoursDay {

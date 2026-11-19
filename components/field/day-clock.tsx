@@ -24,10 +24,13 @@ function currentLocation(): Promise<string | null> {
 export function DayClock({
   since,
   lunchSince = null,
+  workedBeforeMs = 0,
   forCrew,
 }: {
   since: string | null;
   lunchSince?: string | null;
+  /** Already worked today before this stretch (e.g. the morning, before lunch). */
+  workedBeforeMs?: number;
   forCrew: boolean;
 }) {
   const router = useRouter();
@@ -53,8 +56,8 @@ export function DayClock({
       {since ? (
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Work day</p>
-            <ElapsedTimer since={since} baseMs={0} className="font-mono text-xl font-bold tabular-nums text-foreground" />
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Worked today</p>
+            <ElapsedTimer since={since} baseMs={workedBeforeMs} className="font-mono text-xl font-bold tabular-nums text-foreground" />
           </div>
           <Button variant="outline" className="h-12" disabled={pending}
             onClick={() => run(startLunch, "Clock out for lunch? Your job timer pauses too.")}>
