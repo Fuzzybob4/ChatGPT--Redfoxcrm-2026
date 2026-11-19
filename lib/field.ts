@@ -488,6 +488,8 @@ export async function jobsForViewer(
   jobs: FieldJob[],
   _canRunJobs: boolean,
   openJobId?: string | null,
+  /** They've ended their day: skip today's jobs and show tomorrow's. */
+  dayDone = false,
 ): Promise<FieldJob[]> {
   const { loadBusinessRules } = await import("@/lib/schedule-server");
   const { today } = await loadBusinessRules(createAdminClient(), orgId);
@@ -497,7 +499,9 @@ export async function jobsForViewer(
   return jobs.filter(
     (j) =>
       j.status !== "cancelled" &&
-      (j.id === openJobId || j.scheduledDate === today || (j.scheduledDate === tomorrow && j.status === "scheduled")),
+      (j.id === openJobId ||
+        (!dayDone && j.scheduledDate === today) ||
+        (j.scheduledDate === tomorrow && j.status === "scheduled")),
   );
 }
 

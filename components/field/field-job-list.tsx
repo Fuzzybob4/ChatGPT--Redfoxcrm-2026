@@ -19,7 +19,9 @@ export function FieldJobList({
   jobs,
   openEntry,
   firstName,
+  dayDone = false,
 }: {
+  dayDone?: boolean;
   jobs: FieldJob[];
   openEntry: OpenTimeEntry | null;
   firstName: string;
@@ -49,7 +51,9 @@ export function FieldJobList({
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">Hi, {firstName}</h1>
         <p className="text-sm text-muted-foreground">
-          {todayCount === 0
+          {dayDone
+            ? "You're done for today. Here's what's on for tomorrow."
+            : todayCount === 0
             ? "No jobs scheduled for today."
             : `${todayCount} job${todayCount === 1 ? "" : "s"} on your schedule today.`}
         </p>
