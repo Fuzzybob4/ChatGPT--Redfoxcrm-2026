@@ -33,9 +33,8 @@ export function FieldJobList({
     );
     return [
       { key: "active", title: "Right now", jobs: active },
-      { key: "overdue", title: "Missed — still open", jobs: scheduled.filter((j) => j.scheduledDate < today) },
       { key: "today", title: "Today", jobs: scheduled.filter((j) => j.scheduledDate === today) },
-      { key: "upcoming", title: "Coming up", jobs: scheduled.filter((j) => j.scheduledDate > today) },
+      { key: "upcoming", title: "Tomorrow", jobs: scheduled.filter((j) => j.scheduledDate > today) },
       { key: "done", title: "Finished today", jobs: doneToday },
     ].filter((s) => s.jobs.length > 0);
   }, [jobs]);

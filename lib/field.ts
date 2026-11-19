@@ -479,15 +479,25 @@ export async function crewTextFilter(orgId: string, hide?: boolean): Promise<(te
 }
 
 /**
- * Installers only see the day's work (plus anything already underway), so
- * future jobs don't confuse them. Crew leads and the office see everything.
+ * The crew app shows today and tomorrow only, so nobody sees a long list of
+ * future work or old paused jobs. A job from an earlier day stays only while
+ * someone's timer is actually running on it.
  */
-export async function jobsForViewer(orgId: string, jobs: FieldJob[], canRunJobs: boolean): Promise<FieldJob[]> {
-  if (canRunJobs) return jobs;
+export async function jobsForViewer(
+  orgId: string,
+  jobs: FieldJob[],
+  _canRunJobs: boolean,
+  openJobId?: string | null,
+): Promise<FieldJob[]> {
   const { loadBusinessRules } = await import("@/lib/schedule-server");
   const { today } = await loadBusinessRules(createAdminClient(), orgId);
+  const t = new Date(`${today}T12:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + 1);
+  const tomorrow = t.toISOString().slice(0, 10);
   return jobs.filter(
-    (j) => j.status === "in_progress" || j.status === "en_route" || j.scheduledDate === today,
+    (j) =>
+      j.status !== "cancelled" &&
+      (j.id === openJobId || j.scheduledDate === today || (j.scheduledDate === tomorrow && j.status === "scheduled")),
   );
 }
 

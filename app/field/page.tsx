@@ -8,11 +8,12 @@ export default async function FieldHomePage() {
   const { org, employee, canRunJobs, admin } = await getFieldContext();
   if (!employee) return <NoEmployeeProfile role={org.role} />;
 
-  const [jobs, openEntry, shift] = await Promise.all([
-    getAssignedJobs(org.orgId, employee.id).then((all) => jobsForViewer(org.orgId, all, canRunJobs)),
+  const [allJobs, openEntry, shift] = await Promise.all([
+    getAssignedJobs(org.orgId, employee.id),
     getOpenTimeEntry(employee.id),
     getDayStatus(org.orgId, employee.id),
   ]);
+  const jobs = await jobsForViewer(org.orgId, allJobs, canRunJobs, openEntry?.jobId ?? null);
   const { data: crews } = await admin.from("crews").select("id, name").eq("org_id", org.orgId).eq("active", true).order("name");
 
   return (
