@@ -2,9 +2,9 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, MapPin, Timer } from "lucide-react";
+import { Box, ChevronRight, House, MapPin, Sparkles, Timer } from "lucide-react";
 
-import type { FieldJob, OpenTimeEntry } from "@/lib/field";
+import type { FieldJob, JobBadge, OpenTimeEntry } from "@/lib/field";
 import { cn } from "@/lib/utils";
 import { ElapsedTimer } from "./elapsed-timer";
 import { STATUS_LABEL, formatClock, formatDay, jobTypeLabel, localToday, meaningfulTitle } from "./format";
@@ -20,8 +20,10 @@ export function FieldJobList({
   openEntry,
   firstName,
   dayDone = false,
+  badges = {},
 }: {
   dayDone?: boolean;
+  badges?: Record<string, JobBadge>;
   jobs: FieldJob[];
   openEntry: OpenTimeEntry | null;
   firstName: string;
@@ -79,7 +81,7 @@ export function FieldJobList({
           <ul className="flex flex-col gap-3">
             {section.jobs.map((job) => (
               <li key={job.id}>
-                <JobCard job={job} clockedInSince={openEntry?.jobId === job.id ? openEntry.clockIn : null} />
+                <JobCard job={job} badge={job.customerId ? badges[job.customerId] : undefined} clockedInSince={openEntry?.jobId === job.id ? openEntry.clockIn : null} />
               </li>
             ))}
           </ul>
@@ -89,7 +91,23 @@ export function FieldJobList({
   );
 }
 
-function JobCard({ job, clockedInSince }: { job: FieldJob; clockedInSince: string | null }) {
+const BADGE_STYLE: Record<JobBadge["kind"], { label: string; className: string; Icon: typeof Box }> = {
+  past: { label: "Past · pull tote", className: "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300", Icon: Box },
+  new: { label: "New · new materials", className: "bg-orange-50 text-orange-800 dark:bg-orange-950 dark:text-orange-300", Icon: Sparkles },
+  customer_lights: { label: "Customer lights", className: "bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300", Icon: House },
+};
+
+function CustomerBadge({ badge }: { badge: JobBadge }) {
+  const { label, className, Icon } = BADGE_STYLE[badge.kind];
+  return (
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", className)}>
+      <Icon className="size-3" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function JobCard({ job, badge, clockedInSince }: { job: FieldJob; badge?: JobBadge; clockedInSince: string | null }) {
   const active = job.status === "in_progress";
   const done = job.status === "completed";
 
@@ -110,15 +128,19 @@ function JobCard({ job, clockedInSince }: { job: FieldJob; clockedInSince: strin
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
             {jobTypeLabel(job.jobType)}
           </span>
-          <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
-            {STATUS_LABEL[job.status] ?? job.status}
-          </span>
+          {badge && <CustomerBadge badge={badge} />}
+          {(job.status !== "scheduled" || !badge) && (
+            <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
+              {STATUS_LABEL[job.status] ?? job.status}
+            </span>
+          )}
         </div>
         <p className="truncate font-semibold text-foreground">{job.customerName}</p>
+        {badge?.summary && <p className="truncate text-sm text-muted-foreground">{badge.summary}</p>}
         {meaningfulTitle(job.title, job.customerName) && (
           <p className="line-clamp-2 text-sm font-medium text-foreground/80">{meaningfulTitle(job.title, job.customerName)}</p>
         )}

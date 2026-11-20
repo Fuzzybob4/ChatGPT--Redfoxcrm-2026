@@ -600,3 +600,72 @@ export async function getMyHours(orgId: string, employeeId: string, days = 14): 
   out.sort((a, b) => b.day.localeCompare(a.day));
   return { timezone, days: out };
 }
+
+export type CustomerKind = "past" | "new" | "customer_lights";
+
+export interface JobBadge {
+  kind: CustomerKind;
+  /** One line: what to bring, e.g. "Warm white roofline + 16" spheres". */
+  summary: string;
+}
+
+const CUSTOMER_LIGHTS_RE = /\bcustomer[\s-]*(owned|owns|lights?)\b|\btheir (own )?lights\b|\bown lights\b/i;
+const NOT_MATERIAL_RE = /\b(fee|setup|set-up|removal|take ?down|storage|travel|trip|service call|labor)\b/i;
+
+/**
+ * Badge for each customer on the crew's job cards:
+ * - customer_lights: the customer supplies the lights (tagged, or the job/items say so)
+ * - past: they had an invoice in an earlier season, so their lights are in a tote
+ * - new: first season with us, so materials come from new stock
+ * Plus a one-line summary of what's going up (no prices).
+ */
+export async function getJobBadges(orgId: string, jobs: FieldJob[]): Promise<Record<string, JobBadge>> {
+  const customerIds = [...new Set(jobs.map((j) => j.customerId).filter((id): id is string => Boolean(id)))];
+  if (!customerIds.length) return {};
+  const admin = createAdminClient();
+  const { loadBusinessRules } = await import("@/lib/schedule-server");
+  const rules = await loadBusinessRules(admin, orgId);
+  const season = rules.seasonStart;
+  const seasonYear = Number(season.slice(0, 4));
+
+  const [{ data: customers }, { data: pastInvoices }] = await Promise.all([
+    admin.from("customers").select("id, tags").eq("org_id", orgId).in("id", customerIds),
+    admin
+      .from("invoices")
+      .select("customer_id, created_at, season_year")
+      .eq("org_id", orgId)
+      .in("customer_id", customerIds)
+      .neq("status", "cancelled")
+      .lt("created_at", season),
+  ]);
+  const hasPast = new Set(
+    (pastInvoices ?? [])
+      .filter((i: any) => !i.season_year || Number(i.season_year) < seasonYear)
+      .map((i: any) => i.customer_id as string),
+  );
+  const tagsById = new Map((customers ?? []).map((c: any) => [c.id as string, (c.tags ?? []) as string[]]));
+
+  const result: Record<string, JobBadge> = {};
+  await Promise.all(
+    customerIds.map(async (id) => {
+      const items = await getInstallItems(orgId, id).catch(() => [] as InstallItem[]);
+      const jobText = jobs
+        .filter((j) => j.customerId === id)
+        .map((j) => `${j.title} ${j.notes}`)
+        .join(" ");
+      const tagText = (tagsById.get(id) ?? []).join(" ");
+      const itemText = items.map((i) => i.description).join(" ");
+      const ownLights = CUSTOMER_LIGHTS_RE.test(`${tagText} ${jobText} ${itemText}`);
+
+      const names = items
+        .map((i) => i.description.split(/\r?\n/)[0].replace(/\s+/g, " ").trim())
+        .filter((d) => d && !NOT_MATERIAL_RE.test(d) && !CUSTOMER_LIGHTS_RE.test(d));
+      let summary = names.slice(0, 3).join(" + ");
+      if (names.length > 3) summary += ` + ${names.length - 3} more`;
+
+      if (ownLights) result[id] = { kind: "customer_lights", summary: summary ? `Ladders and tools · ${summary}` : "Ladders and tools only" };
+      else result[id] = { kind: hasPast.has(id) ? "past" : "new", summary };
+    }),
+  );
+  return result;
+}
