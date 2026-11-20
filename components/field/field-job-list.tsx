@@ -81,7 +81,7 @@ export function FieldJobList({
           <ul className="flex flex-col gap-3">
             {section.jobs.map((job) => (
               <li key={job.id}>
-                <JobCard job={job} badge={job.customerId ? badges[job.customerId] : undefined} clockedInSince={openEntry?.jobId === job.id ? openEntry.clockIn : null} />
+                <JobCard job={job} badge={badges[job.id]} clockedInSince={openEntry?.jobId === job.id ? openEntry.clockIn : null} />
               </li>
             ))}
           </ul>
@@ -141,7 +141,7 @@ function JobCard({ job, badge, clockedInSince }: { job: FieldJob; badge?: JobBad
         </div>
         <p className="truncate font-semibold text-foreground">{job.customerName}</p>
         {badge?.summary && <p className="truncate text-sm text-muted-foreground">{badge.summary}</p>}
-        {meaningfulTitle(job.title, job.customerName) && (
+        {meaningfulTitle(job.title, job.customerName) && meaningfulTitle(job.title, job.customerName) !== badge?.summary && (
           <p className="line-clamp-2 text-sm font-medium text-foreground/80">{meaningfulTitle(job.title, job.customerName)}</p>
         )}
         {job.address && (

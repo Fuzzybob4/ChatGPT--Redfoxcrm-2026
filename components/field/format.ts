@@ -43,7 +43,8 @@ export function directionsUrl(address: string): string {
 
 /** The work order's title, unless it only repeats the job type and customer name. */
 export function meaningfulTitle(title: string, customerName: string): string {
-  const t = (title ?? "").trim();
+  // The "[PAST - PULL TOTE]" style tag shows as a badge instead.
+  const t = (title ?? "").replace(/^\s*\[(past[^\]]*|new[^\]]*|customer lights?[^\]]*)\]\s*/i, "").trim();
   const bare = t.replace(/^(install|removal|service|job)\s*[–-]\s*/i, "").trim().toLowerCase();
   if (!t || bare === (customerName ?? "").trim().toLowerCase() || /^(work order|job)$/i.test(t)) return "";
   return t;
