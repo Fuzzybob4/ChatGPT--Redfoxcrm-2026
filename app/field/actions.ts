@@ -19,7 +19,11 @@ async function loadMyJob(jobId: string) {
   const access = await getAccessibleJob(org.orgId, employee.id, org.role, jobId);
   if (!access?.assigned) return { ok: false as const, error: "This job isn't assigned to you." };
   if (!canRunJobs) {
-    return { ok: false as const, error: "Your crew lead starts, pauses and finishes jobs. You can still add photos." };
+    // Once the crew lead has ended their day, whoever is left can finish the job.
+    const { crewLeadStillWorking } = await import("@/lib/field");
+    if (await crewLeadStillWorking(org.orgId, access.job.crewId ?? employee.crewId)) {
+      return { ok: false as const, error: "Your crew lead starts, pauses and finishes jobs. You can still add photos." };
+    }
   }
 
   return { ok: true as const, org, employee, admin, job: access.job };

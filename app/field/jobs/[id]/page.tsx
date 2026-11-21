@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
 
-import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter } from "@/lib/field";
+import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking } from "@/lib/field";
 import { InstallItems } from "@/components/field/install-items";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
@@ -17,6 +17,9 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
   const access = await getAccessibleJob(org.orgId, employee?.id ?? null, org.role, id, canManageWorkOrders);
   if (!access) notFound();
   const { job, assigned } = access;
+  // Installers can finish the job once their crew lead has ended the day.
+  const canRunThisJob =
+    canRunJobs || (assigned && !(await crewLeadStillWorking(org.orgId, job.crewId ?? employee?.crewId ?? null)));
 
   const [propertyPhotos, customerPhotos, entries, openEntry, myJobs, items, customerRow] = await Promise.all([
     job.customerId
@@ -190,7 +193,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           loggedMs={loggedMs}
           busyElsewhereJobId={busyElsewhereJobId}
           nextJobId={nextJobId}
-          canRun={canRunJobs}
+          canRun={canRunThisJob}
         />
       ) : (
         <p className="px-4 pb-8 text-center text-sm text-muted-foreground">

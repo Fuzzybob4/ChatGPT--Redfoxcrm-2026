@@ -689,3 +689,32 @@ export async function getJobBadges(orgId: string, jobs: FieldJob[]): Promise<Rec
   }
   return result;
 }
+
+/**
+ * Is a crew lead from this crew still working today (on the clock or at
+ * lunch)? When every lead has ended their day, the rest of the crew can
+ * finish the job themselves.
+ */
+export async function crewLeadStillWorking(orgId: string, crewId: string | null): Promise<boolean> {
+  if (!crewId) return false;
+  const admin = createAdminClient();
+  const { data: leads } = await admin
+    .from("employees")
+    .select("id, role, position")
+    .eq("org_id", orgId)
+    .eq("crew_id", crewId);
+  const leadIds = (leads ?? [])
+    .filter((e: any) => e.role === "crew_lead" || /\blead\b/i.test(e.position ?? ""))
+    .map((e: any) => e.id as string);
+  if (!leadIds.length) return false;
+  const { data: entries } = await admin
+    .from("time_entries")
+    .select("employee_id, clock_in, clock_out, notes")
+    .in("employee_id", leadIds)
+    .is("scheduled_job_id", null)
+    .gte("clock_in", new Date(Date.now() - 20 * 3_600_000).toISOString())
+    .order("clock_in", { ascending: false });
+  const latest = new Map<string, any>();
+  for (const e of entries ?? []) if (!latest.has(e.employee_id)) latest.set(e.employee_id, e);
+  return [...latest.values()].some((e) => !e.clock_out || e.notes === "Lunch");
+}
