@@ -60,6 +60,15 @@ export async function saveDayTimes(
   if (!emp) return { error: "Employee not found." };
   const { timezone } = await loadBusinessRules(db, org.orgId);
 
+  // Pieces of the same day can't overlap, or the time would be paid twice.
+  const spans = segments
+    .filter((g) => /^\d{2}:\d{2}$/.test(g.clockIn))
+    .map((g) => [g.clockIn, g.clockOut && /^\d{2}:\d{2}$/.test(g.clockOut) ? g.clockOut : "99:99"] as const)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  for (let i = 1; i < spans.length; i++) {
+    if (spans[i][0] < spans[i - 1][1]) return { error: "Two of these times overlap. Fix them so each stretch ends before the next one starts." };
+  }
+
   const nowIso = new Date().toISOString();
   for (const seg of segments) {
     if (!/^\d{2}:\d{2}$/.test(seg.clockIn) || (seg.clockOut && !/^\d{2}:\d{2}$/.test(seg.clockOut))) {

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrg } from "@/lib/org";
+import { mergedHours } from "@/lib/time-math";
 
 export interface FieldEmployee {
   id: string;
@@ -569,7 +570,6 @@ export async function getMyHours(orgId: string, employeeId: string, days = 14): 
     .gte("clock_in", since)
     .order("clock_in", { ascending: true });
   const now = Date.now();
-  const hrs = (e: any) => (e.clock_out ? Number(e.total_hours ?? 0) : Math.max(0, (now - new Date(e.clock_in).getTime()) / 3_600_000));
   const byDay = new Map<string, { shifts: any[]; jobs: any[] }>();
   for (const e of data ?? []) {
     const d = new Date(e.clock_in).toLocaleDateString("en-CA", { timeZone: timezone });
@@ -590,9 +590,9 @@ export async function getMyHours(orgId: string, employeeId: string, days = 14): 
       start: segs[0]?.clock_in ?? null,
       end: last?.clock_out ?? null,
       open: segs.some((e: any) => !e.clock_out),
-      workedHours: segs.reduce((s: number, e: any) => s + hrs(e), 0),
+      workedHours: mergedHours(segs, now),
       lunchMinutes: Math.round(lunch),
-      jobHours: r.jobs.reduce((s: number, e: any) => s + hrs(e), 0),
+      jobHours: mergedHours(r.jobs, now),
       segments: segs.map((e: any) => ({ in: e.clock_in, out: e.clock_out })),
       editNote: [...r.shifts, ...r.jobs].filter((e: any) => e.edited_at).map((e: any) => e.edit_note).pop() ?? null,
     };

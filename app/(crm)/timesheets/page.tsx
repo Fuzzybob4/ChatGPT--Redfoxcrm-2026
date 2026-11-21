@@ -7,6 +7,8 @@ import { loadBusinessRules } from "@/lib/schedule-server";
 import { addDays } from "@/lib/schedule";
 import { EditDayTimes } from "@/components/timesheets/edit-day-times";
 
+import { mergedHours } from "@/lib/time-math";
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Timesheets - RedFox CRM" };
 
@@ -58,8 +60,6 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
   const timeOf = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }) : "—";
   const now = Date.now();
-  const hrs = (e: Entry) =>
-    e.clock_out ? Number(e.total_hours ?? 0) : Math.max(0, (now - new Date(e.clock_in).getTime()) / 3_600_000);
 
   // Group by day + employee.
   const rows = new Map<string, { day: string; employeeId: string; shifts: Entry[]; jobs: Entry[] }>();
@@ -74,7 +74,7 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
   const list = [...rows.values()].sort((a, b) => (a.day === b.day ? (nameOf.get(a.employeeId) ?? "").localeCompare(nameOf.get(b.employeeId) ?? "") : b.day.localeCompare(a.day)));
   const totals = new Map<string, number>();
   for (const r of list) {
-    const h = r.shifts.length ? r.shifts.reduce((s, e) => s + hrs(e), 0) : r.jobs.reduce((s, e) => s + hrs(e), 0);
+    const h = mergedHours(r.shifts.length ? r.shifts : r.jobs, now);
     totals.set(r.employeeId, (totals.get(r.employeeId) ?? 0) + h);
   }
 
@@ -104,8 +104,9 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
           {list.map((r) => {
             const shift = r.shifts[0];
             const lastShift = r.shifts[r.shifts.length - 1];
-            const dayHours = r.shifts.reduce((s, e) => s + hrs(e), 0);
-            const jobHours = r.jobs.reduce((s, e) => s + hrs(e), 0);
+            // Overlapping punches count once.
+            const dayHours = mergedHours(r.shifts, now);
+            const jobHours = mergedHours(r.jobs, now);
             const open = r.shifts.some((e) => !e.clock_out);
             const edits = [...r.shifts, ...r.jobs].filter((e) => e.edited_at);
             const dayLabel = new Date(`${r.day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
