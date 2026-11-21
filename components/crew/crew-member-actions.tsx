@@ -139,6 +139,7 @@ function EditMemberDialog({
         position: CREW_ROLES.find((r) => r.value === role)?.label ?? "",
         crewId: String(form.get("crewId") ?? ""),
         role,
+        hourlyRate: String(form.get("hourlyRate") ?? ""),
       });
       if ("error" in result && result.error) setError(result.error);
       else onOpenChange(false);
@@ -150,7 +151,7 @@ function EditMemberDialog({
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Edit crew member</DialogTitle>
-          <DialogDescription>Fix spelling, contact info, crew, or role.</DialogDescription>
+          <DialogDescription>Fix spelling, contact info, crew, role, or pay rate.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
@@ -213,6 +214,20 @@ function EditMemberDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`position-${member.id}`}>Position</Label>
             <PositionSelect id={`position-${member.id}`} value={role} onChange={setRole} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`rate-${member.id}`}>Pay rate ($/hour)</Label>
+            <Input
+              id={`rate-${member.id}`}
+              name="hourlyRate"
+              inputMode="decimal"
+              placeholder="e.g. 20"
+              defaultValue={member.hourlyRate ?? ""}
+              className="text-base md:text-sm"
+            />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Used for their weekly pay estimate in the crew app. Only they and the office see it.
+            </p>
           </div>
           {error && (
             <p role="alert" className="text-sm text-destructive">

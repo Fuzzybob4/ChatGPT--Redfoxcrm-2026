@@ -55,6 +55,8 @@ export interface CrewMember {
   loginStatus: "active" | "invited" | "none";
   canWorkOrders: boolean;
   canMapping: boolean;
+  /** Dollars per hour, blank if not set. */
+  hourlyRate?: string;
 }
 
 function AccessToggle({

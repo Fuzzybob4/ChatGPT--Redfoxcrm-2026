@@ -14,7 +14,7 @@ export default async function CrewPage() {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, full_name, first_name, last_name, email, phone, position, role, crew_name, crew_id, is_active, can_access_work_orders, can_access_mapping, created_at, user_id, invited_at, invite_accepted_at"
+      "id, full_name, first_name, last_name, email, phone, position, role, crew_name, crew_id, is_active, can_access_work_orders, can_access_mapping, hourly_rate, created_at, user_id, invited_at, invite_accepted_at"
     )
     .order("created_at", { ascending: true });
 
@@ -34,6 +34,7 @@ export default async function CrewPage() {
     crewId: e.crew_id ?? "",
     canWorkOrders: e.can_access_work_orders ?? false,
     canMapping: e.can_access_mapping ?? false,
+    hourlyRate: e.hourly_rate != null ? String(Number(e.hourly_rate)) : "",
   }));
 
   return (

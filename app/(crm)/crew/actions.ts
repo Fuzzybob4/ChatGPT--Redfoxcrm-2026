@@ -238,6 +238,8 @@ export interface EmployeeUpdateInput {
   position: string;
   crewId: string;
   role: string;
+  /** Dollars per hour, as typed; blank leaves no rate. */
+  hourlyRate?: string;
 }
 
 export async function updateEmployee(employeeId: string, input: EmployeeUpdateInput) {
@@ -254,6 +256,11 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
   if (!firstName || !lastName) return { error: "First and last name are required." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
   if (!ROLE_VALUES.has(role)) return { error: "Pick a role." };
+  const rateText = (input.hourlyRate ?? "").replace(/[$,\s]/g, "");
+  const hourlyRate = rateText ? Number(rateText) : null;
+  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0 || hourlyRate > 500)) {
+    return { error: "Enter the pay rate as dollars per hour, like 20 or 22.50." };
+  }
 
   const admin = createAdminClient();
   const { data: employee } = await admin
@@ -293,6 +300,7 @@ export async function updateEmployee(employeeId: string, input: EmployeeUpdateIn
       crew_id: crew?.id ?? null,
       crew_name: crew?.name ?? null,
       role,
+      ...(input.hourlyRate !== undefined ? { hourly_rate: hourlyRate } : {}),
     })
     .eq("id", employeeId)
     .eq("org_id", org.orgId);
