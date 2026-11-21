@@ -1,8 +1,9 @@
+import { MaterialsChecklist } from "@/components/field/materials-checklist";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
 
-import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking } from "@/lib/field";
+import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking, getJobBadges } from "@/lib/field";
 import { InstallItems } from "@/components/field/install-items";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
@@ -50,6 +51,19 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
       ? admin.from("customers").select("notes").eq("id", job.customerId).eq("org_id", org.orgId).maybeSingle()
       : Promise.resolve({ data: null as { notes: string | null } | null }),
   ]);
+  // Load-out checklist: the install items plus the basics for this kind of customer.
+  const [{ data: checkRow }, badgeMap] = await Promise.all([
+    admin.from("scheduled_jobs").select("materials_checked").eq("id", job.id).eq("org_id", org.orgId).maybeSingle(),
+    getJobBadges(org.orgId, [job]).catch(() => ({} as Record<string, { kind: string }>)),
+  ]);
+  const kind = (badgeMap as Record<string, { kind: string }>)[job.id]?.kind;
+  const firstLine = (d: string) => d.split(/\r?\n/)[0].replace(/\s+/g, " ").trim();
+  const loadOut = [
+    ...(kind === "past" ? ["Pull the customer's tote"] : kind === "customer_lights" ? [] : ["Load new lights for this job"]),
+    ...items.map((i) => firstLine(i.description) + (i.quantity && i.quantity !== 1 ? ` × ${Number(i.quantity.toFixed(2))}` : "")),
+    ...(kind === "customer_lights" ? ["Ladders"] : ["Clips", "Extension cords", "Timer", "Ladders"]),
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
+
   // Money never shows on crew screens.
   const notes = [crewSafeText(job.notes), crewSafeText(customerRow.data?.notes)].filter(Boolean).join("\n\n");
 
@@ -157,6 +171,15 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
         {job.address && <p className="text-sm leading-relaxed text-foreground">{job.address}</p>}
 
         <InstallItems items={items} />
+
+        {job.jobType !== "removal" && job.status !== "completed" && (
+          <MaterialsChecklist
+            jobId={job.id}
+            items={loadOut}
+            checked={(checkRow?.materials_checked as Record<string, string>) ?? {}}
+            canEdit={assigned}
+          />
+        )}
 
         {notes && (
           <section aria-labelledby="notes-heading" className="flex flex-col gap-2 rounded-xl bg-muted p-4">

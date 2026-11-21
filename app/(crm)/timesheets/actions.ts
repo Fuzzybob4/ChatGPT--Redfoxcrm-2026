@@ -124,3 +124,87 @@ export async function saveDayTimes(
   revalidatePath("/field/hours");
   return { ok: true };
 }
+
+/** Approve a crew member's time fix: their day's clock becomes what they asked for. */
+export async function decideTimeFix(requestId: string, approve: boolean): Promise<{ ok: true } | { error: string }> {
+  const org = await getCurrentOrg();
+  if (!org) return { error: "Please sign in." };
+  if (!["owner", "admin", "manager"].includes(String(org.role ?? "").toLowerCase())) {
+    return { error: "Only the owner or a manager can approve time." };
+  }
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const db = createAdminClient();
+  const { data: req } = await db
+    .from("time_fix_requests")
+    .select("*")
+    .eq("id", requestId)
+    .eq("org_id", org.orgId)
+    .maybeSingle();
+  if (!req) return { error: "Request not found." };
+  if (req.status !== "pending") return { error: "This request was already handled." };
+  const nowIso = new Date().toISOString();
+
+  if (approve) {
+    const { timezone } = await loadBusinessRules(db, org.orgId);
+    const day = String(req.day).slice(0, 10);
+    const pieces: Array<[string, string | null]> = req.lunch_start
+      ? [[req.start_time, req.lunch_start], [req.lunch_end, req.end_time]]
+      : [[req.start_time, req.end_time]];
+    const segs = pieces.map(([a, b]) => {
+      const inIso = zonedToUtc(day, a, timezone);
+      const outIso = b ? zonedToUtc(day, b, timezone) : null;
+      return { inIso, outIso, hours: outIso ? Math.round(((Date.parse(outIso) - Date.parse(inIso)) / 3_600_000) * 100) / 100 : null };
+    });
+
+    // That day's existing work-day entries (by local date).
+    const from = new Date(Date.parse(zonedToUtc(day, "00:00", timezone))).toISOString();
+    const to = new Date(Date.parse(from) + 36 * 3_600_000).toISOString();
+    const { data: existing } = await db
+      .from("time_entries")
+      .select("id, clock_in, clock_out, edited_at")
+      .eq("employee_id", req.employee_id)
+      .is("scheduled_job_id", null)
+      .gte("clock_in", from)
+      .lt("clock_in", to)
+      .order("clock_in", { ascending: true });
+    const sameDay = (existing ?? []).filter(
+      (e) => new Date(e.clock_in).toLocaleDateString("en-CA", { timeZone: timezone }) === day,
+    );
+    const note = `Approved crew time fix: ${req.reason}`;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      const fields = {
+        clock_in: seg.inIso,
+        clock_out: seg.outIso,
+        total_hours: seg.hours,
+        notes: i < segs.length - 1 ? "Lunch" : "Work day",
+        edited_at: nowIso,
+        edited_by: user?.id ?? null,
+        edit_note: note,
+        updated_at: nowIso,
+      };
+      const cur = sameDay[i];
+      if (cur) {
+        await db
+          .from("time_entries")
+          .update({ ...fields, ...(cur.edited_at ? {} : { original_clock_in: cur.clock_in, original_clock_out: cur.clock_out }) })
+          .eq("id", cur.id);
+      } else {
+        await db.from("time_entries").insert({ ...fields, org_id: org.orgId, employee_id: req.employee_id, scheduled_job_id: null, break_minutes: 0 });
+      }
+    }
+    // Extra pieces from the old times would double up, so they go.
+    const extras = sameDay.slice(segs.length).map((e) => e.id);
+    if (extras.length) await db.from("time_entries").delete().in("id", extras);
+  }
+
+  await db
+    .from("time_fix_requests")
+    .update({ status: approve ? "approved" : "declined", decided_at: nowIso, decided_by: user?.id ?? null })
+    .eq("id", requestId);
+  revalidatePath("/timesheets");
+  revalidatePath("/field/hours");
+  revalidatePath("/field");
+  return { ok: true };
+}

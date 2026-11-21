@@ -2,6 +2,7 @@ import { getFieldContext, getMyHours } from "@/lib/field";
 import Link from "next/link";
 import { NoEmployeeProfile } from "@/components/field/no-employee-profile";
 import { ShareHours } from "@/components/field/share-hours";
+import { TimeFixRequest } from "@/components/field/time-fix-request";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function MyHoursPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
   const { week } = await searchParams;
   const lastWeek = week === "last";
-  const { org, employee } = await getFieldContext();
+  const { org, employee, admin } = await getFieldContext();
   if (!employee) return <NoEmployeeProfile role={org.role} />;
 
   const { timezone, days } = await getMyHours(org.orgId, employee.id, 14);
@@ -49,6 +50,24 @@ export default async function MyHoursPage({ searchParams }: { searchParams: Prom
     "From the RedFox crew app clock",
   ].join("\n");
 
+  // Their own pay estimate (straight time at their rate). Only their own; never customer prices.
+  const { data: rateRow } = await admin.from("employees").select("hourly_rate").eq("id", employee.id).maybeSingle();
+  const rate = Number(rateRow?.hourly_rate ?? 0);
+  const pay = rate > 0 ? (Math.round(weekHours * 100) / 100) * rate : 0;
+  const { data: pendingFixes } = await admin
+    .from("time_fix_requests")
+    .select("id, day, status")
+    .eq("employee_id", employee.id)
+    .eq("status", "pending");
+
+  // Days they can ask to fix: the last 7.
+  const fixDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(`${todayStr}T12:00:00`);
+    d.setDate(d.getDate() - i);
+    const value = d.toLocaleDateString("en-CA");
+    return { value, label: i === 0 ? `Today (${dayLabel(value)})` : dayLabel(value) };
+  });
+
   return (
     <div className="flex flex-col gap-4 px-4 pb-10 pt-5">
       <div>
@@ -56,7 +75,17 @@ export default async function MyHoursPage({ searchParams }: { searchParams: Prom
         <p className="text-sm text-muted-foreground">
           {lastWeek ? "Last week" : "This week"}:{" "}
           <span className="font-semibold text-foreground tabular-nums">{hm(weekHours)}</span>
+          {rate > 0 && (
+            <>
+              {" · "}about{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {pay.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+              </span>{" "}
+              at ${rate}/hr
+            </>
+          )}
         </p>
+        {rate > 0 && <p className="text-xs text-muted-foreground">Estimate before any office changes. Final pay comes from the office.</p>}
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
@@ -73,6 +102,13 @@ export default async function MyHoursPage({ searchParams }: { searchParams: Prom
         <ShareHours text={shareText} title={`${employee.name} hours`} />
         <p className="text-xs text-muted-foreground">Sends your clock-in and clock-out times by text or email, straight from the app clock.</p>
       </div>
+
+      {(pendingFixes ?? []).length > 0 && (
+        <p className="rounded-xl bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          {(pendingFixes ?? []).length} time fix request{(pendingFixes ?? []).length === 1 ? "" : "s"} waiting on the office.
+        </p>
+      )}
+      <TimeFixRequest days={fixDays} />
 
       {weekDays.length === 0 && (
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">

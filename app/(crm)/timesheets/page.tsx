@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { loadBusinessRules } from "@/lib/schedule-server";
 import { addDays } from "@/lib/schedule";
 import { EditDayTimes } from "@/components/timesheets/edit-day-times";
+import { TimeFixRequests } from "@/components/timesheets/time-fix-requests";
 
 import { mergedHours } from "@/lib/time-math";
 
@@ -78,10 +79,30 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
     totals.set(r.employeeId, (totals.get(r.employeeId) ?? 0) + h);
   }
 
+  const { data: fixRows } = await db
+    .from("time_fix_requests")
+    .select("id, employee_id, day, start_time, end_time, lunch_start, lunch_end, reason")
+    .eq("org_id", org.orgId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  const clock = (t: string | null) => {
+    if (!t) return "?";
+    const [h, m] = t.split(":").map(Number);
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  };
+  const fixRequests = (fixRows ?? []).map((r: any) => ({
+    id: r.id,
+    employeeName: nameOf.get(r.employee_id) ?? "Employee",
+    dayLabel: new Date(`${String(r.day).slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+    times: `${clock(r.start_time)} – ${clock(r.end_time)}${r.lunch_start ? ` · lunch ${clock(r.lunch_start)}–${clock(r.lunch_end)}` : ""}`,
+    reason: r.reason,
+  }));
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <PageHeader title="Timesheets" description={`Last ${days} days · work day from Start day to End day`} />
       <div className="flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
+        <TimeFixRequests requests={fixRequests} />
         <Card>
           <CardContent className="p-4">
             <p className="mb-2 text-sm font-semibold">Hours by person</p>

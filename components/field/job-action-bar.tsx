@@ -152,7 +152,7 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
           ))}
         </div>
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={1000}
-          placeholder={reason === "other" ? "What happened? (required)" : "What's left to do, what to bring next time (optional)"} className={textareaCls} />
+          placeholder={reason === "weather" || reason === "customer" ? "Anything the office should know (optional)" : "What's left to do and what to bring next time (required)"} className={textareaCls} />
         <div className="grid grid-cols-[auto_1fr] gap-3">
           <Button type="button" variant="outline" className="h-14 px-5" disabled={isPending} onClick={() => setMode("main")}>
             Back

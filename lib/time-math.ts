@@ -27,3 +27,22 @@ export function mergedHours(
   const breaks = entries.reduce((s, e) => s + Number(e.break_minutes ?? 0), 0) * 60_000;
   return Math.max(0, total - breaks) / 3_600_000;
 }
+
+/** "2026-11-11" + "17:30" in America/Chicago → UTC ISO string. */
+export function zonedToUtc(day: string, hhmm: string, timeZone: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const [hh, mm] = hhmm.split(":").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(new Date(guess));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asLocal = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+  return new Date(guess - (asLocal - guess)).toISOString();
+}

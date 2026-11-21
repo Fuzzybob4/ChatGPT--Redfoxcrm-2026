@@ -145,6 +145,18 @@ export async function completeJob(
   if (job.status === "completed") return { ok: true, nextJobId: await findNextJob(org.orgId, employee.id, jobId) };
   if (job.status !== "in_progress") return { error: "Start the job before completing it." };
 
+  // Proof of the finished install: at least one photo taken during this job.
+  if (job.customerId) {
+    const since = job.startedAt ?? new Date(Date.now() - 18 * 3_600_000).toISOString();
+    const [{ count: propCount }, { count: custCount }] = await Promise.all([
+      admin.from("property_photos").select("id", { count: "exact", head: true }).eq("customer_id", job.customerId).gte("created_at", since),
+      admin.from("customer_photos").select("id", { count: "exact", head: true }).eq("customer_id", job.customerId).gte("created_at", since),
+    ]);
+    if (!(propCount ?? 0) && !(custCount ?? 0)) {
+      return { error: "Take at least one photo of the finished install first (Take photo, above)." };
+    }
+  }
+
   const now = new Date();
   const nowIso = now.toISOString();
 
@@ -205,7 +217,7 @@ export async function completeJob(
 
 
 /** Start the work-day clock for these employees (skips anyone already on it). */
-async function startShift(admin: any, orgId: string, employeeIds: string[], location?: string | null) {
+async function startShift(admin: any, orgId: string, employeeIds: string[], location?: string | null, clockInIso?: string) {
   if (!employeeIds.length) return 0;
   const { data: open } = await admin
     .from("time_entries")
@@ -214,7 +226,7 @@ async function startShift(admin: any, orgId: string, employeeIds: string[], loca
     .is("scheduled_job_id", null)
     .is("clock_out", null);
   const on = new Set((open ?? []).map((r: { employee_id: string }) => r.employee_id));
-  const now = new Date().toISOString();
+  const now = clockInIso ?? new Date().toISOString();
   const rows = employeeIds
     .filter((id) => !on.has(id))
     .map((id) => ({ org_id: orgId, employee_id: id, clock_in: now, break_minutes: 0, notes: "Work day", location_clock_in: location?.slice(0, 120) ?? null }));
@@ -226,12 +238,35 @@ async function startShift(admin: any, orgId: string, employeeIds: string[], loca
 }
 
 /** Start the day (at the shop or storage). Everyone clocks in for themselves. */
-export async function startDay(location?: string | null): Promise<ActionResult> {
+export async function startDay(location?: string | null, backAt?: string | null): Promise<ActionResult> {
   const { org, employee, admin } = await getFieldContext();
   if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
   const ids = [employee.id];
+
+  // "I got back from lunch at 1:30": start the clock at that time, not now.
+  let clockInIso: string | undefined;
+  if (backAt) {
+    if (!/^\d{2}:\d{2}$/.test(backAt)) return { error: "Pick the time you got back." };
+    const { data: last } = await admin
+      .from("time_entries")
+      .select("clock_out, notes")
+      .eq("employee_id", employee.id)
+      .is("scheduled_job_id", null)
+      .not("clock_out", "is", null)
+      .order("clock_out", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!last?.clock_out || last.notes !== "Lunch") return { error: "You're not at lunch." };
+    const { loadBusinessRules } = await import("@/lib/schedule-server");
+    const { zonedToUtc } = await import("@/lib/time-math");
+    const { timezone } = await loadBusinessRules(admin, org.orgId);
+    const day = new Date(last.clock_out).toLocaleDateString("en-CA", { timeZone: timezone });
+    clockInIso = zonedToUtc(day, backAt, timezone);
+    if (clockInIso < last.clock_out) return { error: "That's before you went to lunch." };
+    if (Date.parse(clockInIso) > Date.now() + 60_000) return { error: "That time hasn't happened yet." };
+  }
   try {
-    await startShift(admin, org.orgId, ids, location);
+    await startShift(admin, org.orgId, ids, location, clockInIso);
   } catch (e) {
     console.error("[field] startDay failed", employee.id, e);
     return { error: "Couldn't clock you in. Please try again." };
@@ -357,7 +392,9 @@ export async function needsReturnVisit(
   const { admin, org, employee, job } = ctx;
   if (!(reason in RETURN_REASONS)) return { error: "Pick a reason." };
   const note = details?.trim().slice(0, 1000) ?? "";
-  if (reason === "other" && !note) return { error: "Add a quick note about why." };
+  if (reason !== "weather" && reason !== "customer" && !note) {
+    return { error: "Add a quick note: what's left to do and what to bring next time." };
+  }
   if (job.status === "completed") return { error: "This job is already completed." };
 
   await clockOutJob(admin, jobId, employee.id, location);
@@ -429,5 +466,74 @@ export async function setHelpingCrew(crewId: string | null): Promise<ActionResul
     .eq("org_id", org.orgId);
   revalidatePath("/field", "layout");
   revalidatePath("/schedule");
+  return { ok: true };
+}
+
+
+/** Tick an item on the job's materials checklist (anyone on the job can). */
+export async function setMaterialChecked(jobId: string, key: string, checked: boolean): Promise<ActionResult> {
+  const { org, employee, admin } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const access = await getAccessibleJob(org.orgId, employee.id, org.role, jobId);
+  if (!access?.assigned) return { error: "This job isn't assigned to you." };
+  const k = String(key).slice(0, 200);
+  const { data } = await admin.from("scheduled_jobs").select("materials_checked").eq("id", jobId).eq("org_id", org.orgId).single();
+  const current = { ...((data?.materials_checked as Record<string, string>) ?? {}) };
+  if (checked) current[k] = employee.name;
+  else delete current[k];
+  const { error } = await admin.from("scheduled_jobs").update({ materials_checked: current }).eq("id", jobId).eq("org_id", org.orgId);
+  if (error) return { error: "Couldn't save that. Try again." };
+  revalidatePath(`/field/jobs/${jobId}`);
+  return { ok: true };
+}
+
+/** Crew member asks the office to fix a day's times. The office approves or declines. */
+export async function requestTimeFix(input: {
+  day: string;
+  start: string;
+  end: string;
+  lunchStart?: string;
+  lunchEnd?: string;
+  reason: string;
+}): Promise<ActionResult> {
+  const { org, employee, admin } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const t = /^\d{2}:\d{2}$/;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day)) return { error: "Pick the day." };
+  if (!t.test(input.start)) return { error: "Enter your start time." };
+  if (input.end && !t.test(input.end)) return { error: "Enter your end time." };
+  if (input.end && input.end <= input.start) return { error: "End has to be after start." };
+  const hasLunch = Boolean(input.lunchStart || input.lunchEnd);
+  if (hasLunch) {
+    if (!t.test(input.lunchStart ?? "") || !t.test(input.lunchEnd ?? "")) return { error: "Enter both lunch times, or leave lunch blank." };
+    if (!(input.start < input.lunchStart! && input.lunchStart! < input.lunchEnd! && (!input.end || input.lunchEnd! < input.end))) {
+      return { error: "Lunch has to fall between your start and end." };
+    }
+  }
+  const reason = input.reason.trim().slice(0, 500);
+  if (reason.length < 3) return { error: "Say what happened (for example: forgot to clock in)." };
+  const { error } = await admin.from("time_fix_requests").insert({
+    org_id: org.orgId,
+    employee_id: employee.id,
+    day: input.day,
+    start_time: input.start,
+    end_time: input.end || null,
+    lunch_start: hasLunch ? input.lunchStart : null,
+    lunch_end: hasLunch ? input.lunchEnd : null,
+    reason,
+  });
+  if (error) return { error: "Couldn't send the request. Try again." };
+  try {
+    await createNotification({
+      orgId: org.orgId,
+      type: "time_fix_request",
+      title: `Time fix request: ${employee.name}`,
+      message: `${input.day}: ${input.start}–${input.end || "?"}${hasLunch ? `, lunch ${input.lunchStart}–${input.lunchEnd}` : ""}. ${reason}`,
+    });
+  } catch {
+    // The request is saved; the alert is best effort.
+  }
+  revalidatePath("/field/hours");
+  revalidatePath("/timesheets");
   return { ok: true };
 }
