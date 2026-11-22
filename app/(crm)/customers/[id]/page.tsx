@@ -373,7 +373,7 @@ export default function CustomerDetailPage({ params }: Props) {
               </CardContent>
             </Card>
 
-            {(invs.length > 0 || jobs.some((j) => j.status === "completed")) && (
+            {(invs.length > 0 || jobs.some((j) => String(j.status) === "completed" || String(j.status) === "Completed")) && (
               <BookingLinkCard customerId={customer.id} bookedLabel={null} />
             )}
 
