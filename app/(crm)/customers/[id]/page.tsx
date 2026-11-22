@@ -35,6 +35,7 @@ import { useOrgContext } from "@/lib/org-context";
 import { ContactPreferencesCard } from "@/components/customers/contact-preferences-card";
 import { ContractBillingCard } from "@/components/customers/contract-billing-card";
 import { InstallListCard } from "@/components/customers/install-list-card";
+import { BookingLinkCard } from "@/components/customers/booking-link-card";
 import { estimateStage } from "@/lib/estimate-stage";
 
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -371,6 +372,10 @@ export default function CustomerDetailPage({ params }: Props) {
                 ) : null}
               </CardContent>
             </Card>
+
+            {(invs.length > 0 || jobs.some((j) => j.status === "completed")) && (
+              <BookingLinkCard customerId={customer.id} bookedLabel={null} />
+            )}
 
             {/* What's being installed this season (same list the crew sees) */}
             <InstallListCard customerId={customer.id} />

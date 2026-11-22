@@ -19,6 +19,7 @@ import {
   Truck,
   Package,
   LifeBuoy,
+  CalendarCheck,
 } from "lucide-react";
 
 import {
@@ -65,6 +66,13 @@ const navItems = [
     href: "/customers",
     icon: Users,
     badge: true,
+    children: [
+      {
+        title: "Rebooking",
+        href: "/customers/rebook",
+        icon: CalendarCheck,
+      },
+    ],
   },
   {
     title: "Estimates",
