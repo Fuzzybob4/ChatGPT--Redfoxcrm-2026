@@ -62,6 +62,7 @@ export async function updateSession(request: NextRequest) {
     '/quote/', // public instant quote page
     '/customer-portal/', // customer invoice/payment portal (token link)
     '/estimate/',        // customer estimate approval (token link)
+    '/book/',            // returning-customer self booking (token link)
     '/unsubscribe',      // email unsubscribe links
     '/api/webhooks/',    // Stripe webhooks (signature verified)
     '/api/cron/',        // Vercel cron jobs (CRON_SECRET verified)
