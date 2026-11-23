@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, CloudRain, MessageSquare, Phone, Settings2, Sparkles, Undo2, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, CloudRain, GripVertical, MessageSquare, Phone, Settings2, Sparkles, Undo2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -419,60 +419,88 @@ function MobileDayView({
   const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; x: number; y: number; job: BoardJob | null; dragged: boolean }>({
     timer: null, x: 0, y: 0, job: null, dragged: false,
   });
-  const dragRef = useRef(drag);
-  dragRef.current = drag;
-
-  // While dragging, stop the page from scrolling under your finger.
-  useEffect(() => {
-    if (!drag) return;
-    const stop = (e: TouchEvent) => e.preventDefault();
-    document.addEventListener("touchmove", stop, { passive: false });
-    return () => document.removeEventListener("touchmove", stop);
-  }, [drag]);
+  const dragRef = useRef<typeof drag>(null);
 
   const cancelPress = () => {
     if (press.current.timer) clearTimeout(press.current.timer);
     press.current.timer = null;
   };
-  const onPressStart = (e: React.PointerEvent, job: BoardJob) => {
-    if (!canManage) return;
-    press.current = { timer: null, x: e.clientX, y: e.clientY, job, dragged: false };
-    const y = e.clientY;
-    press.current.timer = setTimeout(() => {
-      press.current.dragged = true;
-      try {
-        navigator.vibrate?.(30);
-      } catch {}
-      setDrag({ job, y, overId: job.id, overCrew: job.crewId ?? "none", after: false });
-    }, 450);
+  const beginDrag = (job: BoardJob, y: number) => {
+    press.current.dragged = true;
+    try {
+      navigator.vibrate?.(30);
+    } catch {}
+    const d = { job, y, overId: job.id, overCrew: job.crewId ?? "none", after: false };
+    dragRef.current = d;
+    setDrag(d);
   };
-  const onPressMove = (e: React.PointerEvent) => {
+  const startPress = (x: number, y: number, job: BoardJob, immediate = false) => {
+    if (!canManage) return;
+    cancelPress();
+    press.current = { timer: null, x, y, job, dragged: false };
+    if (immediate) beginDrag(job, y);
+    else press.current.timer = setTimeout(() => beginDrag(job, y), 400);
+  };
+  const movePress = (x: number, y: number) => {
     const d = dragRef.current;
     if (!d) {
-      // Moved before the long-press kicked in: they're scrolling.
-      if (Math.abs(e.clientY - press.current.y) > 8 || Math.abs(e.clientX - press.current.x) > 8) cancelPress();
+      // Moved before the hold kicked in: they're scrolling.
+      if (Math.abs(y - press.current.y) > 10 || Math.abs(x - press.current.x) > 10) cancelPress();
       return;
     }
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
     const card = el?.closest("[data-job-id]") as HTMLElement | null;
     const zone = el?.closest("[data-crew-zone]") as HTMLElement | null;
     let after = false;
     if (card) {
       const r = card.getBoundingClientRect();
-      after = e.clientY > r.top + r.height / 2;
+      after = y > r.top + r.height / 2;
     }
-    setDrag({
-      ...d,
-      y: e.clientY,
-      overId: card?.dataset.jobId ?? null,
-      overCrew: zone?.dataset.crewZone ?? d.overCrew,
-      after,
-    });
+    const next = { ...d, y, overId: card?.dataset.jobId ?? null, overCrew: zone?.dataset.crewZone ?? d.overCrew, after };
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  // Touch listeners go on each card when it mounts and are non-passive, so
+  // once a drag starts we can stop the page from scrolling (phones decide
+  // that at the start of the touch, so adding them later is too late).
+  const cardRef = (job: BoardJob) => (el: HTMLElement | null) => {
+    if (!el || (el as any).__dragWired) return;
+    (el as any).__dragWired = true;
+    el.addEventListener(
+      "touchstart",
+      (e: TouchEvent) => {
+        const t = e.touches[0];
+        const onGrip = (e.target as HTMLElement | null)?.closest("[data-drag-grip]");
+        startPress(t.clientX, t.clientY, (el as any).__job ?? job, Boolean(onGrip));
+      },
+      { passive: true },
+    );
+    el.addEventListener(
+      "touchmove",
+      (e: TouchEvent) => {
+        const t = e.touches[0];
+        if (dragRef.current) e.preventDefault();
+        movePress(t.clientX, t.clientY);
+      },
+      { passive: false },
+    );
+    el.addEventListener("touchend", () => onPressEndRef.current(), { passive: true });
+    el.addEventListener(
+      "touchcancel",
+      () => {
+        cancelPress();
+        dragRef.current = null;
+        setDrag(null);
+      },
+      { passive: true },
+    );
   };
   const onPressEnd = () => {
     cancelPress();
     const d = dragRef.current;
     if (!d) return;
+    dragRef.current = null;
     setDrag(null);
     const targetCrew = d.overCrew === "none" ? null : d.overCrew;
     const list = cellJobs(day, targetCrew).filter((j) => j.id !== d.job.id);
@@ -486,6 +514,8 @@ function MobileDayView({
     const ordered = [...list.slice(0, at), d.job, ...list.slice(at)].map((j) => j.id);
     onReorder(day, targetCrew, ordered);
   };
+  const onPressEndRef = useRef(onPressEnd);
+  onPressEndRef.current = onPressEnd;
   return (
     <div className="space-y-3 md:hidden">
       {/* Day picker: every day of the week fits on one row */}
@@ -568,18 +598,18 @@ function MobileDayView({
                       }
                       onPick(j);
                     }}
-                    onPointerDown={(e) => onPressStart(e, j)}
-                    onPointerMove={onPressMove}
-                    onPointerUp={onPressEnd}
-                    onPointerCancel={() => {
-                      cancelPress();
-                      setDrag(null);
+                    ref={(el) => {
+                      if (el) (el as any).__job = j;
+                      cardRef(j)(el);
                     }}
+                    onPointerDown={(e) => e.pointerType === "mouse" && startPress(e.clientX, e.clientY, j)}
+                    onPointerMove={(e) => e.pointerType === "mouse" && movePress(e.clientX, e.clientY)}
+                    onPointerUp={(e) => e.pointerType === "mouse" && onPressEnd()}
                     onContextMenu={(e) => e.preventDefault()}
                     className={`flex w-full select-none items-start gap-3 rounded-md border p-2 text-left [-webkit-touch-callout:none] active:bg-muted ${j.status === "completed" ? "opacity-60" : ""} ${
                       drag?.job.id === j.id ? "scale-[1.02] bg-muted shadow-lg ring-2 ring-primary" : ""
                     } ${drag && drag.overId === j.id && drag.job.id !== j.id ? (drag.after ? "border-b-4 border-b-primary" : "border-t-4 border-t-primary") : ""}`}
-                    style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}`, touchAction: drag ? "none" : "pan-y" }}
+                    style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}` }}
                   >
                     <span className="w-14 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">{fmtTime(j.startTime) || "—"}</span>
                     <span className="min-w-0">
@@ -592,6 +622,11 @@ function MobileDayView({
                         {j.address}
                       </span>
                     </span>
+                    {canManage && (
+                      <span data-drag-grip aria-hidden="true" className="ml-auto -mr-1 flex self-stretch items-center px-1 text-muted-foreground" style={{ touchAction: "none" }}>
+                        <GripVertical className="size-5" />
+                      </span>
+                    )}
                   </button>
                 ))
               )}
@@ -600,7 +635,7 @@ function MobileDayView({
         );
       })}
       <p className="text-xs text-muted-foreground">
-        Tap a job to move it to another day or change its size.{canManage ? " Press and hold a job, then drag it to change the order or move it to another crew." : ""}
+        Tap a job to move it to another day or change its size.{canManage ? " Drag a job by its grip (⋮⋮), or press and hold it, to change the order or move it to another crew." : ""}
       </p>
     </div>
   );
