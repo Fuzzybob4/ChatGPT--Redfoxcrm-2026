@@ -129,7 +129,6 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           <ArrowLeft className="size-5" aria-hidden="true" />
           Work order
         </Link>
-        <span className="truncate text-sm font-semibold uppercase tracking-wider opacity-90">{org.businessName}</span>
         {canEditWorkOrders && job.status !== "completed" && job.status !== "cancelled" ? (
           <Link href={`/field/jobs/${job.id}/edit`} aria-label="Update work order" className="-mr-2 flex size-11 items-center justify-center rounded-md">
             <Pencil className="size-5" aria-hidden="true" />
