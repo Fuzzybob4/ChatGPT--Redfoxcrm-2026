@@ -34,6 +34,13 @@ interface Props {
 
 type Mode = "main" | "finish" | "return";
 
+const FINISH_CHECKS: Array<[string, string]> = [
+  ["tested", "All lights turned on and tested"],
+  ["secure", "Connections and cords secured"],
+  ["clean", "Site cleaned up (clips, boxes, trash)"],
+  ["photos", "Finished photos taken"],
+];
+
 const textareaCls =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-base leading-relaxed text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -44,6 +51,7 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
   const [mode, setMode] = useState<Mode>("main");
   const [notes, setNotes] = useState("");
   const [reason, setReason] = useState<ReturnReason | null>(null);
+  const [done, setDone] = useState<Record<string, boolean>>({});
   const [ended, setEnded] = useState<{ kind: "completed" | "return"; nextJobId: string | null } | null>(null);
 
   const run = (
@@ -120,8 +128,21 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
       </div>
     );
   } else if (mode === "finish") {
+    const allChecked = FINISH_CHECKS.every(([k]) => done[k]);
     body = (
-      <div className="flex flex-col gap-3">
+      <div className="flex max-h-[75vh] flex-col gap-3 overflow-y-auto">
+        <p className="text-sm font-semibold text-foreground">Before you finish:</p>
+        <ul className="flex flex-col gap-1">
+          {FINISH_CHECKS.map(([k, label]) => (
+            <li key={k}>
+              <label className="flex min-h-11 items-center gap-3 text-[15px]">
+                <input type="checkbox" className="size-5 accent-[var(--primary)]" checked={!!done[k]}
+                  onChange={(e) => setDone((d) => ({ ...d, [k]: e.target.checked }))} />
+                {label}
+              </label>
+            </li>
+          ))}
+        </ul>
         <label htmlFor="crew-notes" className="text-sm font-medium text-foreground">
           Notes for the office (optional)
         </label>
@@ -131,10 +152,10 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
           <Button type="button" variant="outline" className="h-14 px-5" disabled={isPending} onClick={() => setMode("main")}>
             Back
           </Button>
-          <Button type="button" className="h-14 text-base font-semibold" disabled={isPending}
+          <Button type="button" className="h-14 text-base font-semibold" disabled={isPending || !allChecked}
             onClick={() => run(async () => completeJob(jobId, notes, await currentLocation()), (r) => setEnded({ kind: "completed", nextJobId: r.nextJobId ?? null }))}>
             {isPending ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
-            Mark job complete
+            {allChecked ? "Mark job complete" : "Check everything above"}
           </Button>
         </div>
       </div>
@@ -174,7 +195,7 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
         <div className="flex items-center gap-4">
           {timer}
           {clockedInSince ? (
-            <Button type="button" className="h-14 flex-1 text-base font-semibold" disabled={isPending} onClick={() => { setNotes(""); setMode("finish"); }}>
+            <Button type="button" className="h-14 flex-1 text-base font-semibold" disabled={isPending} onClick={() => { setNotes(""); setDone({}); setMode("finish"); }}>
               <Square className="size-5" />
               Finish job
             </Button>

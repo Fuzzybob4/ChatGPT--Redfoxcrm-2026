@@ -1,13 +1,11 @@
-import { MaterialsChecklist } from "@/components/field/materials-checklist";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Navigation, Pencil, Phone } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock, Home, MapPin, Navigation, Pencil, Phone, User, Wrench } from "lucide-react";
 
 import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking, getJobBadges } from "@/lib/field";
-import { InstallItems } from "@/components/field/install-items";
+import { WorkOrderView, type WorkArea } from "@/components/field/work-order-view";
 import { JobActionBar } from "@/components/field/job-action-bar";
-import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
-import { PhotoCapture } from "@/components/field/photo-capture";
+import type { FieldPhoto } from "@/components/field/field-photo-gallery";
 import { STATUS_LABEL, directionsUrl, formatClock, formatDay, jobTypeLabel, meaningfulTitle } from "@/components/field/format";
 
 export default async function FieldJobPage({ params }: { params: Promise<{ id: string }> }) {
@@ -84,128 +82,144 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
     .filter((e) => e.clock_out)
     .reduce((sum, e) => sum + (new Date(e.clock_out!).getTime() - new Date(e.clock_in).getTime()), 0);
 
+  // Group the install list by area so bigger jobs read like a checklist.
+  const AREAS: Array<[string, RegExp]> = [
+    ["Roofline", /roof|eave|gutter|peak|ridge|gable|fascia|c9|c7/i],
+    ["Windows & doors", /window|door|frame|entry/i],
+    ["Trees", /tree|trunk|canopy|branch|palm/i],
+    ["Garland & wreaths", /garland|wreath|bow|swag/i],
+    ["Bushes & ground", /bush|shrub|hedge|net|ground|stake|path|walk|sphere|ball/i],
+    ["Columns & railings", /column|pillar|post|rail|banister|fence/i],
+  ];
+  const areas: WorkArea[] = [];
+  for (const it of items) {
+    const [name, ...details] = it.description.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!name) continue;
+    const area = AREAS.find(([, re]) => re.test(name))?.[0] ?? "Other";
+    let group = areas.find((a) => a.name === area);
+    if (!group) areas.push((group = { name: area, items: [] }));
+    group.items.push({
+      name,
+      qty: Number.isFinite(it.quantity) && it.quantity !== 1 ? ` × ${Number(it.quantity.toFixed(2))}` : "",
+      details,
+    });
+  }
+  areas.sort((a, b) => (a.name === "Other" ? 1 : b.name === "Other" ? -1 : 0));
+  const isRemoval = job.jobType === "removal";
+  const headline =
+    meaningfulTitle(job.title, job.customerName) ||
+    (items.length ? items.slice(0, 3).map((i) => i.description.split(/\r?\n/)[0].trim()).join(" + ") : "");
+  const kindLabel = kind === "past" ? "Past · pull tote" : kind === "customer_lights" ? "Customer lights" : kind === "new" ? "New · new materials" : null;
+  const kindClass =
+    kind === "past"
+      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+      : kind === "customer_lights"
+        ? "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300"
+        : "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300";
+
   const myOpenEntry = openEntry?.jobId === job.id ? openEntry : null;
   const busyElsewhereJobId = openEntry && openEntry.jobId !== job.id ? openEntry.jobId : null;
   const nextJobId = myJobs.find((j) => j.id !== job.id && isOpenStatus(j.status))?.id ?? null;
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-5 px-4 pb-44 pt-4">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/field"
-            className="-ml-2 flex min-h-11 w-fit items-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            My jobs
+      {/* Brand band */}
+      <div className="flex items-center justify-between gap-2 bg-primary px-4 py-2 text-primary-foreground">
+        <Link href="/field" className="-ml-2 flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm font-semibold">
+          <ArrowLeft className="size-5" aria-hidden="true" />
+          Work order
+        </Link>
+        <span className="truncate text-sm font-semibold uppercase tracking-wider opacity-90">{org.businessName}</span>
+        {canEditWorkOrders && job.status !== "completed" && job.status !== "cancelled" ? (
+          <Link href={`/field/jobs/${job.id}/edit`} aria-label="Update work order" className="-mr-2 flex size-11 items-center justify-center rounded-md">
+            <Pencil className="size-5" aria-hidden="true" />
           </Link>
-          {canEditWorkOrders && job.status !== "completed" && job.status !== "cancelled" && (
-            <Link
-              href={`/field/jobs/${job.id}/edit`}
-              className="-mr-2 flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-primary"
-            >
-              <Pencil className="size-4" aria-hidden="true" />
-              Update work order
-            </Link>
-          )}
-        </div>
-
-        <header className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-            <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{jobTypeLabel(job.jobType)}</span>
-            <span className={job.status === "in_progress" ? "text-primary" : "text-muted-foreground"}>
-              {STATUS_LABEL[job.status] ?? job.status}
-            </span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">
-            {job.customerId ? (
-              <Link href={`/field/customers/${job.customerId}`} className="underline-offset-4 hover:underline">
-                {job.customerName}
-              </Link>
-            ) : (
-              job.customerName
-            )}
-          </h1>
-
-          {meaningfulTitle(job.title, job.customerName) && (
-            <p className="text-lg font-semibold leading-snug text-foreground text-pretty">{meaningfulTitle(job.title, job.customerName)}</p>
-          )}
-          <p className="text-sm text-muted-foreground">
-            {formatDay(job.scheduledDate)}
-            {job.startTime ? ` · ${formatClock(job.startTime)}` : ""}
-            {job.endTime ? `–${formatClock(job.endTime)}` : ""}
-          </p>
-        </header>
-
-        <div className="grid grid-cols-2 gap-3">
-          {job.address ? (
-            <a
-              href={directionsUrl(job.address)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-border bg-card text-sm font-semibold text-foreground active:bg-accent"
-            >
-              <Navigation className="size-4 text-primary" aria-hidden="true" />
-              Directions
-            </a>
-          ) : (
-            <span className="flex min-h-14 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-              No address
-            </span>
-          )}
-          {job.customerPhone ? (
-            <a
-              href={`tel:${job.customerPhone}`}
-              className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-border bg-card text-sm font-semibold text-foreground active:bg-accent"
-            >
-              <Phone className="size-4 text-primary" aria-hidden="true" />
-              Call customer
-            </a>
-          ) : (
-            <span className="flex min-h-14 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-              No phone
-            </span>
-          )}
-        </div>
-
-        {job.address && <p className="text-sm leading-relaxed text-foreground">{job.address}</p>}
-
-        <InstallItems items={items} />
-
-        {job.jobType !== "removal" && job.status !== "completed" && (
-          <MaterialsChecklist
-            jobId={job.id}
-            items={loadOut}
-            checked={(checkRow?.materials_checked as Record<string, string>) ?? {}}
-            canEdit={assigned}
-          />
+        ) : (
+          <span className="size-11" />
         )}
+      </div>
 
-        {notes && (
-          <section aria-labelledby="notes-heading" className="flex flex-col gap-2 rounded-xl bg-muted p-4">
-            <h2 id="notes-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Notes, colors &amp; materials
-            </h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{notes}</p>
+      <div className="flex flex-col gap-4 px-4 pb-48 pt-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {/* Customer */}
+          <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+            <h1 className="flex items-center gap-2 text-xl font-bold leading-tight">
+              <User className="size-5 shrink-0" aria-hidden="true" />
+              {job.customerId ? (
+                <Link href={`/field/customers/${job.customerId}`} className="underline-offset-4 hover:underline">{job.customerName}</Link>
+              ) : (
+                job.customerName
+              )}
+            </h1>
+            {job.customerPhone && (
+              <p className="flex items-center gap-2 text-sm"><Phone className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{job.customerPhone}</p>
+            )}
+            {job.address && (
+              <p className="flex items-start gap-2 text-sm"><MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{job.address}</p>
+            )}
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {job.address ? (
+                <a href={directionsUrl(job.address)} target="_blank" rel="noopener noreferrer"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground active:opacity-90">
+                  <Navigation className="size-4" aria-hidden="true" /> Directions
+                </a>
+              ) : (
+                <span className="flex min-h-12 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">No address</span>
+              )}
+              {job.customerPhone ? (
+                <a href={`tel:${job.customerPhone}`}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-lg border-2 border-primary text-sm font-semibold text-primary active:bg-accent">
+                  <Phone className="size-4" aria-hidden="true" /> Call
+                </a>
+              ) : (
+                <span className="flex min-h-12 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">No phone</span>
+              )}
+            </div>
+          </section>
+
+          {/* When */}
+          <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold">{jobTypeLabel(job.jobType)}</span>
+              <span className={`text-xs font-semibold ${job.status === "in_progress" ? "text-primary" : "text-muted-foreground"}`}>
+                {STATUS_LABEL[job.status] ?? job.status}
+              </span>
+              {kindLabel && <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${kindClass}`}>{kindLabel}</span>}
+            </div>
+            <p className="flex items-center gap-2"><CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{formatDay(job.scheduledDate)}</p>
+            {job.startTime && (
+              <p className="flex items-center gap-2">
+                <Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                {formatClock(job.startTime)}{job.endTime ? ` – ${formatClock(job.endTime)}` : ""}
+              </p>
+            )}
+          </section>
+        </div>
+
+        {/* What we're doing */}
+        {headline && (
+          <section className="flex items-start gap-3 rounded-xl bg-primary/10 p-4">
+            <Wrench className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-lg font-extrabold uppercase leading-tight text-primary">
+                {isRemoval ? "Removal" : "Install"}: {headline}
+              </p>
+              {items.length > 3 && <p className="text-sm text-muted-foreground">+ {items.length - 3} more item{items.length - 3 === 1 ? "" : "s"} below</p>}
+            </div>
           </section>
         )}
 
-        <section aria-labelledby="photos-heading" className="flex flex-col gap-3">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <h2 id="photos-heading" className="text-base font-semibold text-foreground">
-                Photos of the home
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {photos.length === 0
-                  ? "No photos yet for this customer."
-                  : "How this property was set up before."}
-              </p>
-            </div>
-            {assigned && <PhotoCapture jobId={job.id} />}
-          </div>
-          <FieldPhotoGallery photos={photos} />
-        </section>
+        <WorkOrderView
+          jobId={job.id}
+          isRemoval={isRemoval}
+          kind={(kind as "past" | "new" | "customer_lights" | undefined) ?? null}
+          areas={areas}
+          loadOut={job.status === "completed" ? [] : loadOut}
+          checked={(checkRow?.materials_checked as Record<string, string>) ?? {}}
+          canEdit={assigned}
+          notes={notes}
+          photos={photos}
+        />
       </div>
 
       {assigned ? (
