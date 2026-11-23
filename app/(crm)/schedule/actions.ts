@@ -441,3 +441,59 @@ export async function deleteScheduledJob(jobId: string): Promise<{ ok: true } | 
   refresh();
   return { ok: true };
 }
+
+/**
+ * Drag to reorder: the crew's stops for the day, in the new order. The day's
+ * existing start times stay the same; they're handed out in the new order so
+ * the first stop gets the earliest time. A job dragged in from another crew
+ * joins this crew. Same day only, so customers aren't notified.
+ */
+export async function reorderCrewDay(day: string, crewId: string | null, orderedIds: string[]): Promise<{ ok: true } | Fail> {
+  const org = await requireOrg(true);
+  if (!org) return { ok: false, error: "Only the owner or a manager can change the schedule." };
+  if (!isDay(day)) return { ok: false, error: "Pick a valid date." };
+  const ids = [...new Set(orderedIds)].slice(0, 50);
+  if (!ids.length) return { ok: true };
+  const db = createAdminClient();
+  const { data: jobs } = await db
+    .from("scheduled_jobs")
+    .select("id, start_time, end_time, scheduled_date")
+    .eq("org_id", org.orgId)
+    .in("id", ids);
+  if (!jobs || jobs.length !== ids.length || jobs.some((j) => j.scheduled_date !== day)) {
+    return { ok: false, error: "Those jobs changed. Refresh and try again." };
+  }
+  let crewName: string | null = null;
+  if (crewId) {
+    const { data: crew } = await db.from("crews").select("id, name").eq("id", crewId).eq("org_id", org.orgId).maybeSingle();
+    if (!crew) return { ok: false, error: "Crew not found." };
+    crewName = crew.name as string;
+  }
+  const toMin = (t: string | null) => {
+    if (!t) return null;
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const fromMin = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+  const byId = new Map(jobs.map((j) => [j.id as string, j]));
+  const times = jobs
+    .map((j) => toMin(j.start_time as string | null))
+    .filter((n): n is number => n !== null)
+    .sort((a, b) => a - b);
+  const now = new Date().toISOString();
+  for (let i = 0; i < ids.length; i++) {
+    const job = byId.get(ids[i])!;
+    const oldStart = toMin(job.start_time as string | null);
+    const oldEnd = toMin(job.end_time as string | null);
+    const length = oldStart !== null && oldEnd !== null && oldEnd > oldStart ? oldEnd - oldStart : 120;
+    const start = times[i] ?? (times.length ? times[times.length - 1] + 30 * (i - times.length + 1) : 8 * 60 + i * 120);
+    const { error } = await db
+      .from("scheduled_jobs")
+      .update({ start_time: fromMin(start), end_time: fromMin(start + length), crew_id: crewId, crew_name: crewName, updated_at: now })
+      .eq("id", ids[i])
+      .eq("org_id", org.orgId);
+    if (error) return { ok: false, error: "Couldn't save the new order." };
+  }
+  refresh();
+  return { ok: true };
+}

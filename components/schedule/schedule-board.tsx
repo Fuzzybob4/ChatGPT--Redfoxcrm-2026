@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, CloudRain, MessageSquare, Phone, Settings2, Sparkles, Undo2, Users } from "lucide-react";
@@ -21,6 +21,7 @@ import {
   undoScheduleBatch,
   updateScheduledJob,
   deleteScheduledJob,
+  reorderCrewDay,
   type MovedJob,
 } from "@/app/(crm)/schedule/actions";
 
@@ -211,6 +212,7 @@ export function ScheduleBoard({
           onPick={setEditing}
           onRain={(d) => setRainConfirm(d)}
           onReopen={(d) => act(() => reopenDay(d))}
+          onReorder={(d, crewId, ids) => act(() => reorderCrewDay(d, crewId, ids))}
         />
       )}
 
@@ -393,7 +395,9 @@ function MobileDayView({
   onPick,
   onRain,
   onReopen,
+  onReorder,
 }: {
+  onReorder: (day: string, crewId: string | null, orderedIds: string[]) => void;
   days: string[];
   day: string;
   today: string;
@@ -409,6 +413,79 @@ function MobileDayView({
 }) {
   const idx = days.indexOf(day);
   const isOff = offSet.has(day);
+
+  // Long-press a job, then drag it up/down (or onto another crew) to change the order.
+  const [drag, setDrag] = useState<{ job: BoardJob; y: number; overId: string | null; overCrew: string | null; after: boolean } | null>(null);
+  const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; x: number; y: number; job: BoardJob | null; dragged: boolean }>({
+    timer: null, x: 0, y: 0, job: null, dragged: false,
+  });
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+
+  // While dragging, stop the page from scrolling under your finger.
+  useEffect(() => {
+    if (!drag) return;
+    const stop = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener("touchmove", stop, { passive: false });
+    return () => document.removeEventListener("touchmove", stop);
+  }, [drag]);
+
+  const cancelPress = () => {
+    if (press.current.timer) clearTimeout(press.current.timer);
+    press.current.timer = null;
+  };
+  const onPressStart = (e: React.PointerEvent, job: BoardJob) => {
+    if (!canManage) return;
+    press.current = { timer: null, x: e.clientX, y: e.clientY, job, dragged: false };
+    const y = e.clientY;
+    press.current.timer = setTimeout(() => {
+      press.current.dragged = true;
+      try {
+        navigator.vibrate?.(30);
+      } catch {}
+      setDrag({ job, y, overId: job.id, overCrew: job.crewId ?? "none", after: false });
+    }, 450);
+  };
+  const onPressMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) {
+      // Moved before the long-press kicked in: they're scrolling.
+      if (Math.abs(e.clientY - press.current.y) > 8 || Math.abs(e.clientX - press.current.x) > 8) cancelPress();
+      return;
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const card = el?.closest("[data-job-id]") as HTMLElement | null;
+    const zone = el?.closest("[data-crew-zone]") as HTMLElement | null;
+    let after = false;
+    if (card) {
+      const r = card.getBoundingClientRect();
+      after = e.clientY > r.top + r.height / 2;
+    }
+    setDrag({
+      ...d,
+      y: e.clientY,
+      overId: card?.dataset.jobId ?? null,
+      overCrew: zone?.dataset.crewZone ?? d.overCrew,
+      after,
+    });
+  };
+  const onPressEnd = () => {
+    cancelPress();
+    const d = dragRef.current;
+    if (!d) return;
+    setDrag(null);
+    const targetCrew = d.overCrew === "none" ? null : d.overCrew;
+    const list = cellJobs(day, targetCrew).filter((j) => j.id !== d.job.id);
+    let at = list.length;
+    if (d.overId && d.overId !== d.job.id) {
+      const i = list.findIndex((j) => j.id === d.overId);
+      if (i >= 0) at = d.after ? i + 1 : i;
+    } else if (d.overId === d.job.id && (d.job.crewId ?? null) === targetCrew) {
+      return; // dropped where it started
+    }
+    const ordered = [...list.slice(0, at), d.job, ...list.slice(at)].map((j) => j.id);
+    onReorder(day, targetCrew, ordered);
+  };
   return (
     <div className="space-y-3 md:hidden">
       {/* Day picker: every day of the week fits on one row */}
@@ -463,7 +540,8 @@ function MobileDayView({
         const pts = list.reduce((s, j) => s + (j.points ?? jobPoints(j.size)), 0);
         const over = crew ? pts > crew.capacity : false;
         return (
-          <Card key={crew?.id ?? "none"}>
+          <Card key={crew?.id ?? "none"} data-crew-zone={crew?.id ?? "none"}
+            className={drag && drag.overCrew === (crew?.id ?? "none") ? "ring-2 ring-primary" : undefined}>
             <CardContent className="space-y-2 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
@@ -482,9 +560,26 @@ function MobileDayView({
                 list.map((j) => (
                   <button
                     key={j.id}
-                    onClick={() => onPick(j)}
-                    className={`flex w-full items-start gap-3 rounded-md border p-2 text-left active:bg-muted ${j.status === "completed" ? "opacity-60" : ""}`}
-                    style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}` }}
+                    data-job-id={j.id}
+                    onClick={() => {
+                      if (press.current.dragged) {
+                        press.current.dragged = false;
+                        return;
+                      }
+                      onPick(j);
+                    }}
+                    onPointerDown={(e) => onPressStart(e, j)}
+                    onPointerMove={onPressMove}
+                    onPointerUp={onPressEnd}
+                    onPointerCancel={() => {
+                      cancelPress();
+                      setDrag(null);
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={`flex w-full select-none items-start gap-3 rounded-md border p-2 text-left [-webkit-touch-callout:none] active:bg-muted ${j.status === "completed" ? "opacity-60" : ""} ${
+                      drag?.job.id === j.id ? "scale-[1.02] bg-muted shadow-lg ring-2 ring-primary" : ""
+                    } ${drag && drag.overId === j.id && drag.job.id !== j.id ? (drag.after ? "border-b-4 border-b-primary" : "border-t-4 border-t-primary") : ""}`}
+                    style={{ borderLeft: `3px solid ${crew?.color ?? "#9ca3af"}`, touchAction: drag ? "none" : "pan-y" }}
                   >
                     <span className="w-14 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">{fmtTime(j.startTime) || "—"}</span>
                     <span className="min-w-0">
@@ -504,7 +599,9 @@ function MobileDayView({
           </Card>
         );
       })}
-      <p className="text-xs text-muted-foreground">Tap a job to move it or change its size.</p>
+      <p className="text-xs text-muted-foreground">
+        Tap a job to move it to another day or change its size.{canManage ? " Press and hold a job, then drag it to change the order or move it to another crew." : ""}
+      </p>
     </div>
   );
 }
