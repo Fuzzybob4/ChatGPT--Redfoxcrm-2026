@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { PhotoViewer } from "@/components/field/photo-viewer";
 
 export interface FieldPhoto {
   id: string;
@@ -23,8 +22,6 @@ export function FieldPhotoGallery({ photos }: { photos: FieldPhoto[] }) {
       </div>
     );
   }
-
-  const current = index != null ? photos[index] : null;
 
   return (
     <>
@@ -48,56 +45,18 @@ export function FieldPhotoGallery({ photos }: { photos: FieldPhoto[] }) {
         ))}
       </ul>
 
-      <Dialog open={current != null} onOpenChange={(open) => !open && setIndex(null)}>
-        <DialogContent showCloseButton={false} className="max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          {current && index != null && (
-            <div className="flex flex-col">
-              <DialogTitle className="sr-only">Photo {index + 1} of {photos.length}</DialogTitle>
-              <div className="relative bg-foreground">
-                <img
-                  src={photoSrc(current.pathname)}
-                  alt={current.caption || `Install photo ${index + 1}`}
-                  className="max-h-[70dvh] w-full object-contain"
-                />
-                <button
-                  type="button"
-                  onClick={() => setIndex(null)}
-                  className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-full bg-background/90 text-foreground"
-                  aria-label="Close photo"
-                >
-                  <X className="size-5" />
-                </button>
-              </div>
-              <div className="flex items-center justify-between gap-2 p-3">
-                <button
-                  type="button"
-                  onClick={() => setIndex((index - 1 + photos.length) % photos.length)}
-                  className="flex size-11 items-center justify-center rounded-md text-foreground hover:bg-accent"
-                  aria-label="Previous photo"
-                >
-                  <ChevronLeft className="size-5" />
-                </button>
-                <div className="min-w-0 text-center">
-                  <p className="truncate text-sm text-foreground">{current.caption || "Install photo"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(current.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    {" · "}
-                    {index + 1}/{photos.length}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIndex((index + 1) % photos.length)}
-                  className="flex size-11 items-center justify-center rounded-md text-foreground hover:bg-accent"
-                  aria-label="Next photo"
-                >
-                  <ChevronRight className="size-5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {index != null && (
+        <PhotoViewer
+          photos={photos.map((p) => ({
+            src: photoSrc(p.pathname),
+            caption: p.caption || "Install photo",
+            date: new Date(p.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          }))}
+          index={index}
+          onIndex={setIndex}
+          onClose={() => setIndex(null)}
+        />
+      )}
     </>
   );
 }
