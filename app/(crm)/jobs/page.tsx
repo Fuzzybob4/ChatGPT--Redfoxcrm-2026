@@ -28,7 +28,7 @@ import { type Job, type JobStatus } from "@/lib/data";
 import { useData, type Employee } from "@/lib/data-context";
 import { useLocation } from "@/lib/location-context";
 import {
-  updateJobStatus, reassignJob, createRemovalJob,
+  updateJobStatus, reassignJob, createRemovalJob, markJobsCompleted,
   archiveJobs, archiveAllFinishedJobs, restoreJob, deleteCancelledJob,
 } from "./actions";
 import { CalendarSyncDialog } from "@/components/schedule/calendar-sync-dialog";
@@ -140,6 +140,10 @@ function WorkOrderCard({
   }
 
   const NextIcon = next ? nextButtonIcon(job.status) : null;
+  const isOpen = job.status !== "Completed" && job.status !== "Cancelled";
+  // A job from an earlier day that's still open was almost always finished
+  // and just never closed out, so "Mark completed" is the useful button.
+  const isPastOpen = isOpen && job.scheduledDate < new Date().toLocaleDateString("en-CA");
   const address = [job.address, job.city].filter(Boolean).join(", ");
   const timeLabel = job.scheduledTime ? job.scheduledTime.slice(0, 5) : null;
 
@@ -169,6 +173,12 @@ function WorkOrderCard({
                   <DropdownMenuLabel className="text-xs">Work Order</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
+                {isOpen && (
+                  <DropdownMenuItem onClick={() => run(() => markJobsCompleted([job.id]))}>
+                    <CheckCircle2 className="size-3.5 mr-2" />
+                    Mark completed
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => setReassignOpen(true)}>
                   <Users className="size-3.5 mr-2" />
                   Reassign crew
@@ -286,7 +296,16 @@ function WorkOrderCard({
           )}
 
           {/* Primary action — full width, tall touch target */}
-          {next && (
+          {isPastOpen ? (
+            <Button
+              className="w-full h-11 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              onClick={() => run(() => markJobsCompleted([job.id]))}
+              disabled={pending}
+            >
+              <CheckCircle2 className="size-4 mr-2" />
+              {pending ? "Updating..." : "Mark completed"}
+            </Button>
+          ) : next && (
             <Button
               className={`w-full h-11 text-sm font-semibold ${nextButtonStyle(job.status)}`}
               onClick={handleAdvance}
@@ -603,6 +622,10 @@ export default function JobsPage() {
   );
 
   const sortedDates = Object.keys(byDate).sort();
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const pastOpen = jobs.filter(
+    (j) => !j.archivedAt && j.scheduledDate < todayStr && ["Scheduled", "En Route", "In Progress"].includes(j.status),
+  );
 
   const counts: Record<string, number> = {
     all: jobs.length,
@@ -703,6 +726,28 @@ export default function JobsPage() {
                 })}
               </div>
             </div>
+
+            {activeStatus !== "Archived" && pastOpen.length > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
+                <p className="text-xs">
+                  {pastOpen.length} work order{pastOpen.length === 1 ? "" : "s"} from earlier days still open. Done?
+                </p>
+                <Button
+                  size="sm"
+                  disabled={archiving}
+                  onClick={() => {
+                    if (!confirm(`Mark ${pastOpen.length} past work order${pastOpen.length === 1 ? "" : "s"} as completed? Check the list first if any weren't finished.`)) return;
+                    startArchiving(async () => {
+                      await markJobsCompleted(pastOpen.map((j) => j.id));
+                      await refresh();
+                    });
+                  }}
+                >
+                  <CheckCircle2 className="size-3.5 mr-1.5" />
+                  Mark all completed
+                </Button>
+              </div>
+            )}
 
             {activeStatus !== "Archived" && finishedCount > 0 && (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2">

@@ -376,3 +376,27 @@ export async function scheduleInvoiceJob(input: {
   revalidatePath(`/invoices/${invoice.id}`);
   return { ok: true, jobId: data.id };
 }
+
+/**
+ * Office shortcut: mark jobs done that the crew finished but never closed out
+ * in the app. Skips anything already completed or cancelled.
+ */
+export async function markJobsCompleted(jobIds: string[]): Promise<{ count: number }> {
+  const supabase = await createClient();
+  const org = await getCurrentOrg();
+  if (!org) throw new Error("Not authenticated");
+  const ids = [...new Set(jobIds)].slice(0, 500);
+  if (!ids.length) return { count: 0 };
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("scheduled_jobs")
+    .update({ status: "completed", status_key: "completed", completed_at: now, updated_at: now })
+    .eq("org_id", org.orgId)
+    .in("id", ids)
+    .not("status", "in", "(completed,cancelled)")
+    .select("id");
+  if (error) throw new Error(error.message);
+  revalidatePath("/jobs");
+  revalidatePath("/schedule");
+  return { count: data?.length ?? 0 };
+}
