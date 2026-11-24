@@ -31,11 +31,15 @@ type Entry = {
 const mapLink = (loc: string | null) =>
   loc && /^-?\d+\.\d+,-?\d+\.\d+$/.test(loc) ? `https://www.google.com/maps?q=${encodeURIComponent(loc)}` : null;
 
-export default async function TimesheetsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+export default async function TimesheetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ days?: string; week?: string; emp?: string }>;
+}) {
   const org = await getCurrentOrg();
   if (!org) redirect("/onboarding");
   if (!["owner", "admin", "manager"].includes(String(org.role ?? "").toLowerCase())) redirect("/dashboard");
-  const { days: daysParam } = await searchParams;
+  const { days: daysParam, week: weekParam, emp: empFilter } = await searchParams;
   const days = Math.min(62, Math.max(7, Number(daysParam) || 14));
 
   const db = createAdminClient();
@@ -50,7 +54,7 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
       .gte("clock_in", `${addDays(since, -1)}T00:00:00Z`)
       .order("clock_in", { ascending: true })
       .limit(5000),
-    db.from("employees").select("id, full_name, first_name, last_name, email").eq("org_id", org.orgId),
+    db.from("employees").select("id, full_name, first_name, last_name, email, hourly_rate, is_active").eq("org_id", org.orgId),
   ]);
   const nameOf = new Map<string, string>(
     (employees ?? []).map((e: any) => [e.id, e.full_name?.trim() || [e.first_name, e.last_name].filter(Boolean).join(" ") || e.email || "Employee"]),
@@ -72,12 +76,54 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
     (e.scheduled_job_id ? r.jobs : r.shifts).push(e);
     rows.set(key, r);
   }
-  const list = [...rows.values()].sort((a, b) => (a.day === b.day ? (nameOf.get(a.employeeId) ?? "").localeCompare(nameOf.get(b.employeeId) ?? "") : b.day.localeCompare(a.day)));
+  const list = [...rows.values()].filter((r) => !empFilter || r.employeeId === empFilter).sort((a, b) => (a.day === b.day ? (nameOf.get(a.employeeId) ?? "").localeCompare(nameOf.get(b.employeeId) ?? "") : b.day.localeCompare(a.day)));
   const totals = new Map<string, number>();
   for (const r of list) {
     const h = mergedHours(r.shifts.length ? r.shifts : r.jobs, now);
     totals.set(r.employeeId, (totals.get(r.employeeId) ?? 0) + h);
   }
+
+  // Pay week grid: Mon–Sun, one row per person, hours per day, total and pay.
+  const weekday = new Date(`${rules.today}T12:00:00Z`).getUTCDay(); // 0 = Sun
+  const thisMonday = addDays(rules.today, -((weekday + 6) % 7));
+  const weekStart = /^\d{4}-\d{2}-\d{2}$/.test(weekParam ?? "") ? weekParam! : thisMonday;
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const { data: weekEntries } = await db
+    .from("time_entries")
+    .select("employee_id, scheduled_job_id, clock_in, clock_out, break_minutes")
+    .eq("org_id", org.orgId)
+    .gte("clock_in", `${addDays(weekStart, -1)}T00:00:00Z`)
+    .lt("clock_in", `${addDays(weekStart, 8)}T12:00:00Z`)
+    .limit(5000);
+  const byPersonDay = new Map<string, { shifts: any[]; jobs: any[] }>();
+  for (const e of weekEntries ?? []) {
+    const d = dayOf(e.clock_in);
+    if (d < weekDays[0] || d > weekDays[6]) continue;
+    const k = `${e.employee_id}|${d}`;
+    const v = byPersonDay.get(k) ?? { shifts: [], jobs: [] };
+    (e.scheduled_job_id ? v.jobs : v.shifts).push(e);
+    byPersonDay.set(k, v);
+  }
+  const rateOf = new Map<string, number>((employees ?? []).map((e: any) => [e.id, Number(e.hourly_rate ?? 0)]));
+  const weekRows = [...new Set((weekEntries ?? []).map((e) => e.employee_id as string))]
+    .map((id) => {
+      const perDay = weekDays.map((d) => {
+        const v = byPersonDay.get(`${id}|${d}`);
+        if (!v) return { hours: 0, open: false };
+        return { hours: mergedHours(v.shifts.length ? v.shifts : v.jobs, now), open: v.shifts.some((x) => !x.clock_out) };
+      });
+      const total = perDay.reduce((a, b) => a + Math.round(b.hours * 100) / 100, 0);
+      const rate = rateOf.get(id) ?? 0;
+      return { id, name: nameOf.get(id) ?? "Employee", perDay, total, rate, pay: total * rate };
+    })
+    .filter((r) => r.total > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const hm = (h: number) => {
+    const m = Math.round(h * 60);
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+  };
+  const weekLabel = `${new Date(`${weekDays[0]}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(`${weekDays[6]}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
   const { data: fixRows } = await db
     .from("time_fix_requests")
@@ -104,24 +150,85 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
       <div className="flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
         <TimeFixRequests requests={fixRequests} />
         <Card>
-          <CardContent className="p-4">
-            <p className="mb-2 text-sm font-semibold">Hours by person</p>
-            {totals.size === 0 ? (
-              <p className="text-sm text-muted-foreground">No time recorded yet. Crews tap Start day in the crew app when they leave the shop.</p>
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between gap-2 border-b border-border p-3">
+              <a href={`/timesheets?week=${addDays(weekStart, -7)}`} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">‹ Prev</a>
+              <div className="text-center">
+                <p className="text-sm font-semibold">Week of {weekLabel}</p>
+                {weekStart !== thisMonday && <a href="/timesheets" className="text-xs text-primary underline">This week</a>}
+              </div>
+              <a href={`/timesheets?week=${addDays(weekStart, 7)}`} className="rounded-md px-3 py-2 text-sm font-medium hover:bg-muted">Next ›</a>
+            </div>
+            {weekRows.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">No hours this week.</p>
             ) : (
-              <div className="grid gap-1 text-sm sm:grid-cols-2">
-                {[...totals.entries()].sort((a, b) => b[1] - a[1]).map(([id, h]) => (
-                  <div key={id} className="flex justify-between gap-3">
-                    <span>{nameOf.get(id) ?? "Employee"}</span>
-                    <span className="tabular-nums font-medium">{h.toFixed(2)} h</span>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="sticky left-0 bg-card px-3 py-2 text-left font-medium">Person</th>
+                      {weekDays.map((d) => (
+                        <th key={d} className={`px-2 py-2 text-center font-medium ${d === rules.today ? "text-primary" : ""}`}>
+                          {new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })}
+                          <br />
+                          {new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { month: "numeric", day: "numeric" })}
+                        </th>
+                      ))}
+                      <th className="px-2 py-2 text-right font-medium">Total</th>
+                      <th className="px-3 py-2 text-right font-medium">Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekRows.map((r) => (
+                      <tr key={r.id} className="border-b border-border last:border-0">
+                        <td className="sticky left-0 bg-card px-3 py-2.5 font-medium">
+                          <a href={`/timesheets?days=14&emp=${r.id}#days`} className="hover:underline">{r.name}</a>
+                        </td>
+                        {r.perDay.map((d, i) => (
+                          <td key={i} className={`px-2 py-2.5 text-center tabular-nums ${d.hours ? "" : "text-muted-foreground/50"}`}>
+                            {d.hours ? hm(d.hours) : "–"}
+                            {d.open && <span className="block text-[10px] font-semibold text-primary">on now</span>}
+                          </td>
+                        ))}
+                        <td className="px-2 py-2.5 text-right font-semibold tabular-nums">{hm(r.total)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {r.rate ? <span className="font-semibold">{usd(r.pay)}</span> : <span className="text-xs text-muted-foreground">no rate</span>}
+                          {r.rate ? <span className="block text-[10px] text-muted-foreground">${r.rate}/h</span> : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted/50 font-semibold">
+                      <td className="sticky left-0 bg-muted/50 px-3 py-2">Total</td>
+                      {weekDays.map((_, i) => (
+                        <td key={i} className="px-2 py-2 text-center tabular-nums">
+                          {(() => {
+                            const t = weekRows.reduce((a, r) => a + r.perDay[i].hours, 0);
+                            return t ? hm(t) : "";
+                          })()}
+                        </td>
+                      ))}
+                      <td className="px-2 py-2 text-right tabular-nums">{hm(weekRows.reduce((a, r) => a + r.total, 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{usd(weekRows.reduce((a, r) => a + r.pay, 0))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
+            <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              Hours are h:mm from the work-day clock (lunch not counted, overlaps counted once). Straight time. Tap a name to see their days below.
+            </p>
           </CardContent>
         </Card>
 
-        <div className="space-y-2">
+        <div id="days" className="space-y-2">
+          {empFilter && (
+            <p className="flex items-center justify-between text-sm">
+              <span>Showing <b>{nameOf.get(empFilter) ?? "one person"}</b>&apos;s days</span>
+              <a href="/timesheets" className="text-primary underline">Show everyone</a>
+            </p>
+          )}
           {list.map((r) => {
             const shift = r.shifts[0];
             const lastShift = r.shifts[r.shifts.length - 1];
