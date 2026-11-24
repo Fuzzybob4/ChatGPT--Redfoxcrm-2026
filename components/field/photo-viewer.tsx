@@ -20,7 +20,10 @@ export function PhotoViewer({
   index,
   onIndex,
   onClose,
+  footer,
 }: {
+  /** Extra buttons along the bottom (e.g. open customer, schedule a service call). */
+  footer?: (index: number) => React.ReactNode;
   photos: ViewerPhoto[];
   index: number;
   onIndex: (i: number) => void;
@@ -192,7 +195,12 @@ export function PhotoViewer({
               </button>
             </>
           )}
-          {scale === 1 && (
+          {footer && (
+            <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-2 bg-gradient-to-t from-black/80 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {footer(index)}
+            </div>
+          )}
+          {!footer && scale === 1 && (
             <p className="pointer-events-none absolute inset-x-0 bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-xs text-white/70">
               Pinch or double-tap to zoom · turn your phone for a bigger view
             </p>

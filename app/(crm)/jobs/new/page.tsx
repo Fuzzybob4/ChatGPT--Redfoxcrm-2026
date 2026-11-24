@@ -21,14 +21,16 @@ export default function NewJobPage() {
   const router = useRouter();
   const customerId = searchParams.get("customer");
   const scheduledDate = searchParams.get("date") ?? "";
+  const typeParam = searchParams.get("type");
+  const initialType = (typeParam === "removal" || typeParam === "other" ? typeParam : "install") as "install" | "removal" | "other";
   const { getCustomerById } = useData();
   const customer = customerId ? getCustomerById(customerId) : null;
 
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    title: "",
-    jobType: "install" as "install" | "removal" | "other",
+    title: searchParams.get("title") ?? "",
+    jobType: initialType,
     scheduledDate,
     startTime: "08:00",
     endTime: "12:00",

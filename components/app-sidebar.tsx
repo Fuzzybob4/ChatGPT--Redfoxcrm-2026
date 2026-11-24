@@ -20,6 +20,7 @@ import {
   Package,
   LifeBuoy,
   CalendarCheck,
+  Images,
 } from "lucide-react";
 
 import {
@@ -71,6 +72,11 @@ const navItems = [
         title: "Rebooking",
         href: "/customers/rebook",
         icon: CalendarCheck,
+      },
+      {
+        title: "Photo gallery",
+        href: "/customers/photos",
+        icon: Images,
       },
     ],
   },
