@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, Clock, Home, MapPin, Navigation, Pencil, Phone, User, Wrench } from "lucide-react";
 
-import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking, getJobBadges } from "@/lib/field";
+import { getAccessibleJob, getAssignedJobs, getFieldContext, getInstallItems, getOpenTimeEntry, isOpenStatus, crewTextFilter, crewLeadStillWorking, getJobBadges, buildJobChecklist, checklistGaps, type ChecklistMark } from "@/lib/field";
 import { WorkOrderView, type WorkArea } from "@/components/field/work-order-view";
 import { JobActionBar } from "@/components/field/job-action-bar";
 import type { FieldPhoto } from "@/components/field/field-photo-gallery";
@@ -51,7 +51,7 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
   ]);
   // Load-out checklist: the install items plus the basics for this kind of customer.
   const [{ data: checkRow }, badgeMap] = await Promise.all([
-    admin.from("scheduled_jobs").select("materials_checked").eq("id", job.id).eq("org_id", org.orgId).maybeSingle(),
+    admin.from("scheduled_jobs").select("materials_checked, job_checklist").eq("id", job.id).eq("org_id", org.orgId).maybeSingle(),
     getJobBadges(org.orgId, [job]).catch(() => ({} as Record<string, { kind: string }>)),
   ]);
   const kind = (badgeMap as Record<string, { kind: string }>)[job.id]?.kind;
@@ -106,6 +106,9 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
   }
   areas.sort((a, b) => (a.name === "Other" ? 1 : b.name === "Other" ? -1 : 0));
   const isRemoval = job.jobType === "removal";
+  const checklist = buildJobChecklist(job, (kind as "past" | "new" | "customer_lights" | undefined) ?? null, items);
+  const marks = ((checkRow as any)?.job_checklist ?? {}) as Record<string, ChecklistMark>;
+  const gaps = checklistGaps(checklist, marks);
   const headline =
     meaningfulTitle(job.title, job.customerName) ||
     (items.length ? items.slice(0, 3).map((i) => i.description.split(/\r?\n/)[0].trim()).join(" + ") : "");
@@ -213,8 +216,8 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           isRemoval={isRemoval}
           kind={(kind as "past" | "new" | "customer_lights" | undefined) ?? null}
           areas={areas}
-          loadOut={job.status === "completed" ? [] : loadOut}
-          checked={(checkRow?.materials_checked as Record<string, string>) ?? {}}
+          checklist={checklist}
+          marks={marks}
           canEdit={assigned}
           notes={notes}
           photos={photos}
@@ -230,6 +233,8 @@ export default async function FieldJobPage({ params }: { params: Promise<{ id: s
           busyElsewhereJobId={busyElsewhereJobId}
           nextJobId={nextJobId}
           canRun={canRunThisJob}
+          loadLeft={job.status === "scheduled" || job.status === "en_route" ? gaps.load.length : 0}
+          stepsLeft={gaps.site.length + gaps.steps.length}
         />
       ) : (
         <p className="px-4 pb-8 text-center text-sm text-muted-foreground">

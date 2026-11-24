@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { crewRoster, getAccessibleJob, getAssignedJobs, getFieldContext, isOpenStatus } from "@/lib/field";
+import { checklistGaps, crewRoster, getAccessibleJob, getAssignedJobs, getFieldContext, isOpenStatus, loadJobChecklist, type ChecklistMark } from "@/lib/field";
 import { createNotification } from "@/lib/notifications-server";
 import { RETURN_REASONS, type ReturnReason } from "@/components/field/format";
 
@@ -65,6 +65,15 @@ export async function startJob(jobId: string, location?: string | null): Promise
     if (job.scheduledDate && job.scheduledDate > today) {
       const day = new Date(`${job.scheduledDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
       return { error: `This job is scheduled for ${day}. You can start it that day.` };
+    }
+  }
+
+  // Load the truck first: every item checked or marked Missing (first start only).
+  if (job.status === "scheduled" || job.status === "en_route") {
+    const { list, marks } = await loadJobChecklist(org.orgId, job);
+    const { load } = checklistGaps(list, marks);
+    if (load.length) {
+      return { error: `Finish "Load the truck" first: check each item or mark it Missing (${load.length} left).` };
     }
   }
 
@@ -154,6 +163,22 @@ export async function completeJob(
     ]);
     if (!(propCount ?? 0) && !(custCount ?? 0)) {
       return { error: "Take at least one photo of the finished install first (Take photo, above)." };
+    }
+  }
+
+  {
+    const { list, marks } = await loadJobChecklist(org.orgId, job);
+    const gaps = checklistGaps(list, marks);
+    if (gaps.site.length) return { error: `Answer "Confirm on site" first (${gaps.site.length} left).` };
+    if (gaps.steps.length) {
+      return { error: `Check off every job step, or mark it "Can't finish" with a reason (${gaps.steps.length} left).` };
+    }
+    const skipped = list.steps
+      .map((k) => [k, marks[`step:${k}`]] as const)
+      .filter(([, m]) => m?.s === "cant")
+      .map(([k, m]) => `${k}: ${m?.reason}`);
+    if (skipped.length) {
+      crewNotes = [crewNotes, `Couldn't finish:\n- ${skipped.join("\n- ")}`].filter(Boolean).join("\n\n");
     }
   }
 
@@ -535,5 +560,55 @@ export async function requestTimeFix(input: {
   }
   revalidatePath("/field/hours");
   revalidatePath("/timesheets");
+  return { ok: true };
+}
+
+/**
+ * Mark one checklist line. "load:" → loaded | missing, "site:" → have | dont,
+ * "step:" → done | cant (with a reason). Anyone on the job can mark it; a
+ * Missing / Don't have it flags the owner right away. Pass state null to clear.
+ */
+export async function setChecklistMark(
+  jobId: string,
+  key: string,
+  state: ChecklistMark["s"] | null,
+  reason?: string,
+): Promise<ActionResult> {
+  const { org, employee, admin } = await getFieldContext();
+  if (!employee) return { error: "Your login isn't linked to an employee profile yet." };
+  const access = await getAccessibleJob(org.orgId, employee.id, org.role, jobId);
+  if (!access?.assigned) return { error: "This job isn't assigned to you." };
+  const [prefix] = key.split(":");
+  const allowed: Record<string, string[]> = { load: ["loaded", "missing"], site: ["have", "dont"], step: ["done", "cant"] };
+  if (!allowed[prefix] || (state !== null && !allowed[prefix].includes(state))) return { error: "Unknown checklist item." };
+  const why = (reason ?? "").trim().slice(0, 300);
+  if (state === "cant" && !why) return { error: "Say why it can't be finished." };
+
+  const { data } = await admin.from("scheduled_jobs").select("job_checklist").eq("id", jobId).eq("org_id", org.orgId).single();
+  const marks = { ...((data?.job_checklist as Record<string, ChecklistMark>) ?? {}) };
+  const k = key.slice(0, 300);
+  const before = marks[k]?.s;
+  if (state === null) delete marks[k];
+  else marks[k] = { s: state, by: employee.name, at: new Date().toISOString(), ...(why ? { reason: why } : {}) };
+  const { error } = await admin.from("scheduled_jobs").update({ job_checklist: marks }).eq("id", jobId).eq("org_id", org.orgId);
+  if (error) return { error: "Couldn't save that. Try again." };
+
+  if ((state === "missing" || state === "dont") && before !== state) {
+    const item = k.slice(k.indexOf(":") + 1);
+    const where = state === "missing" ? "at the shop (not loaded)" : "on site (customer doesn't have it)";
+    try {
+      await createNotification({
+        orgId: org.orgId,
+        type: "job_flag",
+        title: `Missing: ${item} · ${access.job.customerName}`,
+        message: `${employee.name} marked "${item}" missing ${where} for ${access.job.customerName}.`,
+        relatedId: jobId,
+        customerId: access.job.customerId ?? undefined,
+      });
+    } catch {
+      // Saved; the alert is best effort.
+    }
+  }
+  revalidatePath(`/field/jobs/${jobId}`);
   return { ok: true };
 }

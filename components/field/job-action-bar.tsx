@@ -30,6 +30,10 @@ interface Props {
   nextJobId: string | null;
   /** Crew leads (and the office) run the job; installers only view and add photos. */
   canRun?: boolean;
+  /** Load-the-truck items not yet marked (blocks Start). */
+  loadLeft?: number;
+  /** Site checks + job steps not yet marked (blocks Complete). */
+  stepsLeft?: number;
 }
 
 type Mode = "main" | "finish" | "return";
@@ -44,7 +48,7 @@ const FINISH_CHECKS: Array<[string, string]> = [
 const textareaCls =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-base leading-relaxed text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
-export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElsewhereJobId, nextJobId, canRun = true }: Props) {
+export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElsewhereJobId, nextJobId, canRun = true, loadLeft = 0, stepsLeft = 0 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -128,21 +132,14 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
       </div>
     );
   } else if (mode === "finish") {
-    const allChecked = FINISH_CHECKS.every(([k]) => done[k]);
+    const allChecked = stepsLeft === 0;
     body = (
       <div className="flex max-h-[75vh] flex-col gap-3 overflow-y-auto">
-        <p className="text-sm font-semibold text-foreground">Before you finish:</p>
-        <ul className="flex flex-col gap-1">
-          {FINISH_CHECKS.map(([k, label]) => (
-            <li key={k}>
-              <label className="flex min-h-11 items-center gap-3 text-[15px]">
-                <input type="checkbox" className="size-5 accent-[var(--primary)]" checked={!!done[k]}
-                  onChange={(e) => setDone((d) => ({ ...d, [k]: e.target.checked }))} />
-                {label}
-              </label>
-            </li>
-          ))}
-        </ul>
+        {!allChecked && (
+          <p className="rounded-lg bg-amber-100 p-2 text-sm font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            {stepsLeft} job step{stepsLeft === 1 ? "" : "s"} still open. Check them off (or mark Can&apos;t finish) on the Job tab.
+          </p>
+        )}
         <label htmlFor="crew-notes" className="text-sm font-medium text-foreground">
           Notes for the office (optional)
         </label>
@@ -155,7 +152,7 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
           <Button type="button" className="h-14 text-base font-semibold" disabled={isPending || !allChecked}
             onClick={() => run(async () => completeJob(jobId, notes, await currentLocation()), (r) => setEnded({ kind: "completed", nextJobId: r.nextJobId ?? null }))}>
             {isPending ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
-            {allChecked ? "Mark job complete" : "Check everything above"}
+            {allChecked ? "Mark job complete" : "Finish the job steps first"}
           </Button>
         </div>
       </div>
@@ -242,10 +239,10 @@ export function JobActionBar({ jobId, status, clockedInSince, loggedMs, busyElse
             On my way
           </Button>
         )}
-        <Button type="button" className={status === "scheduled" ? "h-14 text-base font-semibold" : "col-span-2 h-14 text-base font-semibold"} disabled={isPending}
+        <Button type="button" className={status === "scheduled" ? "h-14 text-base font-semibold" : "col-span-2 h-14 text-base font-semibold"} disabled={isPending || loadLeft > 0}
           onClick={() => run(async () => startJob(jobId, await currentLocation()))}>
           {isPending ? <Loader2 className="size-5 animate-spin" /> : <Play className="size-5" />}
-          Start job
+          {loadLeft > 0 ? `Load truck first (${loadLeft})` : "Start job"}
         </Button>
       </div>
     );

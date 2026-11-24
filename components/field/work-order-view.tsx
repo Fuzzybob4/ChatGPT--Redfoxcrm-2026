@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { Check, X } from "lucide-react";
+import { setChecklistMark } from "@/app/field/actions";
+import type { ChecklistMark, JobChecklist } from "@/lib/field";
 import {
-  AlertTriangle, Box, Camera, ChevronDown, ClipboardList, Expand, House, Image as ImageIcon, MessageSquare,
-  Package, Sparkles, Wrench,
+  AlertTriangle, Camera, ChevronDown, ClipboardList, Expand, House, Image as ImageIcon, MessageSquare,
+  Wrench,
 } from "lucide-react";
 import { PhotoViewer } from "@/components/field/photo-viewer";
-import { MaterialsChecklist } from "@/components/field/materials-checklist";
 import { PhotoCapture } from "@/components/field/photo-capture";
 import { FieldPhotoGallery, type FieldPhoto } from "@/components/field/field-photo-gallery";
 
@@ -15,7 +17,7 @@ export interface WorkArea {
   items: Array<{ name: string; qty: string; details: string[] }>;
 }
 
-type Tab = "install" | "materials" | "notes" | "photos";
+type Tab = "install" | "notes" | "photos";
 
 const photoSrc = (pathname: string) => `/api/file/photo?pathname=${encodeURIComponent(pathname)}`;
 
@@ -28,8 +30,8 @@ export function WorkOrderView({
   isRemoval,
   kind,
   areas,
-  loadOut,
-  checked,
+  checklist,
+  marks: initialMarks,
   canEdit,
   notes,
   photos,
@@ -38,8 +40,8 @@ export function WorkOrderView({
   isRemoval: boolean;
   kind: "past" | "new" | "customer_lights" | null;
   areas: WorkArea[];
-  loadOut: string[];
-  checked: Record<string, string>;
+  checklist: JobChecklist;
+  marks: Record<string, ChecklistMark>;
   canEdit: boolean;
   notes: string;
   photos: FieldPhoto[];
@@ -48,37 +50,46 @@ export function WorkOrderView({
   const [hero, setHero] = useState(0);
   const [viewer, setViewer] = useState<number | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(areas.map((a, i) => [a.name, i === 0 || areas.length <= 2])),
+    Object.fromEntries(areas.map((a) => [a.name, false])),
   );
   const viewerPhotos = photos.map((p) => ({
     src: photoSrc(p.pathname),
     caption: p.caption || "Property photo",
     date: new Date(p.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
   }));
-  const loadedCount = loadOut.filter((i) => checked[i]).length;
-
-  const steps: string[] = isRemoval
-    ? [
-        "Check the install photos so you know everything that went up.",
-        ...areas.flatMap((a) => a.items.map((i) => `Take down ${i.name.toLowerCase()}${i.qty}.`)),
-        "Label each set by area (roofline, trees, etc.) and pack it in the customer's tote.",
-        "Pick up clips, stakes and cords, and leave the property clean.",
-        "Take a photo of the packed totes before you leave.",
-      ]
-    : [
-        kind === "past"
-          ? "Pull the customer's tote and check it against the Materials tab."
-          : kind === "customer_lights"
-            ? "Find the customer's lights on site and test them before hanging."
-            : "Load new materials from the Materials tab.",
-        ...areas.flatMap((a) => a.items.map((i) => `Install ${i.name}${i.qty}.`)),
-        "Check for clean, straight lines and secure every connection.",
-        "Turn everything on, test it, and take completion photos.",
-      ];
+  const [marks, setMarks] = useState(initialMarks);
+  const [err, setErr] = useState<string | null>(null);
+  const [, start] = useTransition();
+  const mark = (key: string, state: ChecklistMark["s"] | null, reason?: string) => {
+    if (!canEdit) return;
+    const prev = marks;
+    setErr(null);
+    setMarks((m) => {
+      const n = { ...m };
+      if (state === null) delete n[key];
+      else n[key] = { s: state, reason };
+      return n;
+    });
+    start(async () => {
+      const r = await setChecklistMark(jobId, key, state, reason);
+      if ("error" in r) {
+        setMarks(prev);
+        setErr(r.error);
+      }
+    });
+  };
+  const doneOf = (prefix: string, keys: string[]) => keys.filter((k) => marks[`${prefix}:${k}`]).length;
+  const loadDone = doneOf("load", checklist.load);
+  const siteDone = doneOf("site", checklist.site);
+  const stepsDone = checklist.steps.filter((k) => {
+    const m = marks[`step:${k}`];
+    return m && (m.s === "done" || m.reason);
+  }).length;
+  const [cantFor, setCantFor] = useState<string | null>(null);
+  const [cantReason, setCantReason] = useState("");
 
   const tabs: Array<{ key: Tab; label: string; Icon: typeof ClipboardList; badge?: string }> = [
-    { key: "install", label: isRemoval ? "Removal" : "Install", Icon: ClipboardList },
-    { key: "materials", label: "Materials", Icon: Package, badge: loadOut.length ? `${loadedCount}/${loadOut.length}` : undefined },
+    { key: "install", label: "Job", Icon: ClipboardList, badge: `${stepsDone}/${checklist.steps.length}` },
     { key: "notes", label: "Notes", Icon: MessageSquare, badge: notes ? "•" : undefined },
     { key: "photos", label: "Photos", Icon: Camera, badge: photos.length ? String(photos.length) : undefined },
   ];
@@ -121,7 +132,7 @@ export function WorkOrderView({
       )}
 
       {/* Tabs */}
-      <div role="tablist" className="sticky top-0 z-20 -mx-4 grid grid-cols-4 gap-1 border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
+      <div role="tablist" className="sticky top-0 z-20 -mx-4 grid grid-cols-3 gap-1 border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
         {tabs.map(({ key, label, Icon, badge }) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
             className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-semibold ${
@@ -138,26 +149,84 @@ export function WorkOrderView({
 
       {tab === "install" && (
         <div className="flex flex-col gap-4">
-          <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-            <h2 className="flex items-center gap-2 text-base font-bold">
-              <ClipboardList className="size-5 text-primary" aria-hidden="true" />
-              {isRemoval ? "Removal steps" : "Installation steps"}
-            </h2>
-            <ol className="flex flex-col gap-2.5">
-              {steps.map((s, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</span>
-                  <span className="pt-0.5 text-[15px] leading-snug">{s}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
+          {err && <p role="alert" className="rounded-lg bg-destructive/10 p-2 text-sm font-medium text-destructive">{err}</p>}
 
-          {areas.length > 0 ? (
+          {/* Step 0: before leaving the shop */}
+          <StepCard n={0} title="Load the truck" sub="Before you leave the shop" done={loadDone} total={checklist.load.length}
+            note={kind === "past" ? "Returning customer: their lights are in a tote." : kind === "customer_lights" ? "Customer owns the lights. Bring tools, clips and cords." : kind === "new" ? "New customer: load new materials." : undefined}>
+            {checklist.load.map((item) => (
+              <TwoWay key={item} label={item} state={marks[`load:${item}`]?.s} yes="loaded" no="missing" yesLabel="Loaded" noLabel="Missing"
+                disabled={!canEdit} onChange={(st) => mark(`load:${item}`, st)} />
+            ))}
+            <p className="text-xs text-muted-foreground">Start job unlocks when every item is Loaded or Missing. Missing tells the office right away.</p>
+          </StepCard>
+
+          {/* Step 1: customer-owned jobs */}
+          {checklist.site.length > 0 && (
+            <StepCard n={1} title="Confirm on site" sub="When you arrive" done={siteDone} total={checklist.site.length}>
+              {checklist.site.map((item) => (
+                <TwoWay key={item} label={item} state={marks[`site:${item}`]?.s} yes="have" no="dont" yesLabel="Have it" noLabel="Don't have it"
+                  disabled={!canEdit} onChange={(st) => mark(`site:${item}`, st)} />
+              ))}
+            </StepCard>
+          )}
+
+          {/* Scope steps */}
+          <StepCard n={checklist.site.length ? 2 : 1} title={isRemoval ? "Take it down" : "Do the work"} done={stepsDone} total={checklist.steps.length}>
+            {checklist.steps.map((step) => {
+              const m = marks[`step:${step}`];
+              return (
+                <div key={step} className="flex flex-col gap-1 border-b border-border py-2 last:border-0">
+                  <div className="flex items-start gap-3">
+                    <button type="button" disabled={!canEdit} aria-label={m?.s === "done" ? `Undo ${step}` : `Done: ${step}`}
+                      onClick={() => mark(`step:${step}`, m?.s === "done" ? null : "done")}
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-md border-2 ${m?.s === "done" ? "border-emerald-600 bg-emerald-600 text-white" : "border-border"}`}>
+                      {m?.s === "done" && <Check className="size-5" />}
+                    </button>
+                    <span className={`flex-1 pt-1 text-[15px] leading-snug ${m?.s === "done" ? "text-muted-foreground line-through" : ""}`}>{step}</span>
+                    {canEdit && m?.s !== "done" && (
+                      <button type="button" className="pt-1 text-xs font-medium text-muted-foreground underline"
+                        onClick={() => { setCantFor(step); setCantReason(m?.reason ?? ""); }}>
+                        Can&apos;t finish
+                      </button>
+                    )}
+                  </div>
+                  {m?.s === "cant" && cantFor !== step && (
+                    <p className="ml-11 text-sm text-amber-700 dark:text-amber-400">
+                      Can&apos;t finish: {m.reason}{" "}
+                      {canEdit && <button type="button" className="underline" onClick={() => mark(`step:${step}`, null)}>undo</button>}
+                    </p>
+                  )}
+                  {cantFor === step && (
+                    <div className="ml-11 flex gap-2">
+                      <input autoFocus value={cantReason} onChange={(e) => setCantReason(e.target.value)} maxLength={300}
+                        placeholder="Why? (out of clips, no outlet…)" className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm" />
+                      <button type="button" className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        disabled={!cantReason.trim()} onClick={() => { mark(`step:${step}`, "cant", cantReason.trim()); setCantFor(null); }}>
+                        Save
+                      </button>
+                      <button type="button" aria-label="Cancel" className="h-10 px-2" onClick={() => setCantFor(null)}><X className="size-4" /></button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </StepCard>
+
+          {/* Before you leave */}
+          <StepCard n={checklist.site.length ? 3 : 2} title="Before you leave" sub="Completion photos">
+            <ul className="flex flex-col gap-1 text-[15px]">
+              {checklist.photoAreas.map((a) => (
+                <li key={a} className="flex items-center gap-2"><Camera className="size-4 text-muted-foreground" aria-hidden="true" />Photo: {a}</li>
+              ))}
+            </ul>
+            {canEdit && <div className="pt-1"><PhotoCapture jobId={jobId} /></div>}
+            <p className="text-xs text-muted-foreground">Complete job unlocks when every step is checked (or marked Can&apos;t finish) and there&apos;s a photo.</p>
+          </StepCard>
+
+          {areas.length > 0 && (
             <section className="flex flex-col gap-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {isRemoval ? "What's coming down" : "What we're installing"}, by area
-              </h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details by area</h2>
               {areas.map((a) => (
                 <div key={a.name} className="overflow-hidden rounded-xl border border-border bg-card">
                   <button type="button" onClick={() => setOpen((o) => ({ ...o, [a.name]: !o[a.name] }))}
@@ -173,13 +242,8 @@ export function WorkOrderView({
                     <ul className="flex flex-col divide-y divide-border border-t border-border px-4">
                       {a.items.map((i, idx) => (
                         <li key={idx} className="py-2.5">
-                          <p className="text-[15px] font-semibold leading-snug">
-                            {i.name}
-                            <span className="whitespace-nowrap tabular-nums">{i.qty}</span>
-                          </p>
-                          {i.details.map((d, j) => (
-                            <p key={j} className="text-sm leading-snug text-muted-foreground">{d}</p>
-                          ))}
+                          <p className="text-[15px] font-semibold leading-snug">{i.name}<span className="whitespace-nowrap tabular-nums">{i.qty}</span></p>
+                          {i.details.map((d, j) => <p key={j} className="text-sm leading-snug text-muted-foreground">{d}</p>)}
                         </li>
                       ))}
                     </ul>
@@ -187,10 +251,6 @@ export function WorkOrderView({
                 </div>
               ))}
             </section>
-          ) : (
-            <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-              The office hasn&apos;t listed the items yet. Check Notes and Photos, or call the office.
-            </p>
           )}
 
           {notes && (
@@ -203,25 +263,6 @@ export function WorkOrderView({
               </span>
             </button>
           )}
-        </div>
-      )}
-
-      {tab === "materials" && (
-        <div className="flex flex-col gap-3">
-          <p className="flex items-center gap-2 rounded-xl bg-muted p-3 text-sm">
-            {kind === "past" ? <Box className="size-4 shrink-0 text-emerald-600" /> : kind === "customer_lights" ? <House className="size-4 shrink-0 text-violet-600" /> : <Sparkles className="size-4 shrink-0 text-orange-600" />}
-            {kind === "past"
-              ? "Returning customer: their lights are in a tote at the shop."
-              : kind === "customer_lights"
-                ? "Customer owns the lights. Bring ladders and tools."
-                : "New customer: load new materials for this job."}
-          </p>
-          {loadOut.length ? (
-            <MaterialsChecklist jobId={jobId} items={loadOut} checked={checked} canEdit={canEdit} />
-          ) : (
-            <p className="text-sm text-muted-foreground">No materials listed.</p>
-          )}
-          <p className="text-xs text-muted-foreground">Check items off as you load the truck. The whole crew sees the same list.</p>
         </div>
       )}
 
@@ -254,5 +295,56 @@ export function WorkOrderView({
 
       {viewer != null && <PhotoViewer photos={viewerPhotos} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />}
     </>
+  );
+}
+
+function StepCard({
+  n, title, sub, done, total, note, children,
+}: {
+  n: number; title: string; sub?: string; done?: number; total?: number; note?: string; children: React.ReactNode;
+}) {
+  const complete = total != null && total > 0 && done === total;
+  return (
+    <section className={`flex flex-col gap-2 rounded-xl border p-4 ${complete ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30" : "border-border bg-card"}`}>
+      <div className="flex items-center gap-3">
+        <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${complete ? "bg-emerald-600 text-white" : "bg-primary text-primary-foreground"}`}>
+          {complete ? <Check className="size-5" /> : n}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-bold leading-tight">{title}</h2>
+          {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+        </div>
+        {total != null && total > 0 && <span className="text-xs font-semibold tabular-nums text-muted-foreground">{done}/{total}</span>}
+      </div>
+      {note && <p className="rounded-lg bg-muted px-3 py-2 text-sm">{note}</p>}
+      {children}
+    </section>
+  );
+}
+
+function TwoWay({
+  label, state, yes, no, yesLabel, noLabel, disabled, onChange,
+}: {
+  label: string;
+  state?: ChecklistMark["s"];
+  yes: ChecklistMark["s"];
+  no: ChecklistMark["s"];
+  yesLabel: string;
+  noLabel: string;
+  disabled?: boolean;
+  onChange: (s: ChecklistMark["s"] | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 border-b border-border py-1.5 last:border-0">
+      <span className={`min-w-0 flex-1 text-[15px] leading-snug ${state === no ? "font-semibold text-destructive" : state === yes ? "text-muted-foreground" : ""}`}>{label}</span>
+      <button type="button" disabled={disabled} onClick={() => onChange(state === yes ? null : yes)}
+        className={`flex h-10 items-center gap-1 rounded-md border px-2.5 text-sm font-semibold ${state === yes ? "border-emerald-600 bg-emerald-600 text-white" : "border-border"}`}>
+        <Check className="size-4" />{yesLabel}
+      </button>
+      <button type="button" disabled={disabled} onClick={() => onChange(state === no ? null : no)}
+        className={`flex h-10 items-center gap-1 rounded-md border px-2.5 text-sm font-semibold ${state === no ? "border-destructive bg-destructive text-white" : "border-border text-muted-foreground"}`}>
+        {noLabel}
+      </button>
+    </div>
   );
 }

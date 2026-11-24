@@ -718,3 +718,144 @@ export async function crewLeadStillWorking(orgId: string, crewId: string | null)
   for (const e of entries ?? []) if (!latest.has(e.employee_id)) latest.set(e.employee_id, e);
   return [...latest.values()].some((e) => !e.clock_out || e.notes === "Lunch");
 }
+
+// ---------------------------------------------------------------------------
+// One-screen job checklist: load the truck → confirm on site → scope steps →
+// before you leave. State lives in scheduled_jobs.job_checklist, keyed by
+// "load:…", "site:…", "step:…".
+
+export type LoadState = "loaded" | "missing";
+export type SiteState = "have" | "dont";
+export type StepState = "done" | "cant";
+export interface ChecklistMark {
+  s: LoadState | SiteState | StepState;
+  by?: string;
+  at?: string;
+  reason?: string;
+}
+
+export interface JobChecklist {
+  load: string[];
+  site: string[];
+  steps: string[];
+  /** Photo reminders for the wrap-up: one per scope area worth showing. */
+  photoAreas: string[];
+  ladder: string | null;
+}
+
+/** "2-story", "two story", "28 ft ladder", "[HEIGHT: 2 story]" in the title or notes. */
+export function ladderFromText(text: string): string | null {
+  const t = text.toLowerCase();
+  const tag = t.match(/\[\s*height\s*:\s*([^\]]+)\]/);
+  if (tag) return tag[1].trim();
+  const ft = t.match(/(\d{1,2})\s*(?:ft|foot|')\s*ladder/);
+  if (ft) return `${ft[1]} ft ladder`;
+  const story = t.match(/\b(1|one|single|2|two|3|three)[\s-]*stor(?:y|ies)\b/);
+  if (story) {
+    const n = { one: 1, single: 1, two: 2, three: 3 }[story[1] as "one"] ?? Number(story[1]);
+    return n >= 3 ? "3-story: tallest ladder / lift" : n === 2 ? "2-story: 28 ft+ extension ladder" : "1-story: 6–8 ft step + 16 ft ladder";
+  }
+  return null;
+}
+
+const firstLine = (d: string) => d.split(/\r?\n/)[0].replace(/\s+/g, " ").trim();
+
+export function buildJobChecklist(
+  job: Pick<FieldJob, "title" | "notes" | "jobType">,
+  kind: "past" | "new" | "customer_lights" | null,
+  items: InstallItem[],
+): JobChecklist {
+  const isRemoval = job.jobType === "removal";
+  const ladder = ladderFromText(`${job.title} ${job.notes}`);
+  const scope = items
+    .map((i) => firstLine(i.description) + (Number.isFinite(i.quantity) && i.quantity !== 1 ? ` × ${Number(i.quantity.toFixed(2))}` : ""))
+    .filter(Boolean);
+  const scopeText = `${job.title} ${job.notes} ${scope.join(" ")}`.toLowerCase();
+  const has = (re: RegExp) => re.test(scopeText);
+  const ladderItem = ladder ? `Ladder: ${ladder}` : "Ladders (check the house height)";
+
+  if (isRemoval) {
+    return {
+      load: ["Empty totes", "Labels and marker", ladderItem],
+      site: [],
+      steps: [
+        ...scope.map((s) => `Take down ${s}`),
+        "Label every set by area and pack the totes",
+        "Pick up clips, stakes and cords; leave it clean",
+      ],
+      photoAreas: ["Packed totes"],
+      ladder,
+    };
+  }
+
+  const load =
+    kind === "customer_lights"
+      ? ["Clips", "Extension cords (spares)", ladderItem]
+      : [
+          kind === "past" ? "Customer's tote" : "New lights for this job",
+          ...(has(/wreath/) ? [kind === "past" ? "Customer's wreath" : "Wreath"] : []),
+          ...(has(/garland/) ? ["Garland"] : []),
+          ...scope.filter((s) => !/wreath|garland/i.test(s)),
+          "Timer",
+          "Clips",
+          "Extension cords",
+          ladderItem,
+        ];
+  const site =
+    kind === "customer_lights"
+      ? [
+          "Customer's lights are out",
+          ...(has(/wreath/) ? ["Customer's wreath"] : []),
+          ...(has(/garland/) ? ["Customer's garland"] : []),
+          "Timer",
+          "Extension cords",
+        ]
+      : [];
+  const photoAreas = [
+    ...(has(/roof|eave|gutter|peak/) ? ["Roofline"] : []),
+    ...(has(/window/) ? ["Windows"] : []),
+    ...(has(/door|entry/) ? ["Door / entry"] : []),
+    ...(has(/tree/) ? ["Trees"] : []),
+    ...(has(/wreath|garland/) ? ["Wreath / garland"] : []),
+    ...(has(/bush|shrub|hedge/) ? ["Bushes"] : []),
+  ];
+  return {
+    load: [...new Set(load)],
+    site: [...new Set(site)],
+    steps: [
+      ...(scope.length ? scope.map((s) => `Install ${s}`) : ["Install everything on the work order"]),
+      "Clean, straight lines and every connection secure",
+      "Lights on and tested (timer set)",
+      "Site cleaned up: clips, boxes, trash",
+    ],
+    photoAreas: photoAreas.length ? photoAreas : ["Front of the house"],
+    ladder,
+  };
+}
+
+/** What's still open, for the Start/Complete gates. */
+export function checklistGaps(list: JobChecklist, marks: Record<string, ChecklistMark>) {
+  const open = (prefix: string, keys: string[]) => keys.filter((k) => !marks[`${prefix}:${k}`]);
+  return {
+    load: open("load", list.load),
+    site: open("site", list.site),
+    steps: list.steps.filter((k) => {
+      const m = marks[`step:${k}`];
+      return !m || (m.s === "cant" && !m.reason?.trim());
+    }),
+  };
+}
+
+/** Everything the gates need for one job, loaded fresh on the server. */
+export async function loadJobChecklist(orgId: string, job: FieldJob) {
+  const admin = createAdminClient();
+  const [items, badges, { data: row }] = await Promise.all([
+    job.customerId ? getInstallItems(orgId, job.customerId) : Promise.resolve([] as InstallItem[]),
+    getJobBadges(orgId, [job]).catch(() => ({}) as Record<string, JobBadge>),
+    admin.from("scheduled_jobs").select("job_checklist").eq("id", job.id).eq("org_id", orgId).maybeSingle(),
+  ]);
+  const kind = (badges as Record<string, JobBadge>)[job.id]?.kind ?? null;
+  const list = buildJobChecklist(job, kind, items);
+  const marks = ((row?.job_checklist as Record<string, ChecklistMark>) ?? {}) as Record<string, ChecklistMark>;
+  return { list, marks, kind, items };
+}
