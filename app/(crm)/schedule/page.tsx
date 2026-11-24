@@ -28,8 +28,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       .eq("org_id", org.orgId)
       .gte("scheduled_date", start)
       .lte("scheduled_date", end)
-      // Finished and cancelled jobs come off the board.
-      .not("status", "in", "(cancelled,completed)")
+      // Cancelled jobs come off the board; finished ones stay, showing how long they took.
+      .neq("status", "cancelled")
       .is("archived_at", null)
       .order("scheduled_date"),
   ]);
@@ -95,6 +95,39 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         (j.title && !GENERIC_TITLE.test(String(j.title).trim()) ? String(j.title).trim() : null),
     };
   });
+
+  // Actual on-site time from the crew's job timers: first start, last stop,
+  // time worked (overlapping crew timers counted once), and whether it's running.
+  const jobIds = (jobs ?? []).map((j: any) => j.id);
+  const { data: timers } = jobIds.length
+    ? await db.from("time_entries").select("scheduled_job_id, clock_in, clock_out").in("scheduled_job_id", jobIds)
+    : { data: [] as any[] };
+  const { mergedHours } = await import("@/lib/time-math");
+  const byJob = new Map<string, any[]>();
+  for (const t of timers ?? []) {
+    const l = byJob.get(t.scheduled_job_id) ?? [];
+    l.push(t);
+    byJob.set(t.scheduled_job_id, l);
+  }
+  for (const bj of boardJobs) {
+    const list = byJob.get(bj.id);
+    if (!list?.length) continue;
+    const running = list.some((t) => !t.clock_out);
+    const starts = list.map((t) => t.clock_in as string).sort();
+    const ends = list.filter((t) => t.clock_out).map((t) => t.clock_out as string).sort();
+    // Crew members share a timer, so count elapsed (wall) time once.
+    const now = Date.now();
+    const workedMs = Math.round(mergedHours(list, now) * 3_600_000);
+    bj.actual = {
+      start: starts[0],
+      end: running ? null : ends[ends.length - 1] ?? null,
+      running,
+      // Time logged before the current stretch, so the live timer adds on top.
+      baseMs: running ? Math.round(mergedHours(list.filter((t) => t.clock_out), now) * 3_600_000) : workedMs,
+      runningSince: running ? list.filter((t) => !t.clock_out).map((t) => t.clock_in as string).sort()[0] : null,
+      workedMs,
+    };
+  }
 
   return (
     <div className="flex flex-1 flex-col min-h-0">

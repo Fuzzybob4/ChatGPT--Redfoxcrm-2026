@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { ElapsedTimer } from "@/components/field/elapsed-timer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, CloudRain, GripVertical, MessageSquare, Phone, Settings2, Sparkles, Undo2, Users } from "lucide-react";
@@ -51,6 +52,44 @@ export interface BoardJob {
   service?: string | null;
   status: string;
   jobType: string;
+  /** What actually happened on site, from the crew's job timers. */
+  actual?: {
+    start: string;
+    end: string | null;
+    running: boolean;
+    baseMs: number;
+    runningSince: string | null;
+    workedMs: number;
+  };
+}
+
+const clockOf = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const dur = (ms: number) => {
+  const m = Math.round(ms / 60_000);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+};
+
+/** "▶ Started 9:12 AM · 1:23:45" live, or "✓ 9:12 AM – 11:40 AM · 2h 28m". */
+function OnSiteLine({ job, compact = false }: { job: BoardJob; compact?: boolean }) {
+  const a = job.actual;
+  if (!a) return null;
+  if (a.running && a.runningSince) {
+    return (
+      <span className={`flex items-center gap-1 font-semibold text-primary ${compact ? "text-[10px]" : "text-xs"}`}>
+        <span className="size-1.5 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+        Started {clockOf(a.start)} ·{" "}
+        <ElapsedTimer since={a.runningSince} baseMs={a.baseMs} className="tabular-nums" />
+      </span>
+    );
+  }
+  return (
+    <span className={`block truncate font-medium text-emerald-700 dark:text-emerald-400 ${compact ? "text-[10px]" : "text-xs"}`}>
+      {job.status === "completed" ? "✓ " : "⏸ "}
+      {clockOf(a.start)}
+      {a.end ? ` – ${clockOf(a.end)}` : ""} · {dur(a.workedMs)}
+      {job.status !== "completed" && job.status !== "needs_return" ? " (paused)" : ""}
+    </span>
+  );
 }
 
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -615,6 +654,7 @@ function MobileDayView({
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{j.customerName}</span>
                       <ServiceLine job={j} />
+                      <OnSiteLine job={j} />
                       <span className="block truncate text-xs text-muted-foreground">
                         {j.jobType.includes("remov") ? "Removal · " : ""}
                         {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
@@ -686,6 +726,7 @@ function Row({
                   {j.customerName}
                 </span>
                 <ServiceLine job={j} compact />
+                <OnSiteLine job={j} compact />
                 <span className="block truncate text-muted-foreground">
                   {j.jobType.includes("remov") ? "Removal · " : ""}
                   {j.size !== "standard" ? `${JOB_SIZES[j.size].label} · ` : ""}
