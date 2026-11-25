@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
+import { PhotoViewer } from "@/components/field/photo-viewer";
 import {
   Card,
   CardContent,
@@ -10,7 +10,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import type { CustomerPhoto } from "@/lib/data";
 
 interface CustomerPhotoGalleryProps {
@@ -38,20 +37,6 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
   // org-checked route; older public Blob links load directly.
   const photoSrc = (photoUrl: string) =>
     /^https?:\/\//i.test(photoUrl) ? photoUrl : `/api/file/photo?pathname=${encodeURIComponent(photoUrl)}`;
-
-  const selected = selectedIndex !== null ? photos[selectedIndex] : null;
-
-  const handlePrev = () => {
-    if (selectedIndex !== null) {
-      setSelectedIndex((selectedIndex - 1 + photos.length) % photos.length);
-    }
-  };
-
-  const handleNext = () => {
-    if (selectedIndex !== null) {
-      setSelectedIndex((selectedIndex + 1) % photos.length);
-    }
-  };
 
   const handleDelete = async (pathname: string) => {
     if (!confirm('Are you sure you want to delete this photo?')) {
@@ -111,92 +96,31 @@ export function CustomerPhotoGallery({ photos, onPhotoDeleted, canDelete = true 
         </CardContent>
       </Card>
 
-      {/* Lightbox Modal */}
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-          onClick={() => setSelectedIndex(null)}
-        >
-          <div
-            className="relative max-w-4xl w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close and Delete buttons */}
-            <div className="absolute -top-12 right-0 flex gap-2 z-10">
-              {canDelete && selected && (
-                <button
-                  onClick={() => handleDelete(selected.photoUrl)}
-                  disabled={deleting === selected.photoUrl}
-                  className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                  title="Delete photo"
-                >
-                  <Trash2 className="size-6" />
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedIndex(null)}
-                className="text-white hover:text-gray-300"
-              >
-                <X className="size-8" />
-              </button>
-            </div>
-
-            {/* Image */}
-            <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-              <img
-                src={photoSrc(selected.photoUrl)}
-                alt={selected.description || "Property photo"}
-                className="absolute inset-0 h-full w-full object-contain"
-              />
-            </div>
-
-            {/* Navigation */}
-            {photos.length > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handlePrev}
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-
-                <div className="text-center text-white text-sm">
-                  {selectedIndex! + 1} / {photos.length}
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleNext}
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            )}
-
-            {/* Photo details */}
-            <div className="mt-4 bg-black/50 rounded-lg p-3 text-white text-sm space-y-1">
-              {selected.description && (
-                <p className="font-medium">{selected.description}</p>
-              )}
-              {selected.photoType && (
-                <div className="flex gap-2">
-                  <Badge variant="secondary" className="bg-white/20 text-white">
-                    {selected.photoType}
-                  </Badge>
-                </div>
-              )}
-              {selected.createdAt && (
-                <p className="text-xs text-gray-300">
-                  {new Date(selected.createdAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+      {selectedIndex !== null && (
+        <PhotoViewer
+          photos={photos.map((p) => ({
+            src: photoSrc(p.photoUrl),
+            caption: [p.description, p.photoType].filter(Boolean).join(" · ") || "Photo",
+            date: p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : undefined,
+          }))}
+          index={selectedIndex}
+          onIndex={setSelectedIndex}
+          onClose={() => setSelectedIndex(null)}
+          footer={
+            canDelete
+              ? (i) => (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(photos[i].photoUrl)}
+                    disabled={deleting === photos[i].photoUrl}
+                    className="flex h-11 items-center gap-2 rounded-full bg-red-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="size-4" /> Delete photo
+                  </button>
+                )
+              : undefined
+          }
+        />
       )}
     </>
   );

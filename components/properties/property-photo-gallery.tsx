@@ -1,5 +1,6 @@
 "use client";
 
+import { PhotoViewer } from "@/components/field/photo-viewer";
 import { useState } from "react";
 import { Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ interface PropertyPhotoGalleryProps {
 }
 
 export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGalleryProps) {
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const photoSrc = (photoUrl: string) =>
     /^https?:\/\//i.test(photoUrl)
@@ -58,6 +60,7 @@ export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGa
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Property Photos</CardTitle>
@@ -65,24 +68,26 @@ export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGa
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {photos.map((photo) => (
+          {photos.map((photo, idx) => (
             <div key={photo.id} className="relative group rounded-lg overflow-hidden bg-muted h-48">
               <img
+                onClick={() => setViewIndex(idx)}
+                role="button"
                 src={photoSrc(photo.photoUrl)}
                 alt={photo.description || "Property photo"}
-                className="w-full h-full object-cover"
+                className="w-full h-full cursor-zoom-in object-cover"
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
                   img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23e5e7eb' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='16' fill='%239ca3af'%3EPhoto unavailable%3C/text%3E%3C/svg%3E";
                 }}
               />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-center justify-center">
+              <div className="pointer-events-none absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-center justify-center">
                 <Button
                   size="icon"
                   variant="destructive"
                   onClick={() => handleDelete(photo.id, photo.photoUrl)}
                   disabled={deletingId === photo.id}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   {deletingId === photo.id ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -101,5 +106,14 @@ export function PropertyPhotoGallery({ photos, onPhotoDeleted }: PropertyPhotoGa
         </div>
       </CardContent>
     </Card>
+    {viewIndex !== null && (
+      <PhotoViewer
+        photos={photos.map((p) => ({ src: photoSrc(p.photoUrl), caption: p.description || "Property photo" }))}
+        index={viewIndex}
+        onIndex={setViewIndex}
+        onClose={() => setViewIndex(null)}
+      />
+    )}
+    </>
   );
 }
